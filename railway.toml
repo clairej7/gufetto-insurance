@@ -1,0 +1,16 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "node server.js"
+healthcheckPath = "/api/health"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+[[services]]
+name = "crm-assurance-web"
+
+[[services]]
+name = "crm-assurance-cron"
+startCommand = "node -e \"const h=require('https');setInterval(()=>{h.request({host:process.env.APP_URL?.replace('https://',''),path:'/api/sync/omni',method:'POST',headers:{'x-cron-secret':process.env.CRON_SECRET,'content-length':0}},r=>{console.log(new Date().toISOString(),'sync',r.statusCode)}).end()},24*60*60*1000)\""

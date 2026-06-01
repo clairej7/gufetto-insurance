@@ -1,0 +1,164 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// NextAuth required tables
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  isAdmin       Boolean   @default(false)
+  accounts      Account[]
+  sessions      Session[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// CRM tables
+model Copro {
+  id          String  @id @default(cuid())
+  buildingId  String  @unique // Duomo ID
+  nom         String
+  adresse     String?
+
+  gestionnaireEmail String?
+
+  // Contrat d'assurance actuel
+  assureurActuel    String?
+  courtierActuel    String?
+  primeActuelle     Float?
+  dateEcheance      DateTime?
+  dateDebutContrat  DateTime?
+
+  // Contact Conseil Syndical
+  contactCsEmail String?
+  contactCsNom   String?
+
+  // Sync metadata
+  source    String   @default("omni") // "omni" | "duomo"
+  syncedAt  DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pipelines InsurancePipeline[]
+}
+
+enum PipelineStatut {
+  identifie
+  rs_en_cours
+  rs_recu
+  devis_demandes
+  devis_recus
+  envoye_cs
+  validation_cs
+  contrat_signe
+  resiliation_envoyee
+  sepa_complete
+  termine
+  abandonne
+}
+
+model InsurancePipeline {
+  id             String         @id @default(cuid())
+  coproId        String
+  copro          Copro          @relation(fields: [coproId], references: [id], onDelete: Cascade)
+  statut         PipelineStatut @default(identifie)
+  anneeEcheance  Int
+  notes          String?        @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events          PipelineEvent[]
+  taskCompletions TaskCompletion[]
+}
+
+enum EventType {
+  statut_change
+  note_ajoutee
+  tache_completee
+  action_manuelle
+  sync_auto
+}
+
+model PipelineEvent {
+  id         String    @id @default(cuid())
+  pipelineId String
+  pipeline   InsurancePipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+
+  type          EventType
+  ancienStatut  String?
+  nouveauStatut String?
+  description   String    @db.Text
+  metadata      Json?
+
+  createdBy String // email du gestionnaire
+  createdAt DateTime @default(now())
+}
+
+// Tâches prédéfinies par étape (seed data)
+model StageTaskTemplate {
+  id          String         @id @default(cuid())
+  statut      PipelineStatut
+  label       String
+  description String?
+  required    Boolean        @default(true)
+  order       Int
+
+  completions TaskCompletion[]
+}
+
+model TaskCompletion {
+  id         String @id @default(cuid())
+  pipelineId String
+  pipeline   InsurancePipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  taskId     String
+  task       StageTaskTemplate @relation(fields: [taskId], references: [id])
+
+  completedBy String // email
+  completedAt DateTime @default(now())
+  note        String?
+
+  @@unique([pipelineId, taskId])
+}
