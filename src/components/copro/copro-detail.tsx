@@ -28,6 +28,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { PIPELINE_STEPS, getDaysUntilEcheance, getNextStatut } from "@/lib/pipeline";
+import { RSRequestAction } from "@/components/copro/steps/rs-request-action";
 import { advanceStatut, abandonPipeline, toggleTask, addNote } from "@/lib/actions";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -289,8 +290,21 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
             </Card>
           ) : (
             <>
-              {/* Prochaine action mise en avant */}
-              <Card className="p-5">
+              {/* Action spécifique à l'étape */}
+              {pipeline.statut === "rs_en_cours" && (
+                <Card className="p-5">
+                  <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">
+                    Demande de relevé de sinistralité
+                  </div>
+                  <RSRequestAction
+                    pipelineId={pipeline.id}
+                    copro={pipeline.copro}
+                  />
+                </Card>
+              )}
+
+              {/* Prochaine action mise en avant (autres étapes) */}
+              {pipeline.statut !== "rs_en_cours" && <Card className="p-5">
                 <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
                   Prochaine action
                 </div>
@@ -320,7 +334,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                     <span className="font-medium">Toutes les tâches sont faites</span>
                   </div>
                 )}
-              </Card>
+              </Card>}
 
               {/* Checklist complète (repliable) */}
               {currentStepTasks.length > 0 && (
