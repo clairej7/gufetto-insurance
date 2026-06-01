@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { PIPELINE_STEPS, getDaysUntilEcheance, getNextStatut } from "@/lib/pipeline";
 import { RSRequestAction } from "@/components/copro/steps/rs-request-action";
-import { advanceStatut, abandonPipeline, toggleTask, addNote } from "@/lib/actions";
+import { advanceStatut, abandonPipeline, toggleTask, addNote, goBackStatut } from "@/lib/actions";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -114,6 +114,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
   const currentStepIndex = PIPELINE_STEPS.findIndex((s) => s.statut === pipeline.statut);
   const nextStatut = getNextStatut(pipeline.statut as Parameters<typeof getNextStatut>[0]);
   const nextStep = nextStatut ? PIPELINE_STEPS.find((s) => s.statut === nextStatut) : null;
+  const prevStep = currentStepIndex > 0 ? PIPELINE_STEPS[currentStepIndex - 1] : null;
 
   const days = getDaysUntilEcheance(pipeline.copro.dateEcheance);
 
@@ -384,9 +385,9 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                 </Card>
               )}
 
-              {/* Bouton avancer */}
-              {nextStep && (
-                <Card className="p-4 space-y-3">
+              {/* Boutons navigation */}
+              <Card className="p-4 space-y-3">
+                {nextStep && (
                   <Button
                     onClick={() => allRequiredDone ? handleAdvance(false) : setShowAdvanceDialog(true)}
                     disabled={isPending}
@@ -396,16 +397,32 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                     Passer à : {nextStep.label}
                     <ArrowRight className="h-4 w-4 ml-1" />
                   </Button>
+                )}
+                {prevStep && (
                   <Button
-                    variant="ghost"
-                    onClick={() => setShowAbandonDialog(true)}
+                    variant="outline"
+                    onClick={() => {
+                      startTransition(async () => {
+                        await goBackStatut(pipeline.id);
+                        toast.success(`Retour à : ${prevStep.label}`);
+                      });
+                    }}
                     disabled={isPending}
-                    className="w-full text-red-400 hover:text-red-600 hover:bg-red-50 text-sm"
+                    className="w-full text-gray-600"
                   >
-                    Abandonner ce pipeline
+                    <ArrowLeft className="h-4 w-4 mr-1" />
+                    Revenir à : {prevStep.label}
                   </Button>
-                </Card>
-              )}
+                )}
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowAbandonDialog(true)}
+                  disabled={isPending}
+                  className="w-full text-red-400 hover:text-red-600 hover:bg-red-50 text-sm"
+                >
+                  Abandonner ce pipeline
+                </Button>
+              </Card>
             </>
           )}
         </div>

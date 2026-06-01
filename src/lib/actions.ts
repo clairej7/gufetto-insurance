@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { getNextStatut } from "@/lib/pipeline";
+import { getNextStatut, PIPELINE_STEPS } from "@/lib/pipeline";
 import { PipelineStatut } from "@/generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { MOCK_USER } from "@/lib/mock-session";
@@ -66,6 +66,44 @@ export async function advanceStatut(
         description: note
           ? `Passage de "${ancienStatut}" à "${nextStatut}" — ${note}`
           : `Passage de "${ancienStatut}" à "${nextStatut}"`,
+        createdBy: session.user.email!,
+      },
+    }),
+  ]);
+
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
+export async function goBackStatut(pipelineId: string, note?: string) {
+  const session = await getSession();
+
+  const pipeline = await prisma.insurancePipeline.findUnique({
+    where: { id: pipelineId },
+  });
+  if (!pipeline) throw new Error("Pipeline introuvable");
+
+  const currentIdx = PIPELINE_STEPS.findIndex((s) => s.statut === pipeline.statut);
+  if (currentIdx <= 0) return { success: false, error: "Déjà à la première étape" };
+
+  const prevStatut = PIPELINE_STEPS[currentIdx - 1].statut;
+  const ancienStatut = pipeline.statut;
+
+  await prisma.$transaction([
+    prisma.insurancePipeline.update({
+      where: { id: pipelineId },
+      data: { statut: prevStatut },
+    }),
+    prisma.pipelineEvent.create({
+      data: {
+        pipelineId,
+        type: "statut_change",
+        ancienStatut,
+        nouveauStatut: prevStatut,
+        description: note
+          ? `Retour à "${prevStatut}" — ${note}`
+          : `Retour à "${prevStatut}"`,
         createdBy: session.user.email!,
       },
     }),
