@@ -142,6 +142,8 @@ model StageTaskTemplate {
   id          String         @id @default(cuid())
   statut      PipelineStatut
   label       String
+  shortLabel  String?
+  actionType  String?        // "email" | "document" | "waiting" | "signature" | "update" | "other"
   description String?
   required    Boolean        @default(true)
   order       Int

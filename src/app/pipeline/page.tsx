@@ -29,12 +29,18 @@ export default async function PipelinePage() {
     select: { syncedAt: true },
   });
 
+  const gestionnaires = [
+    ...new Set(
+      pipelines.map((p) => p.copro.gestionnaireEmail).filter(Boolean) as string[]
+    ),
+  ].sort();
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar user={user} lastSyncAt={lastSync?.syncedAt} />
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Mon pipeline assurance</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Pipeline assurance</h1>
           <p className="text-sm text-gray-500 mt-1">
             {pipelines.length} copropriété{pipelines.length !== 1 ? "s" : ""} en cours de traitement
           </p>
@@ -42,6 +48,7 @@ export default async function PipelinePage() {
         <PipelineBoard
           pipelines={pipelines as Parameters<typeof PipelineBoard>[0]["pipelines"]}
           taskTemplates={taskTemplates}
+          gestionnaires={gestionnaires}
         />
       </main>
     </div>

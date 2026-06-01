@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { PIPELINE_STEPS, getDaysUntilEcheance, getUrgenceBadge } from "@/lib/pipeline";
-import { Building2, ArrowRight, ChevronUp, ChevronDown } from "lucide-react";
+import { Building2, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type PipelineWithCopro = {
@@ -27,25 +27,42 @@ type TaskTemplate = {
   id: string;
   statut: string;
   label: string;
+  shortLabel: string | null;
+  actionType: string | null;
   required: boolean;
   order: number;
+};
+
+const ACTION_BADGE: Record<string, { className: string }> = {
+  email:     { className: "bg-blue-100 text-blue-700" },
+  document:  { className: "bg-purple-100 text-purple-700" },
+  waiting:   { className: "bg-gray-100 text-gray-500" },
+  signature: { className: "bg-green-100 text-green-700" },
+  update:    { className: "bg-teal-100 text-teal-700" },
+  other:     { className: "bg-gray-100 text-gray-600" },
 };
 
 interface PipelineBoardProps {
   pipelines: PipelineWithCopro[];
   taskTemplates: TaskTemplate[];
+  gestionnaires: string[];
 }
 
-function getNextAction(pipeline: PipelineWithCopro, taskTemplates: TaskTemplate[]): string | null {
+function getNextAction(pipeline: PipelineWithCopro, taskTemplates: TaskTemplate[]): { label: string; shortLabel: string; actionType: string } | null {
   const completedIds = new Set(pipeline.taskCompletions.map((tc) => tc.taskId));
   const stepTasks = taskTemplates
     .filter((t) => t.statut === pipeline.statut)
     .sort((a, b) => a.order - b.order);
   const nextTask = stepTasks.find((t) => !completedIds.has(t.id));
-  if (nextTask) return nextTask.label;
+  if (nextTask) return {
+    label: nextTask.label,
+    shortLabel: nextTask.shortLabel || nextTask.label,
+    actionType: nextTask.actionType || "other",
+  };
   const step = PIPELINE_STEPS.find((s) => s.statut === pipeline.statut);
   const idx = PIPELINE_STEPS.indexOf(step!);
-  return PIPELINE_STEPS[idx + 1] ? `Passer à : ${PIPELINE_STEPS[idx + 1].label}` : null;
+  const nextStep = PIPELINE_STEPS[idx + 1];
+  return nextStep ? { label: `Passer à : ${nextStep.label}`, shortLabel: `→ ${nextStep.label}`, actionType: "other" } : null;
 }
 
 const STATUT_BADGE: Record<string, { label: string; className: string }> = {
@@ -65,17 +82,22 @@ const STATUT_BADGE: Record<string, { label: string; className: string }> = {
 
 type SortKey = "nom" | "echeance" | "statut" | "assureur";
 
-export function PipelineBoard({ pipelines, taskTemplates }: PipelineBoardProps) {
+export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: PipelineBoardProps) {
   const [sortKey, setSortKey] = useState<SortKey>("echeance");
   const [sortAsc, setSortAsc] = useState(true);
   const [view, setView] = useState<"actions" | "kanban">("actions");
+  const [selectedGestionnaire, setSelectedGestionnaire] = useState<string>("all");
+
+  const filtered = selectedGestionnaire === "all"
+    ? pipelines
+    : pipelines.filter((p) => p.copro.gestionnaireEmail === selectedGestionnaire);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortAsc(!sortAsc);
     else { setSortKey(key); setSortAsc(true); }
   }
 
-  const sorted = [...pipelines].sort((a, b) => {
+  const sorted = [...filtered].sort((a, b) => {
     let va: string | number = 0;
     let vb: string | number = 0;
     if (sortKey === "echeance") {
@@ -96,12 +118,12 @@ export function PipelineBoard({ pipelines, taskTemplates }: PipelineBoardProps) 
     return 0;
   });
 
-  const urgent = pipelines.filter((p) => {
+  const urgent = filtered.filter((p) => {
     const d = getDaysUntilEcheance(p.copro.dateEcheance);
     return d !== null && d <= 60;
   }).length;
 
-  const enAttente = pipelines.filter((p) => p.statut === "validation_cs").length;
+  const enAttente = filtered.filter((p) => p.statut === "validation_cs").length;
 
   function SortIcon({ k }: { k: SortKey }) {
     if (sortKey !== k) return null;
@@ -124,6 +146,34 @@ export function PipelineBoard({ pipelines, taskTemplates }: PipelineBoardProps) 
           <div className="text-2xl font-bold text-orange-500">{enAttente}</div>
           <div className="text-sm text-gray-500 mt-0.5">En attente CS</div>
         </div>
+      </div>
+
+      {/* Filtre gestionnaire */}
+      <div className="flex items-center gap-3 mb-4">
+        <label className="text-sm font-medium text-gray-600 whitespace-nowrap">Gestionnaire</label>
+        <select
+          value={selectedGestionnaire}
+          onChange={(e) => setSelectedGestionnaire(e.target.value)}
+          className="text-sm border border-gray-200 rounded-md px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-48"
+        >
+          <option value="all">Tous ({pipelines.length})</option>
+          {gestionnaires.map((g) => {
+            const count = pipelines.filter((p) => p.copro.gestionnaireEmail === g).length;
+            const prenom = g.split(".")[0];
+            const nom = g.split(".")[1]?.split("@")[0];
+            const label = prenom && nom
+              ? `${prenom.charAt(0).toUpperCase() + prenom.slice(1)} ${nom.charAt(0).toUpperCase() + nom.slice(1)}`
+              : g.split("@")[0];
+            return (
+              <option key={g} value={g}>{label} ({count})</option>
+            );
+          })}
+        </select>
+        {selectedGestionnaire !== "all" && (
+          <button onClick={() => setSelectedGestionnaire("all")} className="text-xs text-gray-400 hover:text-gray-600">
+            Réinitialiser
+          </button>
+        )}
       </div>
 
       {/* Toggle */}
@@ -161,11 +211,11 @@ export function PipelineBoard({ pipelines, taskTemplates }: PipelineBoardProps) 
                 <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer select-none" onClick={() => toggleSort("assureur")}>
                   Assureur <SortIcon k="assureur" />
                 </th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">
-                  Prime
-                </th>
                 <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer select-none" onClick={() => toggleSort("echeance")}>
-                  Échéance <SortIcon k="echeance" />
+                  Date échéance <SortIcon k="echeance" />
+                </th>
+                <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">
+                  J-
                 </th>
               </tr>
             </thead>
@@ -197,10 +247,12 @@ export function PipelineBoard({ pipelines, taskTemplates }: PipelineBoardProps) 
                     </td>
                     <td className="px-4 py-3">
                       {nextAction && (
-                        <div className="flex items-center gap-1.5 text-gray-600 max-w-56">
-                          <ArrowRight className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
-                          <span className="text-xs truncate">{nextAction}</span>
-                        </div>
+                        <span className={cn(
+                          "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
+                          ACTION_BADGE[nextAction.actionType]?.className || ACTION_BADGE.other.className
+                        )}>
+                          {nextAction.shortLabel}
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -212,9 +264,9 @@ export function PipelineBoard({ pipelines, taskTemplates }: PipelineBoardProps) 
                         <span className="text-gray-300 text-xs">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {pipeline.copro.primeActuelle
-                        ? `${pipeline.copro.primeActuelle.toLocaleString("fr-FR")} €`
+                    <td className="px-4 py-3 text-right text-sm text-gray-500">
+                      {pipeline.copro.dateEcheance
+                        ? new Date(pipeline.copro.dateEcheance).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })
                         : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -223,7 +275,7 @@ export function PipelineBoard({ pipelines, taskTemplates }: PipelineBoardProps) 
                           urgence === "overdue" && "text-red-600",
                           urgence === "urgent" && "text-orange-500",
                           urgence === "warning" && "text-yellow-600",
-                          urgence === "ok" && "text-gray-500"
+                          urgence === "ok" && "text-gray-400"
                         )}>
                           {days < 0 ? `+${Math.abs(days)}j` : `J-${days}`}
                         </span>
@@ -261,10 +313,12 @@ export function PipelineBoard({ pipelines, taskTemplates }: PipelineBoardProps) 
                         )}>
                           <div className="font-medium text-sm text-blue-600 truncate">{p.copro.nom}</div>
                           {nextAction && (
-                            <div className="text-xs text-gray-500 mt-1 flex items-center gap-1 truncate">
-                              <ArrowRight className="h-3 w-3 flex-shrink-0" />
-                              {nextAction}
-                            </div>
+                            <span className={cn(
+                              "inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium mt-1",
+                              ACTION_BADGE[nextAction.actionType]?.className || ACTION_BADGE.other.className
+                            )}>
+                              {nextAction.shortLabel}
+                            </span>
                           )}
                           {days !== null && (
                             <div className={cn("text-xs font-medium mt-1",

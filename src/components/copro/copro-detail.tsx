@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -19,17 +18,16 @@ import {
   ArrowLeft,
   Building2,
   Calendar,
-  Euro,
   Mail,
   User,
   ChevronRight,
   CheckCircle2,
-  AlertCircle,
   Clock,
   MessageSquare,
   XCircle,
+  ArrowRight,
 } from "lucide-react";
-import { PIPELINE_STEPS, getDaysUntilEcheance, getUrgenceBadge, getNextStatut } from "@/lib/pipeline";
+import { PIPELINE_STEPS, getDaysUntilEcheance, getNextStatut } from "@/lib/pipeline";
 import { advanceStatut, abandonPipeline, toggleTask, addNote } from "@/lib/actions";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -74,6 +72,7 @@ type TaskTemplate = {
   id: string;
   statut: string;
   label: string;
+  shortLabel: string | null;
   description: string | null;
   required: boolean;
   order: number;
@@ -85,6 +84,22 @@ interface CoproDetailProps {
   userEmail: string;
 }
 
+function getEcheanceColor(days: number | null): string {
+  if (days === null) return "text-gray-400";
+  if (days < 0) return "text-red-600";
+  if (days <= 60) return "text-red-600";
+  if (days <= 180) return "text-orange-500";
+  return "text-green-600";
+}
+
+function getEcheanceBg(days: number | null): string {
+  if (days === null) return "bg-gray-50 border-gray-200";
+  if (days < 0) return "bg-red-50 border-red-200";
+  if (days <= 60) return "bg-red-50 border-red-200";
+  if (days <= 180) return "bg-orange-50 border-orange-200";
+  return "bg-green-50 border-green-200";
+}
+
 export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailProps) {
   const [isPending, startTransition] = useTransition();
   const [showAbandonDialog, setShowAbandonDialog] = useState(false);
@@ -92,6 +107,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
   const [abandonRaison, setAbandonRaison] = useState("");
   const [advanceNote, setAdvanceNote] = useState("");
   const [noteText, setNoteText] = useState("");
+  const [showAllTasks, setShowAllTasks] = useState(false);
 
   const currentStep = PIPELINE_STEPS.find((s) => s.statut === pipeline.statut);
   const currentStepIndex = PIPELINE_STEPS.findIndex((s) => s.statut === pipeline.statut);
@@ -99,9 +115,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
   const nextStep = nextStatut ? PIPELINE_STEPS.find((s) => s.statut === nextStatut) : null;
 
   const days = getDaysUntilEcheance(pipeline.copro.dateEcheance);
-  const urgence = getUrgenceBadge(days);
 
-  // Tasks for current step
   const currentStepTasks = taskTemplates
     .filter((t) => t.statut === pipeline.statut)
     .sort((a, b) => a.order - b.order);
@@ -110,6 +124,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
   const requiredTasks = currentStepTasks.filter((t) => t.required);
   const completedRequired = requiredTasks.filter((t) => completedTaskIds.has(t.id));
   const allRequiredDone = completedRequired.length === requiredTasks.length;
+  const nextTask = currentStepTasks.find((t) => !completedTaskIds.has(t.id));
 
   const isTerminal = pipeline.statut === "termine" || pipeline.statut === "abandonne";
 
@@ -124,7 +139,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
     startTransition(async () => {
       const result = await advanceStatut(pipeline.id, force, advanceNote);
       if (result.success) {
-        toast.success("Étape avancée avec succès");
+        toast.success("Étape avancée !");
         setShowAdvanceDialog(false);
         setAdvanceNote("");
       } else {
@@ -134,13 +149,10 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
   }
 
   function handleAbandon() {
-    if (!abandonRaison.trim()) {
-      toast.error("Veuillez indiquer une raison");
-      return;
-    }
+    if (!abandonRaison.trim()) { toast.error("Veuillez indiquer une raison"); return; }
     startTransition(async () => {
       await abandonPipeline(pipeline.id, abandonRaison);
-      toast.success("Pipeline marqué comme abandonné");
+      toast.success("Pipeline abandonné");
       setShowAbandonDialog(false);
     });
   }
@@ -158,10 +170,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
     <div>
       {/* Header */}
       <div className="mb-6">
-        <Link
-          href="/pipeline"
-          className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-3"
-        >
+        <Link href="/pipeline" className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 mb-3">
           <ArrowLeft className="h-4 w-4" />
           Retour au pipeline
         </Link>
@@ -178,12 +187,11 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
             ) : pipeline.statut === "termine" ? (
               <Badge className="bg-green-100 text-green-700">Terminé ✓</Badge>
             ) : (
-              <Badge variant="secondary">{currentStep?.label}</Badge>
+              <Badge variant="secondary">{currentStep?.label} — étape {currentStepIndex + 1}/{PIPELINE_STEPS.length - 1}</Badge>
             )}
           </div>
         </div>
 
-        {/* Progress bar */}
         {!isTerminal && (
           <div className="mt-4">
             <StepProgressBar
@@ -196,7 +204,8 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
 
       {/* 3-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Col 1: Copro info */}
+
+        {/* Col 1: infos */}
         <div className="space-y-4">
           <Card className="p-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -204,64 +213,26 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
               Contrat actuel
             </h3>
             <dl className="space-y-2">
-              <InfoRow
-                label="Assureur"
-                value={pipeline.copro.assureurActuel}
-                placeholder="Non renseigné"
-              />
-              <InfoRow
-                label="Courtier"
-                value={pipeline.copro.courtierActuel}
-                placeholder="Non renseigné"
-              />
-              <InfoRow
-                label="Prime annuelle"
-                value={
-                  pipeline.copro.primeActuelle
-                    ? `${pipeline.copro.primeActuelle.toLocaleString("fr-FR")} €`
-                    : null
-                }
-                placeholder="Non renseigné"
-              />
-              <InfoRow
-                label="Début contrat"
-                value={
-                  pipeline.copro.dateDebutContrat
-                    ? new Date(pipeline.copro.dateDebutContrat).toLocaleDateString("fr-FR")
-                    : null
-                }
-                placeholder="Non renseigné"
-              />
+              <InfoRow label="Assureur" value={pipeline.copro.assureurActuel} />
+              <InfoRow label="Courtier" value={pipeline.copro.courtierActuel} />
+              <InfoRow label="Prime annuelle" value={pipeline.copro.primeActuelle ? `${pipeline.copro.primeActuelle.toLocaleString("fr-FR")} €` : null} />
+              <InfoRow label="Début contrat" value={pipeline.copro.dateDebutContrat ? new Date(pipeline.copro.dateDebutContrat).toLocaleDateString("fr-FR") : null} />
             </dl>
           </Card>
 
-          <Card className="p-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <Card className={cn("p-4 border", getEcheanceBg(days))}>
+            <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
               <Calendar className="h-4 w-4" />
               Échéance
             </h3>
-            <div
-              className={cn(
-                "text-lg font-bold",
-                urgence === "overdue" && "text-red-600",
-                urgence === "urgent" && "text-orange-600",
-                urgence === "warning" && "text-yellow-600",
-                urgence === "ok" && "text-gray-900"
-              )}
-            >
+            <div className={cn("text-lg font-bold", getEcheanceColor(days))}>
               {pipeline.copro.dateEcheance
-                ? new Date(pipeline.copro.dateEcheance).toLocaleDateString("fr-FR", {
-                    day: "2-digit",
-                    month: "long",
-                    year: "numeric",
-                  })
+                ? new Date(pipeline.copro.dateEcheance).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })
                 : "Non renseignée"}
             </div>
             {days !== null && (
-              <div className="text-sm text-gray-500 mt-1">
-                {days < 0
-                  ? `Échue il y a ${Math.abs(days)} jours`
-                  : `Dans ${days} jours`}
+              <div className={cn("text-sm font-medium mt-1", getEcheanceColor(days))}>
+                {days < 0 ? `Échue il y a ${Math.abs(days)} jours` : `Dans ${days} jours`}
               </div>
             )}
           </Card>
@@ -272,14 +243,11 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
               Conseil Syndical
             </h3>
             <dl className="space-y-2">
-              <InfoRow label="Nom" value={pipeline.copro.contactCsNom} placeholder="Non renseigné" />
+              <InfoRow label="Nom" value={pipeline.copro.contactCsNom} />
               <div>
                 <dt className="text-xs text-gray-500">Email</dt>
                 {pipeline.copro.contactCsEmail ? (
-                  <a
-                    href={`mailto:${pipeline.copro.contactCsEmail}`}
-                    className="flex items-center gap-1 text-sm text-blue-600 hover:underline mt-0.5"
-                  >
+                  <a href={`mailto:${pipeline.copro.contactCsEmail}`} className="flex items-center gap-1 text-sm text-blue-600 hover:underline mt-0.5">
                     <Mail className="h-3 w-3" />
                     {pipeline.copro.contactCsEmail}
                   </a>
@@ -292,143 +260,134 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
 
           <Card className="p-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-              <Euro className="h-4 w-4" />
-              Infos Duomo
+              <Building2 className="h-4 w-4" />
+              Infos copropriété
             </h3>
-            <div className="text-xs text-gray-500">
-              <div>ID : <span className="font-mono">{pipeline.copro.buildingId}</span></div>
-              <div className="mt-1">Gestionnaire : {pipeline.copro.gestionnaireEmail}</div>
+            <div className="text-xs text-gray-500 space-y-1">
+              <div>ID Duomo : <span className="font-mono text-gray-700">{pipeline.copro.buildingId}</span></div>
+              <div>Gestionnaire : <span className="text-gray-700">{pipeline.copro.gestionnaireEmail?.split("@")[0] || "—"}</span></div>
             </div>
           </Card>
         </div>
 
-        {/* Col 2: Tasks for current step */}
+        {/* Col 2: action centrale */}
         <div className="space-y-4">
           {isTerminal ? (
-            <Card className="p-6 text-center">
+            <Card className="p-8 text-center">
               {pipeline.statut === "termine" ? (
                 <>
-                  <CheckCircle2 className="h-10 w-10 text-green-500 mx-auto mb-2" />
-                  <p className="font-medium text-gray-700">Processus terminé</p>
+                  <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
+                  <p className="font-semibold text-gray-800">Processus terminé</p>
                   <p className="text-sm text-gray-400 mt-1">Nouveau contrat actif</p>
                 </>
               ) : (
                 <>
-                  <XCircle className="h-10 w-10 text-red-400 mx-auto mb-2" />
-                  <p className="font-medium text-gray-700">Pipeline abandonné</p>
+                  <XCircle className="h-12 w-12 text-red-400 mx-auto mb-3" />
+                  <p className="font-semibold text-gray-700">Pipeline abandonné</p>
                 </>
               )}
             </Card>
           ) : (
             <>
-              <Card className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-gray-700">
-                    {currentStep?.label}
-                  </h3>
-                  <span className="text-xs text-gray-400">
-                    Étape {currentStepIndex + 1} / {PIPELINE_STEPS.length - 1}
-                  </span>
+              {/* Prochaine action mise en avant */}
+              <Card className="p-5">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                  Prochaine action
                 </div>
-                <p className="text-xs text-gray-500 mb-4">{currentStep?.description}</p>
-
-                {/* Task progress */}
-                {requiredTasks.length > 0 && (
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                      <div
-                        className={cn(
-                          "h-1.5 rounded-full transition-all",
-                          allRequiredDone ? "bg-green-500" : "bg-blue-500"
-                        )}
-                        style={{
-                          width: `${(completedRequired.length / requiredTasks.length) * 100}%`,
-                        }}
-                      />
+                {nextTask ? (
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 mt-0.5 w-5 h-5 rounded-full border-2 border-blue-500 flex items-center justify-center">
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
                     </div>
-                    <span className="text-xs text-gray-500">
-                      {completedRequired.length}/{requiredTasks.length} obligatoire{requiredTasks.length > 1 ? "s" : ""}
-                    </span>
+                    <div>
+                      <p className="font-medium text-gray-900 leading-snug">{nextTask.label}</p>
+                      {nextTask.description && (
+                        <p className="text-xs text-gray-400 mt-1">{nextTask.description}</p>
+                      )}
+                      <button
+                        onClick={() => handleToggleTask(nextTask.id)}
+                        disabled={isPending}
+                        className="mt-3 text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Marquer comme fait
+                      </button>
+                    </div>
                   </div>
-                )}
-
-                {/* Task list */}
-                <div className="space-y-3">
-                  {currentStepTasks.map((task) => {
-                    const isCompleted = completedTaskIds.has(task.id);
-                    const completion = pipeline.taskCompletions.find(
-                      (tc) => tc.taskId === task.id
-                    );
-                    return (
-                      <div key={task.id} className="flex items-start gap-3">
-                        <Checkbox
-                          checked={isCompleted}
-                          onCheckedChange={() => handleToggleTask(task.id)}
-                          disabled={isPending}
-                          className="mt-0.5"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start gap-1.5">
-                            <span
-                              className={cn(
-                                "text-sm leading-tight",
-                                isCompleted && "line-through text-gray-400"
-                              )}
-                            >
-                              {task.label}
-                            </span>
-                            {task.required && !isCompleted && (
-                              <span className="flex-shrink-0 text-xs text-red-500 font-medium">★</span>
-                            )}
-                          </div>
-                          {task.description && !isCompleted && (
-                            <p className="text-xs text-gray-400 mt-0.5">{task.description}</p>
-                          )}
-                          {isCompleted && completion && (
-                            <p className="text-xs text-gray-400 mt-0.5">
-                              Fait le{" "}
-                              {new Date(completion.completedAt).toLocaleDateString("fr-FR")}
-                              {completion.note && ` — ${completion.note}`}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {requiredTasks.length > 0 && !allRequiredDone && (
-                  <p className="text-xs text-gray-400 mt-3 flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    ★ = tâche obligatoire pour avancer
-                  </p>
+                ) : (
+                  <div className="flex items-center gap-2 text-green-600">
+                    <CheckCircle2 className="h-5 w-5" />
+                    <span className="font-medium">Toutes les tâches sont faites</span>
+                  </div>
                 )}
               </Card>
 
-              {/* Advance / Abandon buttons */}
+              {/* Checklist complète (repliable) */}
+              {currentStepTasks.length > 0 && (
+                <Card className="p-4">
+                  <button
+                    onClick={() => setShowAllTasks(!showAllTasks)}
+                    className="flex items-center justify-between w-full text-sm font-medium text-gray-600 hover:text-gray-900"
+                  >
+                    <span>
+                      Toutes les tâches
+                      <span className="ml-2 text-xs font-normal text-gray-400">
+                        {completedRequired.length}/{requiredTasks.length} obligatoires
+                      </span>
+                    </span>
+                    <ChevronRight className={cn("h-4 w-4 transition-transform", showAllTasks && "rotate-90")} />
+                  </button>
+
+                  {showAllTasks && (
+                    <div className="mt-3 space-y-3 pt-3 border-t border-gray-100">
+                      {currentStepTasks.map((task) => {
+                        const isCompleted = completedTaskIds.has(task.id);
+                        const completion = pipeline.taskCompletions.find((tc) => tc.taskId === task.id);
+                        return (
+                          <div key={task.id} className="flex items-start gap-3">
+                            <Checkbox
+                              checked={isCompleted}
+                              onCheckedChange={() => handleToggleTask(task.id)}
+                              disabled={isPending}
+                              className="mt-0.5"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <span className={cn("text-sm", isCompleted && "line-through text-gray-400")}>
+                                {task.label}
+                                {task.required && !isCompleted && <span className="ml-1 text-red-400 text-xs">★</span>}
+                              </span>
+                              {isCompleted && completion && (
+                                <p className="text-xs text-gray-400 mt-0.5">
+                                  {new Date(completion.completedAt).toLocaleDateString("fr-FR")}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </Card>
+              )}
+
+              {/* Bouton avancer */}
               {nextStep && (
                 <Card className="p-4 space-y-3">
                   <Button
-                    onClick={() => {
-                      if (allRequiredDone) {
-                        handleAdvance(false);
-                      } else {
-                        setShowAdvanceDialog(true);
-                      }
-                    }}
+                    onClick={() => allRequiredDone ? handleAdvance(false) : setShowAdvanceDialog(true)}
                     disabled={isPending}
                     className="w-full"
+                    size="lg"
                   >
                     Passer à : {nextStep.label}
-                    <ChevronRight className="h-4 w-4 ml-1" />
+                    <ArrowRight className="h-4 w-4 ml-1" />
                   </Button>
                   <Button
                     variant="ghost"
                     onClick={() => setShowAbandonDialog(true)}
                     disabled={isPending}
-                    className="w-full text-red-500 hover:text-red-700 hover:bg-red-50"
+                    className="w-full text-red-400 hover:text-red-600 hover:bg-red-50 text-sm"
                   >
-                    <XCircle className="h-4 w-4 mr-1.5" />
                     Abandonner ce pipeline
                   </Button>
                 </Card>
@@ -437,9 +396,8 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
           )}
         </div>
 
-        {/* Col 3: History + notes */}
+        {/* Col 3: notes + historique */}
         <div className="space-y-4">
-          {/* Add note */}
           <Card className="p-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
               <MessageSquare className="h-4 w-4" />
@@ -451,17 +409,11 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
               placeholder="Écrire une note..."
               className="text-sm min-h-20"
             />
-            <Button
-              size="sm"
-              className="mt-2 w-full"
-              onClick={handleAddNote}
-              disabled={isPending || !noteText.trim()}
-            >
+            <Button size="sm" className="mt-2 w-full" onClick={handleAddNote} disabled={isPending || !noteText.trim()}>
               Ajouter
             </Button>
           </Card>
 
-          {/* Event log */}
           <Card className="p-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
               <Clock className="h-4 w-4" />
@@ -473,19 +425,11 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
               <div className="space-y-3">
                 {pipeline.events.map((event) => (
                   <div key={event.id} className="flex gap-3">
-                    <div className="flex-shrink-0 mt-0.5">
-                      <EventIcon type={event.type} />
-                    </div>
+                    <EventIcon type={event.type} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-gray-700 leading-snug">{event.description}</p>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {event.createdBy.split("@")[0]} ·{" "}
-                        {new Date(event.createdAt).toLocaleDateString("fr-FR", {
-                          day: "2-digit",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        {event.createdBy.split("@")[0]} · {new Date(event.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                       </p>
                     </div>
                   </div>
@@ -496,56 +440,35 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
         </div>
       </div>
 
-      {/* Abandon dialog */}
+      {/* Dialogs */}
       <Dialog open={showAbandonDialog} onOpenChange={setShowAbandonDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Abandonner ce pipeline</DialogTitle>
-            <DialogDescription>
-              Cette action marquera le pipeline comme abandonné. Indiquez la raison.
-            </DialogDescription>
+            <DialogDescription>Indiquez la raison de l&apos;abandon.</DialogDescription>
           </DialogHeader>
-          <Textarea
-            value={abandonRaison}
-            onChange={(e) => setAbandonRaison(e.target.value)}
-            placeholder="Raison de l'abandon..."
-            className="min-h-24"
-          />
+          <Textarea value={abandonRaison} onChange={(e) => setAbandonRaison(e.target.value)} placeholder="Raison..." className="min-h-24" />
           <div className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={() => setShowAbandonDialog(false)}>
-              Annuler
-            </Button>
-            <Button variant="destructive" onClick={handleAbandon} disabled={isPending}>
-              Confirmer l&apos;abandon
-            </Button>
+            <Button variant="outline" onClick={() => setShowAbandonDialog(false)}>Annuler</Button>
+            <Button variant="destructive" onClick={handleAbandon} disabled={isPending}>Confirmer</Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Force advance dialog (when required tasks incomplete) */}
       <Dialog open={showAdvanceDialog} onOpenChange={setShowAdvanceDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Passer à l&apos;étape suivante</DialogTitle>
             <DialogDescription>
-              {completedRequired.length < requiredTasks.length
-                ? `${requiredTasks.length - completedRequired.length} tâche(s) obligatoire(s) ne sont pas encore cochées. Vous pouvez forcer le passage en indiquant la raison.`
-                : "Confirmez le passage à l'étape suivante."}
+              {requiredTasks.length - completedRequired.length > 0
+                ? `${requiredTasks.length - completedRequired.length} tâche(s) obligatoire(s) non cochées. Vous pouvez forcer le passage.`
+                : "Confirmez le passage."}
             </DialogDescription>
           </DialogHeader>
-          <Textarea
-            value={advanceNote}
-            onChange={(e) => setAdvanceNote(e.target.value)}
-            placeholder="Note (optionnelle)..."
-            className="min-h-20"
-          />
+          <Textarea value={advanceNote} onChange={(e) => setAdvanceNote(e.target.value)} placeholder="Note (optionnelle)..." className="min-h-20" />
           <div className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={() => setShowAdvanceDialog(false)}>
-              Annuler
-            </Button>
-            <Button onClick={() => handleAdvance(true)} disabled={isPending}>
-              Forcer le passage
-            </Button>
+            <Button variant="outline" onClick={() => setShowAdvanceDialog(false)}>Annuler</Button>
+            <Button onClick={() => handleAdvance(true)} disabled={isPending}>Forcer le passage</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -553,52 +476,30 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
   );
 }
 
-function InfoRow({
-  label,
-  value,
-  placeholder,
-}: {
-  label: string;
-  value: string | null | undefined;
-  placeholder: string;
-}) {
+function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div>
       <dt className="text-xs text-gray-500">{label}</dt>
-      <dd className={cn("text-sm", value ? "text-gray-900" : "text-gray-400 italic")}>
-        {value || placeholder}
-      </dd>
+      <dd className={cn("text-sm", value ? "text-gray-900" : "text-gray-400 italic")}>{value || "Non renseigné"}</dd>
     </div>
   );
 }
 
-function StepProgressBar({
-  steps,
-  currentStatut,
-}: {
-  steps: typeof PIPELINE_STEPS;
-  currentStatut: string;
-}) {
+function StepProgressBar({ steps, currentStatut }: { steps: typeof PIPELINE_STEPS; currentStatut: string }) {
   const currentIdx = steps.findIndex((s) => s.statut === currentStatut);
-
   return (
     <div className="flex items-center gap-1 overflow-x-auto pb-1">
       {steps.map((step, idx) => (
         <div key={step.statut} className="flex items-center gap-1 flex-shrink-0">
-          <div
-            className={cn(
-              "flex items-center gap-1 px-2 py-1 rounded text-xs font-medium",
-              idx < currentIdx && "bg-green-100 text-green-700",
-              idx === currentIdx && "bg-blue-600 text-white",
-              idx > currentIdx && "bg-gray-100 text-gray-400"
-            )}
-          >
+          <div className={cn("flex items-center gap-1 px-2 py-1 rounded text-xs font-medium",
+            idx < currentIdx && "bg-green-100 text-green-700",
+            idx === currentIdx && "bg-blue-600 text-white",
+            idx > currentIdx && "bg-gray-100 text-gray-400"
+          )}>
             {idx < currentIdx && <CheckCircle2 className="h-3 w-3" />}
             {step.shortLabel}
           </div>
-          {idx < steps.length - 1 && (
-            <ChevronRight className="h-3 w-3 text-gray-300 flex-shrink-0" />
-          )}
+          {idx < steps.length - 1 && <ChevronRight className="h-3 w-3 text-gray-200 flex-shrink-0" />}
         </div>
       ))}
     </div>
@@ -606,15 +507,11 @@ function StepProgressBar({
 }
 
 function EventIcon({ type }: { type: string }) {
-  const cls = "h-3.5 w-3.5";
+  const cls = "h-3.5 w-3.5 flex-shrink-0 mt-0.5";
   switch (type) {
-    case "statut_change":
-      return <ChevronRight className={cn(cls, "text-blue-500")} />;
-    case "tache_completee":
-      return <CheckCircle2 className={cn(cls, "text-green-500")} />;
-    case "note_ajoutee":
-      return <MessageSquare className={cn(cls, "text-gray-400")} />;
-    default:
-      return <Clock className={cn(cls, "text-gray-400")} />;
+    case "statut_change": return <ChevronRight className={cn(cls, "text-blue-400")} />;
+    case "tache_completee": return <CheckCircle2 className={cn(cls, "text-green-500")} />;
+    case "note_ajoutee": return <MessageSquare className={cn(cls, "text-gray-400")} />;
+    default: return <Clock className={cn(cls, "text-gray-400")} />;
   }
 }
