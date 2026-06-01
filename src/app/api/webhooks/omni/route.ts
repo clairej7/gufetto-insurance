@@ -1,20 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { PipelineStatut } from "@/generated/prisma/client";
 
-// Format attendu depuis Omni — à adapter selon le vrai payload
 type OmniCoproPayload = {
-  building_id: string;
+  building_id?: string;
+  "Building ID"?: string;
   nom?: string;
+  "Building Name"?: string;
   adresse?: string;
   gestionnaire_email?: string;
+  "Email"?: string;
   assureur_actuel?: string;
+  "Last Known MRI Supplier Name"?: string;
   courtier_actuel?: string;
   prime_actuelle?: number;
-  date_echeance?: string; // "YYYY-MM-DD"
+  date_echeance?: string;
+  "Last known MRI Contract Termination Date"?: string;
   date_debut_contrat?: string;
   contact_cs_email?: string;
   contact_cs_nom?: string;
+  "Insurance Sales Status"?: string;
 };
+
+function normalizeItem(item: OmniCoproPayload) {
+  const buildingId = item.building_id || item["Building ID"] || "";
+  const nom = item.nom || item["Building Name"] || buildingId;
+  const gestionnaireEmail = item.gestionnaire_email || item["Email"] || null;
+  const assureurActuel = item.assureur_actuel || item["Last Known MRI Supplier Name"] || null;
+  const dateEcheanceStr = item.date_echeance || item["Last known MRI Contract Termination Date"] || null;
+  const insuranceSalesStatus = item["Insurance Sales Status"] || null;
+  return { buildingId, nom, gestionnaireEmail, assureurActuel, dateEcheanceStr, insuranceSalesStatus };
+}
+
+function mapStatut(salesStatus: string | null): PipelineStatut {
+  switch (salesStatus) {
+    case "Waiting Claims History": return "rs_en_cours";
+    case "Quote Asked": return "devis_demandes";
+    case "Quote Received": return "devis_recus";
+    case "Quote Validated": return "envoye_cs";
+    case "Contract Signed": return "contrat_signe";
+    case "Contract Uploaded": return "contrat_signe";
+    case "Refused":
+    case "Uninsurable": return "abandonne";
+    default: return "identifie";
+  }
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -32,19 +62,23 @@ export async function POST(req: NextRequest) {
   const errors: string[] = [];
 
   for (const item of items) {
-    if (!item.building_id) {
-      errors.push(`Entrée ignorée : building_id manquant`);
+    const { buildingId, nom, gestionnaireEmail, assureurActuel, dateEcheanceStr, insuranceSalesStatus } = normalizeItem(item);
+
+    if (!buildingId) {
+      errors.push(`Entrée ignorée : Building ID manquant`);
       continue;
     }
 
+    const dateEcheance = dateEcheanceStr ? new Date(dateEcheanceStr) : null;
+
     const data = {
-      nom: item.nom || item.building_id,
+      nom,
       adresse: item.adresse ?? null,
-      gestionnaireEmail: item.gestionnaire_email ?? null,
-      assureurActuel: item.assureur_actuel ?? null,
+      gestionnaireEmail,
+      assureurActuel,
       courtierActuel: item.courtier_actuel ?? null,
       primeActuelle: item.prime_actuelle ?? null,
-      dateEcheance: item.date_echeance ? new Date(item.date_echeance) : null,
+      dateEcheance,
       dateDebutContrat: item.date_debut_contrat ? new Date(item.date_debut_contrat) : null,
       contactCsEmail: item.contact_cs_email ?? null,
       contactCsNom: item.contact_cs_nom ?? null,
@@ -52,8 +86,10 @@ export async function POST(req: NextRequest) {
       syncedAt: new Date(),
     };
 
+    const statut = mapStatut(insuranceSalesStatus);
+
     const existing = await prisma.copro.findUnique({
-      where: { buildingId: item.building_id },
+      where: { buildingId },
       include: {
         pipelines: {
           where: { statut: { notIn: ["termine", "abandonne"] } },
@@ -63,15 +99,14 @@ export async function POST(req: NextRequest) {
 
     if (!existing) {
       const newCopro = await prisma.copro.create({
-        data: { buildingId: item.building_id, ...data },
+        data: { buildingId, ...data },
       });
-      // Crée un pipeline automatiquement
-      if (data.dateEcheance) {
+      if (dateEcheance) {
         await prisma.insurancePipeline.create({
           data: {
             coproId: newCopro.id,
-            statut: "identifie",
-            anneeEcheance: data.dateEcheance.getFullYear(),
+            statut,
+            anneeEcheance: dateEcheance.getFullYear(),
           },
         });
         pipelinesCreated++;
@@ -79,16 +114,16 @@ export async function POST(req: NextRequest) {
       created++;
     } else {
       await prisma.copro.update({
-        where: { buildingId: item.building_id },
+        where: { buildingId },
         data,
       });
-      // Crée un pipeline si aucun actif
-      if (existing.pipelines.length === 0 && data.dateEcheance) {
+      // Ne touche pas au statut du pipeline existant (géré par le gestionnaire)
+      if (existing.pipelines.length === 0 && dateEcheance) {
         await prisma.insurancePipeline.create({
           data: {
             coproId: existing.id,
-            statut: "identifie",
-            anneeEcheance: data.dateEcheance.getFullYear(),
+            statut,
+            anneeEcheance: dateEcheance.getFullYear(),
           },
         });
         pipelinesCreated++;
