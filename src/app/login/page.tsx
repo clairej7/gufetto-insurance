@@ -3,14 +3,25 @@ import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-xl shadow-sm border">
+    <div className="min-h-screen flex items-center justify-center bg-[#F7F7F8]">
+      <div
+        className="max-w-md w-full space-y-8 p-8 bg-white rounded-2xl shadow-sm"
+        style={{ border: "1px solid #E8E8EC" }}
+      >
         <div className="text-center">
-          <div className="text-3xl font-bold text-gray-900">Matera</div>
-          <h2 className="mt-4 text-xl font-semibold text-gray-700">
+          <div className="flex items-center justify-center mb-2">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg"
+              style={{ backgroundColor: "#4E49FC" }}
+            >
+              M
+            </div>
+          </div>
+          <div className="text-3xl font-bold text-[#4E49FC]">Matera</div>
+          <h2 className="mt-4 text-xl font-semibold text-[#26262C]">
             CRM Assurance MRI
           </h2>
-          <p className="mt-2 text-sm text-gray-500">
+          <p className="mt-2 text-sm text-[#656576]">
             Connectez-vous avec votre compte Matera
           </p>
         </div>
@@ -42,7 +53,7 @@ export default function LoginPage() {
             Se connecter avec Google
           </Button>
         </form>
-        <p className="text-center text-xs text-gray-400">
+        <p className="text-center text-xs text-[#A2A1AF]">
           Réservé aux collaborateurs @matera.eu
         </p>
       </div>

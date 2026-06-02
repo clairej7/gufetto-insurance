@@ -70,9 +70,24 @@ model Copro {
   dateEcheance      DateTime?
   dateDebutContrat  DateTime?
 
+  // Contact courtier / assureur
+  contactCourtierEmail  String?
+  contactCourtierTel    String?
+
   // Contact Conseil Syndical
   contactCsEmail String?
   contactCsNom   String?
+
+  // Caractéristiques de l'immeuble
+  surfaceDeveloppee           Float?
+  periodeConstruction         String? // "avant_1950" | "1950_1970" | "1970_1985" | "1985_2000" | "apres_2000" | "inconnue"
+  natureOccupation            String? // "habitation" | "mixte" | "professionnelle"
+  activitesAggravantes        String?
+  caracteristiquesParticulieres String?
+  proportionInoccupee         String? // "moins_25" | "25_50" | "50_75" | "plus_75"
+  protectionJuridique         String? // "oui" | "non"
+  assureursDevis              String? // JSON: ["axa"] | ["mila"] | ["axa","mila"]
+  representantLegal           String?
 
   // Sync metadata
   source    String   @default("omni") // "omni" | "duomo"
@@ -114,6 +129,22 @@ model InsurancePipeline {
 
   events          PipelineEvent[]
   taskCompletions TaskCompletion[]
+  devisRecus      DevisRecu[]
+}
+
+model DevisRecu {
+  id            String            @id @default(cuid())
+  pipelineId    String
+  pipeline      InsurancePipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  assureur      String
+  numeroContrat String?
+  primeTTC      Float
+  data          String?           @db.Text
+  notes         String?           @db.Text
+  pdfName       String?
+  recommande    Boolean           @default(false)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 }
 
 enum EventType {

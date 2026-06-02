@@ -34,12 +34,12 @@ type TaskTemplate = {
 };
 
 const ACTION_BADGE: Record<string, { className: string }> = {
-  email:     { className: "bg-blue-100 text-blue-700" },
-  document:  { className: "bg-purple-100 text-purple-700" },
-  waiting:   { className: "bg-gray-100 text-gray-500" },
-  signature: { className: "bg-green-100 text-green-700" },
-  update:    { className: "bg-teal-100 text-teal-700" },
-  other:     { className: "bg-gray-100 text-gray-600" },
+  email:     { className: "bg-[#F5F5FF] text-[#4E49FC]" },
+  document:  { className: "bg-[#F5F5FF] text-[#4E49FC]" },
+  waiting:   { className: "bg-[#F7F7F8] text-[#656576]" },
+  signature: { className: "bg-[#EFFBF2] text-[#13762C]" },
+  update:    { className: "bg-[#F2F9FD] text-[#206E92]" },
+  other:     { className: "bg-[#F7F7F8] text-[#656576]" },
 };
 
 interface PipelineBoardProps {
@@ -66,16 +66,16 @@ function getNextAction(pipeline: PipelineWithCopro, taskTemplates: TaskTemplate[
 }
 
 const STATUT_BADGE: Record<string, { label: string; className: string }> = {
-  identifie:     { label: "Aucune action",       className: "bg-gray-100 text-gray-600" },
-  rs_en_cours:   { label: "RS en cours",         className: "bg-blue-100 text-blue-700" },
-  devis_demandes:{ label: "Devis demandés",      className: "bg-purple-100 text-purple-700" },
-  devis_recus:   { label: "Devis partagés",      className: "bg-purple-100 text-purple-700" },
-  envoye_cs:     { label: "Devis validé",        className: "bg-yellow-100 text-yellow-700" },
-  contrat_signe: { label: "Contrat signé 🎉",    className: "bg-green-600 text-white" },
-  termine:       { label: "Duomo OK ✓",          className: "bg-green-200 text-green-800" },
-  abandonne:     { label: "Abandonné",           className: "bg-red-100 text-red-600" },
-  refuse:        { label: "Refus client",        className: "bg-red-100 text-red-700" },
-  non_assurable: { label: "Non assurable",       className: "bg-red-100 text-red-700" },
+  identifie:     { label: "Aucune action",       className: "bg-[#F7F7F8] text-[#656576]" },
+  rs_en_cours:   { label: "RS en cours",         className: "bg-[#F5F5FF] text-[#4E49FC]" },
+  devis_demandes:{ label: "Devis demandés",      className: "bg-[#F5F5FF] text-[#4E49FC]" },
+  devis_recus:   { label: "Devis partagés",      className: "bg-[#F5F5FF] text-[#4E49FC]" },
+  envoye_cs:     { label: "Devis validé",        className: "bg-[#FFF7EB] text-[#955804]" },
+  contrat_signe: { label: "Contrat signé",       className: "bg-[#13762C] text-white" },
+  termine:       { label: "Duomo OK",            className: "bg-[#EFFBF2] text-[#13762C]" },
+  abandonne:     { label: "Abandonné",           className: "bg-[#FFF5F5] text-[#CA1E12]" },
+  refuse:        { label: "Refus client",        className: "bg-[#FFF5F5] text-[#CA1E12]" },
+  non_assurable: { label: "Non assurable",       className: "bg-[#FFF5F5] text-[#CA1E12]" },
 };
 
 function GestionnaireCombobox({
@@ -124,31 +124,32 @@ function GestionnaireCombobox({
 
   return (
     <div ref={ref} className="relative">
-      <div className="flex items-center border border-gray-200 rounded-md bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
+      <div className="flex items-center border rounded-lg bg-white overflow-hidden focus-within:ring-2" style={{ borderColor: "#E8E8EC", "--tw-ring-color": "#8784FD" } as React.CSSProperties}>
         <input
           type="text"
           placeholder="Gestionnaire…"
           value={open ? query : displayName}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
-          className="text-sm px-3 py-1.5 bg-transparent outline-none w-44 text-gray-700 placeholder-gray-400"
+          className="text-sm px-3 py-1.5 bg-transparent outline-none w-44"
+          style={{ color: "#26262C" }}
         />
         {selected && (
-          <button onClick={clear} className="pr-2 text-gray-400 hover:text-gray-600">
+          <button onClick={clear} className="pr-2" style={{ color: "#A2A1AF" }}>
             <X className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
       {open && filtered.length > 0 && (
-        <div className="absolute z-20 top-full mt-1 left-0 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1 max-h-52 overflow-y-auto">
+        <div className="absolute z-20 top-full mt-1 left-0 w-56 bg-white rounded-lg shadow-lg py-1 max-h-52 overflow-y-auto border" style={{ borderColor: "#E8E8EC" }}>
           {filtered.map((g) => (
             <button
               key={g}
               onMouseDown={(e) => { e.preventDefault(); select(g); }}
-              className={cn(
-                "w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors",
-                value === g ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700"
-              )}
+              className={cn("w-full text-left px-3 py-2 text-sm transition-colors")}
+              style={value === g ? { backgroundColor: "#F5F5FF", color: "#4E49FC", fontWeight: 500 } : { color: "#26262C" }}
+              onMouseEnter={e => { if (value !== g) (e.target as HTMLElement).style.backgroundColor = "#F7F7F8"; }}
+              onMouseLeave={e => { if (value !== g) (e.target as HTMLElement).style.backgroundColor = ""; }}
             >
               {formatGestionnaire(g)}
             </button>
@@ -240,17 +241,17 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
     <div>
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="text-2xl font-bold text-gray-900">{pipelines.length}</div>
-          <div className="text-sm text-gray-500 mt-0.5">Copros en cours</div>
+        <div className="bg-white rounded-2xl p-4" style={{ border: "1px solid #E8E8EC" }}>
+          <div className="text-2xl font-bold" style={{ color: "#26262C" }}>{pipelines.length}</div>
+          <div className="text-sm mt-0.5" style={{ color: "#656576" }}>Copros en cours</div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="text-2xl font-bold text-red-600">{urgent}</div>
-          <div className="text-sm text-gray-500 mt-0.5">Échéance &lt; 2 mois</div>
+        <div className="bg-white rounded-2xl p-4" style={{ border: "1px solid #E8E8EC" }}>
+          <div className="text-2xl font-bold" style={{ color: "#CA1E12" }}>{urgent}</div>
+          <div className="text-sm mt-0.5" style={{ color: "#656576" }}>Échéance &lt; 2 mois</div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="text-2xl font-bold text-green-600">{dealsGagnes}</div>
-          <div className="text-sm text-gray-500 mt-0.5">Deals gagnés</div>
+        <div className="bg-white rounded-2xl p-4" style={{ border: "1px solid #E8E8EC" }}>
+          <div className="text-2xl font-bold" style={{ color: "#13762C" }}>{dealsGagnes}</div>
+          <div className="text-sm mt-0.5" style={{ color: "#656576" }}>Deals gagnés</div>
         </div>
       </div>
 
@@ -264,7 +265,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
         <select
           value={selectedStatut}
           onChange={(e) => setSelectedStatut(e.target.value)}
-          className="text-sm border border-gray-200 rounded-md px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="text-sm rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2" style={{ border: "1px solid #E8E8EC", color: "#26262C" } as React.CSSProperties}
         >
           <option value="all">Toutes les étapes</option>
           {PIPELINE_STEPS.map((s) => (
@@ -274,7 +275,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
         <select
           value={selectedEcheance}
           onChange={(e) => setSelectedEcheance(e.target.value)}
-          className="text-sm border border-gray-200 rounded-md px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="text-sm rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2" style={{ border: "1px solid #E8E8EC", color: "#26262C" } as React.CSSProperties}
         >
           <option value="all">Toutes les échéances</option>
           <option value="overdue">Dépassées</option>
@@ -285,7 +286,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
         <select
           value={selectedAssureur}
           onChange={(e) => setSelectedAssureur(e.target.value)}
-          className="text-sm border border-gray-200 rounded-md px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="text-sm rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2" style={{ border: "1px solid #E8E8EC", color: "#26262C" } as React.CSSProperties}
         >
           <option value="all">Tous les assureurs</option>
           {assureurs.map((a) => (
@@ -295,58 +296,57 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
         {hasActiveFilters && (
           <button
             onClick={() => { setSelectedGestionnaire("all"); setSelectedStatut("all"); setSelectedEcheance("all"); setSelectedAssureur("all"); }}
-            className="text-xs text-gray-400 hover:text-gray-600 underline"
+            className="text-xs underline" style={{ color: "#A2A1AF" }}
           >
             Réinitialiser les filtres
           </button>
         )}
-        <span className="text-xs text-gray-400 ml-auto">{filtered.length} résultat{filtered.length !== 1 ? "s" : ""}</span>
+        <span className="text-xs ml-auto" style={{ color: "#A2A1AF" }}>{filtered.length} résultat{filtered.length !== 1 ? "s" : ""}</span>
       </div>
 
       {/* Toggle */}
       <div className="flex gap-2 mb-4">
         {(["actions", "kanban"] as const).map((v) => (
           <button key={v} onClick={() => setView(v)}
-            className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
-              view === v ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"
-            )}>
+            className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            style={view === v ? { backgroundColor: "#26262C", color: "#FFFFFF" } : { color: "#656576" }}>
             {v === "actions" ? "Actions à faire" : "Par étape"}
           </button>
         ))}
       </div>
 
       {pipelines.length === 0 ? (
-        <div className="text-center py-20 text-gray-400">
+        <div className="text-center py-20" style={{ color: "#A2A1AF" }}>
           <Building2 className="h-10 w-10 mx-auto mb-3 opacity-20" />
           <p className="text-sm">Aucune copropriété dans votre pipeline.</p>
           <p className="text-xs mt-1">Les données sont synchronisées chaque nuit depuis Omni.</p>
         </div>
       ) : view === "actions" ? (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-2xl overflow-hidden" style={{ border: "1px solid #E8E8EC" }}>
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer select-none" onClick={() => toggleSort("nom")}>
+              <tr style={{ borderBottom: "1px solid #E8E8EC", backgroundColor: "#F7F7F8" }}>
+                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide cursor-pointer select-none font-medium" style={{ color: "#656576" }} onClick={() => toggleSort("nom")}>
                   Copropriété <SortIcon k="nom" />
                 </th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer select-none" onClick={() => toggleSort("statut")}>
+                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide cursor-pointer select-none font-medium" style={{ color: "#656576" }} onClick={() => toggleSort("statut")}>
                   Étape <SortIcon k="statut" />
                 </th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">
+                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide font-medium" style={{ color: "#656576" }}>
                   Prochaine action
                 </th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer select-none" onClick={() => toggleSort("assureur")}>
+                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide cursor-pointer select-none font-medium" style={{ color: "#656576" }} onClick={() => toggleSort("assureur")}>
                   Assureur <SortIcon k="assureur" />
                 </th>
-                <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide cursor-pointer select-none" onClick={() => toggleSort("echeance")}>
+                <th className="text-right px-4 py-3 text-xs uppercase tracking-wide cursor-pointer select-none font-medium" style={{ color: "#656576" }} onClick={() => toggleSort("echeance")}>
                   Date échéance <SortIcon k="echeance" />
                 </th>
-                <th className="text-right px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">
+                <th className="text-right px-4 py-3 text-xs uppercase tracking-wide font-medium" style={{ color: "#656576" }}>
                   J-
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {sorted.map((pipeline) => {
                 const days = getDaysUntilEcheance(pipeline.copro.dateEcheance);
                 const urgence = getUrgenceBadge(days);
@@ -355,14 +355,17 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
 
                 return (
                   <tr key={pipeline.id}
-                    className="hover:bg-gray-50 transition-colors cursor-pointer group"
+                    className="transition-colors cursor-pointer group"
+                    style={{ borderTop: "1px solid #F7F7F8" }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#F7F7F8")}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "")}
                     onClick={() => window.location.href = `/pipeline/${pipeline.id}`}>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-blue-600 group-hover:underline truncate max-w-48">
+                      <div className="font-medium group-hover:underline truncate max-w-48" style={{ color: "#4E49FC" }}>
                         {pipeline.copro.nom}
                       </div>
                       {pipeline.copro.adresse && (
-                        <div className="text-xs text-gray-400 truncate max-w-48 mt-0.5">
+                        <div className="text-xs truncate max-w-48 mt-0.5" style={{ color: "#A2A1AF" }}>
                           {pipeline.copro.adresse}
                         </div>
                       )}
@@ -384,29 +387,26 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
                     </td>
                     <td className="px-4 py-3">
                       {pipeline.copro.assureurActuel ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: "#F7F7F8", color: "#656576" }}>
                           {pipeline.copro.assureurActuel}
                         </span>
                       ) : (
-                        <span className="text-gray-300 text-xs">—</span>
+                        <span className="text-xs" style={{ color: "#A2A1AF" }}>—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-500">
+                    <td className="px-4 py-3 text-right text-sm" style={{ color: "#656576" }}>
                       {pipeline.copro.dateEcheance
                         ? new Date(pipeline.copro.dateEcheance).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })
-                        : <span className="text-gray-300">—</span>}
+                        : <span style={{ color: "#A2A1AF" }}>—</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {days !== null ? (
-                        <span className={cn("text-sm font-medium",
-                          urgence === "overdue" && "text-red-600",
-                          urgence === "urgent" && "text-orange-500",
-                          urgence === "warning" && "text-yellow-600",
-                          urgence === "ok" && "text-gray-400"
-                        )}>
+                        <span className="text-sm font-medium" style={{
+                          color: urgence === "overdue" ? "#CA1E12" : urgence === "urgent" ? "#955804" : urgence === "warning" ? "#955804" : "#A2A1AF"
+                        }}>
                           {days < 0 ? `+${Math.abs(days)}j` : `J-${days}`}
                         </span>
-                      ) : <span className="text-gray-300">—</span>}
+                      ) : <span style={{ color: "#A2A1AF" }}>—</span>}
                     </td>
                   </tr>
                 );
@@ -422,23 +422,20 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
             return (
               <div key={step.statut} className="min-w-52 flex-shrink-0">
                 <div className="flex items-center gap-2 mb-2 px-1">
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{step.shortLabel}</span>
-                  {items.length > 0 && <span className="text-xs bg-gray-200 text-gray-600 rounded-full px-1.5 py-0.5">{items.length}</span>}
+                  <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#656576" }}>{step.shortLabel}</span>
+                  {items.length > 0 && <span className="text-xs rounded-full px-1.5 py-0.5" style={{ backgroundColor: "#E8E8EC", color: "#656576" }}>{items.length}</span>}
                 </div>
                 <div className="space-y-2">
                   {items.map((p) => {
                     const days = getDaysUntilEcheance(p.copro.dateEcheance);
                     const urgence = getUrgenceBadge(days);
                     const nextAction = getNextAction(p, taskTemplates);
+                    const leftColor = urgence === "overdue" ? "#CA1E12" : urgence === "urgent" ? "#955804" : urgence === "warning" ? "#955804" : "#E8E8EC";
                     return (
                       <Link key={p.id} href={`/pipeline/${p.id}`}>
-                        <div className={cn("bg-white border rounded-lg p-3 hover:shadow-sm transition-shadow cursor-pointer border-l-4",
-                          urgence === "overdue" && "border-l-red-500",
-                          urgence === "urgent" && "border-l-orange-400",
-                          urgence === "warning" && "border-l-yellow-400",
-                          urgence === "ok" && "border-l-gray-200",
-                        )}>
-                          <div className="font-medium text-sm text-blue-600 truncate">{p.copro.nom}</div>
+                        <div className="bg-white rounded-xl p-3 hover:shadow-sm transition-shadow cursor-pointer border-l-4"
+                          style={{ border: `1px solid #E8E8EC`, borderLeft: `4px solid ${leftColor}` }}>
+                          <div className="font-medium text-sm truncate" style={{ color: "#4E49FC" }}>{p.copro.nom}</div>
                           {nextAction && (
                             <span className={cn(
                               "inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium mt-1",
@@ -448,12 +445,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
                             </span>
                           )}
                           {days !== null && (
-                            <div className={cn("text-xs font-medium mt-1",
-                              urgence === "overdue" && "text-red-600",
-                              urgence === "urgent" && "text-orange-500",
-                              urgence === "warning" && "text-yellow-600",
-                              urgence === "ok" && "text-gray-400"
-                            )}>
+                            <div className="text-xs font-medium mt-1" style={{ color: leftColor === "#E8E8EC" ? "#A2A1AF" : leftColor }}>
                               {days < 0 ? `+${Math.abs(days)}j` : `J-${days}`}
                             </div>
                           )}
@@ -462,7 +454,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
                     );
                   })}
                   {items.length === 0 && (
-                    <div className="bg-gray-50 border border-dashed border-gray-200 rounded-lg p-3 text-center text-xs text-gray-300">Vide</div>
+                    <div className="rounded-xl p-3 text-center text-xs border border-dashed" style={{ backgroundColor: "#F7F7F8", borderColor: "#E8E8EC", color: "#A2A1AF" }}>Vide</div>
                   )}
                 </div>
               </div>

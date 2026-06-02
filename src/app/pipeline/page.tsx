@@ -10,7 +10,7 @@ export default async function PipelinePage() {
 
   const pipelines = await prisma.insurancePipeline.findMany({
     where: {
-      statut: { notIn: ["abandonne", "refuse", "non_assurable"] },
+      statut: { notIn: ["termine"] },
     },
     include: {
       copro: true,

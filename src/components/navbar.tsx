@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LayoutDashboard, Shield, LogOut } from "lucide-react";
+import { LayoutDashboard, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface NavbarProps {
@@ -31,25 +31,27 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
     : (user.email?.[0] || "?").toUpperCase();
 
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <header className="bg-white border-b sticky top-0 z-50" style={{ borderColor: "#E8E8EC" }}>
+      <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex items-center justify-between h-14">
           {/* Logo + Nav */}
-          <div className="flex items-center gap-6">
-            <Link href="/pipeline" className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-blue-600" />
-              <span className="font-semibold text-gray-900 text-sm">
-                CRM Assurance MRI
+          <div className="flex items-center gap-8">
+            <Link href="/pipeline" className="flex items-center gap-2.5">
+              <div className="h-7 w-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#4E49FC" }}>
+                <span className="text-white text-xs font-bold">M</span>
+              </div>
+              <span className="font-semibold text-sm" style={{ color: "#26262C" }}>
+                Assurance MRI
               </span>
             </Link>
             <nav className="flex items-center gap-1">
               <Link
                 href="/pipeline"
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
                   pathname.startsWith("/pipeline")
-                    ? "bg-gray-100 text-gray-900"
-                    : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"
+                    ? "text-[#4E49FC] bg-[#F5F5FF]"
+                    : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
                 )}
               >
                 <LayoutDashboard className="h-4 w-4" />
@@ -59,10 +61,10 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
                 <Link
                   href="/admin"
                   className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
                     pathname.startsWith("/admin")
-                      ? "bg-gray-100 text-gray-900"
-                      : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"
+                      ? "text-[#4E49FC] bg-[#F5F5FF]"
+                      : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
                   )}
                 >
                   Vue globale
@@ -74,7 +76,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
           {/* Right side */}
           <div className="flex items-center gap-3">
             {lastSyncAt && (
-              <span className="text-xs text-gray-400 hidden sm:block">
+              <span className="text-xs hidden sm:block" style={{ color: "#A2A1AF" }}>
                 Actualisé le{" "}
                 {new Date(lastSyncAt).toLocaleDateString("fr-FR", {
                   day: "2-digit",
@@ -86,18 +88,19 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
             )}
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-2 rounded-full focus:outline-none">
-                <Avatar className="h-7 w-7">
+                <Avatar className="h-8 w-8">
                   <AvatarImage src={user.image || ""} alt={user.name || ""} />
-                  <AvatarFallback className="text-xs bg-blue-100 text-blue-700">
+                  <AvatarFallback className="text-xs font-medium" style={{ backgroundColor: "#F5F5FF", color: "#4E49FC" }}>
                     {initials}
                   </AvatarFallback>
                 </Avatar>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <div className="px-2 py-1.5 text-xs text-gray-500">{user.email}</div>
+                <div className="px-2 py-1.5 text-xs" style={{ color: "#656576" }}>{user.email}</div>
                 <DropdownMenuItem
                   onClick={() => signOut({ callbackUrl: "/login" })}
-                  className="text-red-600 cursor-pointer"
+                  className="cursor-pointer"
+                  style={{ color: "#CA1E12" }}
                 >
                   <LogOut className="h-4 w-4 mr-2" />
                   Se déconnecter

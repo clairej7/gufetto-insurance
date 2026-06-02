@@ -97,11 +97,12 @@ function buildRelanceTemplate(
 
 Je me permets de revenir vers vous suite à mon ${label} mail du ${formatDate(firstSentAt)} concernant le relevé de sinistralité de la copropriété ${copro.nom}${copro.adresse ? `, située ${copro.adresse}` : ""}.
 
-Nous n'avons toujours pas reçu ce document, indispensable pour l'étude du renouvellement du contrat d'assurance MRI (échéance le ${formatDate(copro.dateEcheance)}).
+Nous n'avons toujours pas reçu ce document, malgré plusieurs relances.
 
 Pourriez-vous nous le faire parvenir dans les meilleurs délais ?
 
 Cordialement,
+${nameFromEmail(copro.gestionnaireEmail)}
 Matera Syndic`;
 }
 
@@ -150,10 +151,10 @@ function DropZone({
 
   if (file) {
     return (
-      <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-        <FileText className="h-5 w-5 text-green-600 flex-shrink-0" />
-        <span className="text-sm text-green-800 truncate flex-1">{file.name}</span>
-        <button onClick={onRemove} className="text-green-400 hover:text-green-600">
+      <div className="flex items-center gap-3 p-3 bg-[#EFFBF2] border border-[#BBF1C8] rounded-xl">
+        <FileText className="h-5 w-5 text-[#13762C] flex-shrink-0" />
+        <span className="text-sm text-[#13762C] truncate flex-1">{file.name}</span>
+        <button onClick={onRemove} className="text-[#13762C] hover:text-[#13762C]">
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -169,13 +170,13 @@ function DropZone({
       className={cn(
         "border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors",
         isDragging
-          ? "border-blue-400 bg-blue-50"
-          : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+          ? "border-[#8784FD] bg-[#F5F5FF]"
+          : "border-[#E8E8EC] hover:border-[#A2A1AF] hover:bg-[#F7F7F8]"
       )}
     >
-      <Upload className="h-5 w-5 text-gray-400 mx-auto mb-1" />
-      <p className="text-sm font-medium text-gray-600">{label}</p>
-      <p className="text-xs text-gray-400 mt-0.5">{hint}</p>
+      <Upload className="h-5 w-5 text-[#A2A1AF] mx-auto mb-1" />
+      <p className="text-sm font-medium text-[#656576]">{label}</p>
+      <p className="text-xs text-[#A2A1AF] mt-0.5">{hint}</p>
     </div>
   );
 }
@@ -236,7 +237,7 @@ function FirstEmailForm({
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+        <p className="text-xs font-semibold text-[#656576] uppercase tracking-wide mb-2">
           Documents à joindre
         </p>
         <div className="grid grid-cols-2 gap-3">
@@ -258,7 +259,7 @@ function FirstEmailForm({
       </div>
 
       <div>
-        <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+        <Label className="text-xs font-semibold text-[#656576] uppercase tracking-wide">
           Destinataire (courtier / assureur actuel)
         </Label>
         <Input
@@ -269,19 +270,19 @@ function FirstEmailForm({
           className="mt-1"
         />
         {copro.courtierActuel && (
-          <p className="text-xs text-gray-400 mt-1">Courtier actuel : {copro.courtierActuel}</p>
+          <p className="text-xs text-[#A2A1AF] mt-1">Courtier actuel : {copro.courtierActuel}</p>
         )}
       </div>
 
       <div>
-        <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+        <Label className="text-xs font-semibold text-[#656576] uppercase tracking-wide">
           Objet
         </Label>
         <Input value={subject} onChange={(e) => setSubject(e.target.value)} className="mt-1" />
       </div>
 
       <div>
-        <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+        <Label className="text-xs font-semibold text-[#656576] uppercase tracking-wide">
           Message
         </Label>
         <Textarea
@@ -369,9 +370,9 @@ function RelanceForm({
   }
 
   return (
-    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+    <div className="mt-3 p-3 bg-[#F5F5FF] border border-[#8784FD] rounded-xl space-y-3">
       <div>
-        <Label className="text-xs text-gray-500">Destinataire</Label>
+        <Label className="text-xs text-[#656576]">Destinataire</Label>
         <Input
           value={to}
           onChange={(e) => setTo(e.target.value)}
@@ -380,13 +381,13 @@ function RelanceForm({
         />
       </div>
       <div>
-        <Label className="text-xs text-gray-500">Objet</Label>
+        <Label className="text-xs text-[#656576]">Objet</Label>
         <Input value={subject} onChange={(e) => setSubject(e.target.value)} className="mt-1 bg-white" />
       </div>
       <button
         type="button"
         onClick={() => setShowBody(!showBody)}
-        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+        className="flex items-center gap-1 text-xs text-[#4E49FC] hover:text-[#3f3ae0]"
       >
         {showBody ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
         {showBody ? "Masquer le message" : "Voir / modifier le message"}
@@ -492,11 +493,12 @@ function PostSendPanel({
         )}
       </div>
 
-      {/* RS reçu */}
+      {/* RS reçu — bouton principal */}
       <Button
         onClick={handleRSRecu}
         disabled={isPending}
-        className="w-full bg-green-600 hover:bg-green-700 text-white"
+        style={{ backgroundColor: "#13762C" }}
+        className="w-full text-white hover:opacity-90"
         size="lg"
       >
         <Check className="h-4 w-4 mr-2" />
@@ -504,14 +506,14 @@ function PostSendPanel({
       </Button>
 
       {/* Relances */}
-      <div className="border-t border-gray-100 pt-4 space-y-3">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+      <div className="border-t border-[#E8E8EC] pt-4 space-y-3">
+        <p className="text-xs font-semibold text-[#A2A1AF] uppercase tracking-wide">
           Pas encore reçu ?
         </p>
 
         {/* Relance J+7 */}
-        {!relance1Done && (
-          <div>
+        {!relance1Done ? (
+          <div className="space-y-2">
             <RelanceRow
               label="Relance J+7"
               date={j7Date}
@@ -535,12 +537,20 @@ function PostSendPanel({
                 onCancel={() => setActiveForm(null)}
               />
             )}
+            <Button onClick={handleRSRecu} disabled={isPending} variant="outline" size="sm" className="w-full border-[#BBF1C8] text-[#13762C] hover:bg-[#EFFBF2]">
+              <Check className="h-3.5 w-3.5 mr-1.5" />
+              J&apos;ai reçu le relevé de sinistralité
+            </Button>
           </div>
+        ) : (
+          <RelanceRow label="Relance J+7" date={j7Date} available done />
         )}
 
         {/* Relance J+14 */}
-        {relance1Done && !relance2Done && (
-          <div>
+        {relance2Done ? (
+          <RelanceRow label="Relance J+14" date={j14Date} available done />
+        ) : relance1Done ? (
+          <div className="space-y-2">
             <RelanceRow
               label="Relance J+14"
               date={j14Date}
@@ -564,76 +574,64 @@ function PostSendPanel({
                 onCancel={() => setActiveForm(null)}
               />
             )}
+            <Button onClick={handleRSRecu} disabled={isPending} variant="outline" size="sm" className="w-full border-[#BBF1C8] text-[#13762C] hover:bg-[#EFFBF2]">
+              <Check className="h-3.5 w-3.5 mr-1.5" />
+              J&apos;ai reçu le relevé de sinistralité
+            </Button>
           </div>
-        )}
-
-        {/* Relances done indicators */}
-        {relance1Done && !relance2Done && (
-          <RelanceRow label="Relance J+7" date={j7Date} available done />
-        )}
-        {relance2Done && (
-          <>
-            <RelanceRow label="Relance J+7" date={j7Date} available done />
-            <RelanceRow label="Relance J+14" date={j14Date} available done />
-          </>
+        ) : (
+          <RelanceRow label="Relance J+14" date={j14Date} available={false} done={false} locked />
         )}
 
         {/* Appel courtier J+28 */}
-        {relance2Done && (
-          <div>
-            {appellDone ? (
-              <RelanceRow
-                label="Appeler le courtier"
-                date={j28Date}
-                available
-                done
-              />
-            ) : (
-              <div
-                className={cn(
-                  "flex items-center justify-between gap-3 p-3 rounded-lg border",
-                  j28Available
-                    ? "border-orange-200 bg-orange-50"
-                    : "border-gray-100 bg-gray-50"
-                )}
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Phone
-                      className={cn(
-                        "h-4 w-4",
-                        j28Available ? "text-orange-500" : "text-gray-300"
-                      )}
-                    />
-                    <span
-                      className={cn(
-                        "text-sm font-medium",
-                        j28Available ? "text-orange-700" : "text-gray-400"
-                      )}
-                    >
-                      J+28 — Appeler le courtier
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-0.5 ml-6">
-                    {j28Available
-                      ? "Créer une tâche de rappel"
-                      : `Disponible le ${formatDate(j28Date)}`}
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  variant={j28Available ? "default" : "outline"}
-                  disabled={!j28Available || isPending}
-                  onClick={handleAppelCourtier}
+        {appellDone ? (
+          <RelanceRow label="Appeler le courtier" date={j28Date} available done />
+        ) : relance2Done ? (
+          <div
+            className={cn(
+              "flex items-center justify-between gap-3 p-3 rounded-xl border",
+              j28Available
+                ? "border-[#F5C97A] bg-[#FFF7EB]"
+                : "border-[#E8E8EC] bg-[#F7F7F8]"
+            )}
+          >
+            <div>
+              <div className="flex items-center gap-2">
+                <Phone
                   className={cn(
-                    j28Available && "bg-orange-500 hover:bg-orange-600 text-white border-orange-500"
+                    "h-4 w-4",
+                    j28Available ? "text-[#955804]" : "text-[#A2A1AF]"
+                  )}
+                />
+                <span
+                  className={cn(
+                    "text-sm font-medium",
+                    j28Available ? "text-[#955804]" : "text-[#A2A1AF]"
                   )}
                 >
-                  Créer la tâche
-                </Button>
+                  J+28 — Appeler le courtier
+                </span>
               </div>
-            )}
+              <p className="text-xs text-[#A2A1AF] mt-0.5 ml-6">
+                {j28Available
+                  ? "Créer une tâche de rappel"
+                  : `Disponible le ${formatDate(j28Date)}`}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant={j28Available ? "default" : "outline"}
+              disabled={!j28Available || isPending}
+              onClick={handleAppelCourtier}
+              className={cn(
+                j28Available && "bg-[#955804] hover:bg-[#7a4903] text-white border-[#955804]"
+              )}
+            >
+              Créer la tâche
+            </Button>
           </div>
+        ) : (
+          <RelanceRow label="J+28 — Appeler le courtier" date={j28Date} available={false} done={false} locked />
         )}
       </div>
     </div>
@@ -656,19 +654,19 @@ function TimelineItem({
       <div
         className={cn(
           "mt-0.5 h-4 w-4 rounded-full flex items-center justify-center flex-shrink-0",
-          done ? "bg-green-100" : "bg-gray-100"
+          done ? "bg-[#EFFBF2]" : "bg-[#F7F7F8]"
         )}
       >
         <CheckCircle2
-          className={cn("h-3 w-3", done ? "text-green-600" : "text-gray-300")}
+          className={cn("h-3 w-3", done ? "text-[#13762C]" : "text-[#A2A1AF]")}
         />
       </div>
       <div>
-        <span className="text-sm text-gray-700">{label}</span>
+        <span className="text-sm text-[#26262C]">{label}</span>
         {date && (
-          <span className="text-xs text-gray-400 ml-2">{formatDate(date)}</span>
+          <span className="text-xs text-[#A2A1AF] ml-2">{formatDate(date)}</span>
         )}
-        {sub && <p className="text-xs text-gray-400">{sub}</p>}
+        {sub && <p className="text-xs text-[#A2A1AF]">{sub}</p>}
       </div>
     </div>
   );
@@ -679,6 +677,7 @@ function RelanceRow({
   date,
   available,
   done,
+  locked,
   onAction,
   actionLabel,
   isOpen,
@@ -687,15 +686,28 @@ function RelanceRow({
   date: Date;
   available: boolean;
   done: boolean;
+  locked?: boolean;
   onAction?: () => void;
   actionLabel?: string;
   isOpen?: boolean;
 }) {
   if (done) {
     return (
-      <div className="flex items-center gap-2 text-xs text-gray-400">
-        <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+      <div className="flex items-center gap-2 text-xs text-[#A2A1AF]">
+        <CheckCircle2 className="h-3.5 w-3.5 text-[#13762C] flex-shrink-0" />
         <span>{label} — envoyée</span>
+      </div>
+    );
+  }
+
+  if (locked) {
+    return (
+      <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-[#E8E8EC] bg-[#F7F7F8] opacity-50">
+        <div className="flex items-center gap-2">
+          <Clock className="h-4 w-4 text-[#A2A1AF]" />
+          <span className="text-sm font-medium text-[#A2A1AF]">{label}</span>
+        </div>
+        <span className="text-xs text-[#A2A1AF]">Disponible après l&apos;étape précédente</span>
       </div>
     );
   }
@@ -703,25 +715,25 @@ function RelanceRow({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-3 p-3 rounded-lg border",
-        available ? "border-blue-200 bg-blue-50" : "border-gray-100 bg-gray-50"
+        "flex items-center justify-between gap-3 p-3 rounded-xl border",
+        available ? "border-[#8784FD] bg-[#F5F5FF]" : "border-[#E8E8EC] bg-[#F7F7F8]"
       )}
     >
       <div className="flex items-center gap-2">
         <Clock
-          className={cn("h-4 w-4", available ? "text-blue-500" : "text-gray-300")}
+          className={cn("h-4 w-4", available ? "text-[#4E49FC]" : "text-[#A2A1AF]")}
         />
         <div>
           <span
             className={cn(
               "text-sm font-medium",
-              available ? "text-blue-700" : "text-gray-400"
+              available ? "text-[#4E49FC]" : "text-[#A2A1AF]"
             )}
           >
             {label}
           </span>
           {!available && (
-            <p className="text-xs text-gray-400">Disponible le {formatDate(date)}</p>
+            <p className="text-xs text-[#A2A1AF]">Disponible le {formatDate(date)}</p>
           )}
         </div>
       </div>
@@ -729,11 +741,8 @@ function RelanceRow({
         <Button
           size="sm"
           variant="outline"
-          disabled={!available}
           onClick={onAction}
-          className={cn(
-            available && "border-blue-300 text-blue-700 hover:bg-blue-100"
-          )}
+          className="border-[#8784FD] text-[#4E49FC] hover:bg-[#F5F5FF]"
         >
           {isOpen ? (
             <>
@@ -794,16 +803,29 @@ export function RSRequestAction({
           }}
         />
       ) : (
-        <div className="border rounded-lg overflow-hidden">
+        <div className="border rounded-xl overflow-hidden">
           <button
             onClick={() => setMail1Open((o) => !o)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-green-50 hover:bg-green-100 text-left"
+            className="w-full flex items-center justify-between px-4 py-3 bg-[#EFFBF2] hover:bg-[#d8f5e3] text-left"
           >
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <span className="text-sm font-medium text-green-800">Mail 1 envoyé</span>
+              <CheckCircle2 className="h-4 w-4 text-[#13762C]" />
+              <span className="text-sm font-medium text-[#13762C]">Mail 1 envoyé</span>
+              {firstDraftEvent && (
+                <span className="text-xs text-[#13762C] opacity-70">
+                  {new Date(firstDraftEvent.createdAt).toLocaleString("fr-FR", {
+                    timeZone: "Europe/Paris",
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  })}
+                </span>
+              )}
             </div>
-            {mail1Open ? <ChevronUp className="h-4 w-4 text-green-600" /> : <ChevronDown className="h-4 w-4 text-green-600" />}
+            {mail1Open ? <ChevronUp className="h-4 w-4 text-[#13762C]" /> : <ChevronDown className="h-4 w-4 text-[#13762C]" />}
           </button>
           {mail1Open && (
             <div className="p-4 border-t">
@@ -823,50 +845,50 @@ export function RSRequestAction({
       {/* Optimistic state: sent locally but server not yet revalidated */}
       {hasSent && !firstDraftEvent && (
         <div className="text-center py-4">
-          <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-2">
-            <Send className="h-5 w-5 text-green-600" />
+          <div className="h-10 w-10 rounded-full bg-[#EFFBF2] flex items-center justify-center mx-auto mb-2">
+            <Send className="h-5 w-5 text-[#13762C]" />
           </div>
-          <p className="font-medium text-gray-800 text-sm">Mail envoyé via Front</p>
-          <p className="text-xs text-gray-400 mt-1">La page va se rafraîchir…</p>
+          <p className="font-medium text-[#26262C] text-sm">Mail envoyé via Front</p>
+          <p className="text-xs text-[#A2A1AF] mt-1">La page va se rafraîchir…</p>
         </div>
       )}
 
       {/* Suivi & relances — always shown, locked until first email sent */}
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
+      <div className="border border-[#E8E8EC] rounded-xl overflow-hidden">
         <button
           onClick={() => hasSent && setSuiviOpen(!panelOpen)}
           className={cn(
             "w-full flex items-center justify-between px-4 py-3 text-left transition-colors",
-            hasSent ? "hover:bg-gray-50 cursor-pointer" : "cursor-default",
-            panelOpen ? "bg-gray-50" : "bg-white"
+            hasSent ? "hover:bg-[#F7F7F8] cursor-pointer" : "cursor-default",
+            panelOpen ? "bg-[#F7F7F8]" : "bg-white"
           )}
         >
           <div className="flex items-center gap-2">
-            <Clock className={cn("h-4 w-4", hasSent ? "text-blue-500" : "text-gray-300")} />
-            <span className={cn("text-sm font-medium", hasSent ? "text-gray-800" : "text-gray-400")}>
+            <Clock className={cn("h-4 w-4", hasSent ? "text-[#4E49FC]" : "text-[#A2A1AF]")} />
+            <span className={cn("text-sm font-medium", hasSent ? "text-[#26262C]" : "text-[#A2A1AF]")}>
               Suivi des relances
             </span>
             {!hasSent && (
-              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+              <span className="text-xs text-[#A2A1AF] bg-[#F7F7F8] px-2 py-0.5 rounded-full">
                 Disponible après envoi du 1er mail
               </span>
             )}
             {hasSent && relance1Event && !relance2Event && (
-              <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Relance 1 envoyée</span>
+              <span className="text-xs text-[#4E49FC] bg-[#F5F5FF] px-2 py-0.5 rounded-full">Relance 1 envoyée</span>
             )}
             {hasSent && relance2Event && (
-              <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Relance 2 envoyée</span>
+              <span className="text-xs text-[#4E49FC] bg-[#F5F5FF] px-2 py-0.5 rounded-full">Relance 2 envoyée</span>
             )}
           </div>
           {hasSent && (
             panelOpen
-              ? <ChevronUp className="h-4 w-4 text-gray-400" />
-              : <ChevronDown className="h-4 w-4 text-gray-400" />
+              ? <ChevronUp className="h-4 w-4 text-[#A2A1AF]" />
+              : <ChevronDown className="h-4 w-4 text-[#A2A1AF]" />
           )}
         </button>
 
         {panelOpen && firstDraftEvent && (
-          <div className="px-4 pb-4 pt-2 border-t border-gray-100">
+          <div className="px-4 pb-4 pt-2 border-t border-[#E8E8EC]">
             <PostSendPanel
               pipelineId={pipelineId}
               copro={copro}

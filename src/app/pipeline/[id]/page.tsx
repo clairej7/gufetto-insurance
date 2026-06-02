@@ -26,6 +26,9 @@ export default async function CoproDetailPage({
         orderBy: { createdAt: "desc" },
         take: 50,
       },
+      devisRecus: {
+        orderBy: { createdAt: "asc" },
+      },
     },
   });
 

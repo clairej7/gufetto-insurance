@@ -75,19 +75,56 @@ export async function advanceStatut(
   return { success: true };
 }
 
+export async function goToStatut(pipelineId: string, targetStatut: string) {
+  const session = await getSession();
+  const pipeline = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId } });
+  if (!pipeline) throw new Error("Pipeline introuvable");
+
+  const ancienStatut = pipeline.statut;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await prisma.$transaction([
+    prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { statut: targetStatut as any } }),
+    prisma.pipelineEvent.create({
+      data: {
+        pipelineId,
+        type: "statut_change",
+        ancienStatut,
+        nouveauStatut: targetStatut,
+        description: `Retour manuel à l'étape "${targetStatut}"`,
+        createdBy: session.user.email!,
+      },
+    }),
+  ]);
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
 export async function goBackStatut(pipelineId: string, note?: string) {
   const session = await getSession();
 
   const pipeline = await prisma.insurancePipeline.findUnique({
     where: { id: pipelineId },
+    include: { events: { orderBy: { createdAt: "desc" }, take: 10 } },
   });
   if (!pipeline) throw new Error("Pipeline introuvable");
 
-  const currentIdx = PIPELINE_STEPS.findIndex((s) => s.statut === pipeline.statut);
-  if (currentIdx <= 0) return { success: false, error: "Déjà à la première étape" };
-
-  const prevStatut = PIPELINE_STEPS[currentIdx - 1].statut;
+  const lostStatuts = ["refuse", "non_assurable", "abandonne"];
   const ancienStatut = pipeline.statut;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let prevStatut: any;
+  if (lostStatuts.includes(pipeline.statut)) {
+    // Retrouver l'étape avant la perte via l'historique
+    const lastChange = pipeline.events.find(
+      (e) => e.type === "statut_change" && e.ancienStatut && !lostStatuts.includes(e.ancienStatut)
+    );
+    prevStatut = (lastChange?.ancienStatut ?? "identifie") as never;
+  } else {
+    const currentIdx = PIPELINE_STEPS.findIndex((s) => s.statut === pipeline.statut);
+    if (currentIdx <= 0) return { success: false, error: "Déjà à la première étape" };
+    prevStatut = PIPELINE_STEPS[currentIdx - 1].statut;
+  }
 
   await prisma.$transaction([
     prisma.insurancePipeline.update({
@@ -312,6 +349,76 @@ export async function addNote(pipelineId: string, note: string) {
   return { success: true };
 }
 
+export async function updateCoproCaracteristiques(
+  coproId: string,
+  pipelineId: string,
+  data: {
+    assureurActuel?: string | null;
+    courtierActuel?: string | null;
+    primeActuelle?: number | null;
+    dateDebutContrat?: Date | null;
+    contactCourtierEmail?: string | null;
+    contactCourtierTel?: string | null;
+    surfaceDeveloppee?: number | null;
+    periodeConstruction?: string | null;
+    natureOccupation?: string | null;
+    activitesAggravantes?: string | null;
+    caracteristiquesParticulieres?: string | null;
+    proportionInoccupee?: string | null;
+    protectionJuridique?: string | null;
+    assureursDevis?: string | null;
+    representantLegal?: string | null;
+  }
+) {
+  await getSession();
+  const sanitized = {
+    ...data,
+    surfaceDeveloppee: typeof data.surfaceDeveloppee === "number" && isNaN(data.surfaceDeveloppee) ? null : data.surfaceDeveloppee,
+    primeActuelle: typeof data.primeActuelle === "number" && isNaN(data.primeActuelle) ? null : data.primeActuelle,
+  };
+  await prisma.copro.update({ where: { id: coproId }, data: sanitized });
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
+export async function logDevisSent(
+  pipelineId: string,
+  assureur: string,
+  toEmail: string,
+  body?: string
+) {
+  const session = await getSession();
+  await prisma.pipelineEvent.create({
+    data: {
+      pipelineId,
+      type: "action_manuelle",
+      description: `Demande de devis envoyée à ${assureur.toUpperCase()} — ${toEmail}`,
+      metadata: { devisType: "devis_sent", assureur, to: toEmail, body: body ?? null },
+      createdBy: session.user.email!,
+    },
+  });
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
+export async function deleteNote(pipelineId: string, eventId: string) {
+  await getSession();
+  await prisma.pipelineEvent.delete({ where: { id: eventId } });
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
+export async function editNote(pipelineId: string, eventId: string, newText: string) {
+  await getSession();
+  if (!newText.trim()) return { success: false, error: "Note vide" };
+  await prisma.pipelineEvent.update({
+    where: { id: eventId },
+    data: { description: newText.trim() },
+  });
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
 export async function updatePipelineNotes(pipelineId: string, notes: string) {
   await getSession();
 
@@ -319,6 +426,86 @@ export async function updatePipelineNotes(pipelineId: string, notes: string) {
     where: { id: pipelineId },
     data: { notes },
   });
+
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
+export async function addDevisRecu(
+  pipelineId: string,
+  data: {
+    assureur: string;
+    numeroContrat?: string | null;
+    primeTTC: number;
+    data?: string | null;
+    notes?: string | null;
+    pdfName?: string | null;
+  }
+) {
+  await getSession();
+
+  await prisma.devisRecu.create({
+    data: {
+      pipelineId,
+      assureur: data.assureur,
+      numeroContrat: data.numeroContrat ?? null,
+      primeTTC: data.primeTTC,
+      data: data.data ?? null,
+      notes: data.notes ?? null,
+      pdfName: data.pdfName ?? null,
+    },
+  });
+
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
+export async function updateDevisRecu(
+  id: string,
+  pipelineId: string,
+  data: {
+    assureur?: string;
+    numeroContrat?: string | null;
+    primeTTC?: number;
+    data?: string | null;
+    notes?: string | null;
+    recommande?: boolean;
+  }
+) {
+  await getSession();
+
+  await prisma.devisRecu.update({
+    where: { id },
+    data,
+  });
+
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
+export async function deleteDevisRecu(id: string, pipelineId: string) {
+  await getSession();
+
+  await prisma.devisRecu.delete({ where: { id } });
+
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
+export async function setRecommandeDevis(id: string, pipelineId: string) {
+  await getSession();
+
+  // Set all devis for this pipeline to recommande=false, then set the selected one to true
+  await prisma.$transaction([
+    prisma.devisRecu.updateMany({
+      where: { pipelineId },
+      data: { recommande: false },
+    }),
+    prisma.devisRecu.update({
+      where: { id },
+      data: { recommande: true },
+    }),
+  ]);
 
   revalidatePath(`/pipeline/${pipelineId}`);
   return { success: true };

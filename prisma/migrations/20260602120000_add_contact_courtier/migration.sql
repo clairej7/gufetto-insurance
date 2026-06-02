@@ -1,0 +1,2 @@
+ALTER TABLE "Copro" ADD COLUMN IF NOT EXISTS "contactCourtierEmail" TEXT;
+ALTER TABLE "Copro" ADD COLUMN IF NOT EXISTS "contactCourtierTel" TEXT;
