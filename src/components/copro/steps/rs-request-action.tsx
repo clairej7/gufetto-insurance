@@ -223,12 +223,12 @@ function FirstEmailForm({
           window.open(data.mailtoUrl, "_blank");
           toast.success("Client mail ouvert (Front pas encore configuré)");
         } else {
-          toast.success("Brouillon créé dans Front !");
+          toast.success("Mail envoyé !");
         }
         await logRSDraftSent(pipelineId, toEmail, 0);
         onSent(toEmail);
       } else {
-        toast.error(data.error || "Erreur lors de la création du brouillon");
+        toast.error(data.error || "Erreur lors de l'envoi du mail");
       }
     });
   }
@@ -295,12 +295,12 @@ function FirstEmailForm({
         {isPending ? (
           <>
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            Création du brouillon...
+            Envoi en cours...
           </>
         ) : (
           <>
             <Send className="h-4 w-4 mr-2" />
-            Créer le brouillon dans Front
+            Envoyer le mail via Front
           </>
         )}
       </Button>
@@ -405,7 +405,7 @@ function RelanceForm({
           ) : (
             <>
               <Send className="h-3.5 w-3.5 mr-1.5" />
-              Créer le brouillon dans Front
+              Envoyer le mail via Front
             </>
           )}
         </Button>
@@ -758,6 +758,7 @@ export function RSRequestAction({
 }: RSRequestActionProps) {
   const [localSentTo, setLocalSentTo] = useState<string | null>(null);
   const [suiviOpen, setSuiviOpen] = useState(false);
+  const [mail1Open, setMail1Open] = useState(false);
 
   const draftEvents = rsEvents.filter((e) => {
     const m = parseMeta(e.metadata);
@@ -782,8 +783,8 @@ export function RSRequestAction({
 
   return (
     <div className="space-y-5">
-      {/* First email form — hidden once sent */}
-      {!hasSent && (
+      {/* First email form — collapsible once sent */}
+      {!hasSent ? (
         <FirstEmailForm
           pipelineId={pipelineId}
           copro={copro}
@@ -792,6 +793,31 @@ export function RSRequestAction({
             setSuiviOpen(true);
           }}
         />
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <button
+            onClick={() => setMail1Open((o) => !o)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-green-50 hover:bg-green-100 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <span className="text-sm font-medium text-green-800">Mail 1 envoyé</span>
+            </div>
+            {mail1Open ? <ChevronUp className="h-4 w-4 text-green-600" /> : <ChevronDown className="h-4 w-4 text-green-600" />}
+          </button>
+          {mail1Open && (
+            <div className="p-4 border-t">
+              <FirstEmailForm
+                pipelineId={pipelineId}
+                copro={copro}
+                onSent={(to) => {
+                  setLocalSentTo(to);
+                  setSuiviOpen(true);
+                }}
+              />
+            </div>
+          )}
+        </div>
       )}
 
       {/* Optimistic state: sent locally but server not yet revalidated */}
@@ -800,7 +826,7 @@ export function RSRequestAction({
           <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-2">
             <Send className="h-5 w-5 text-green-600" />
           </div>
-          <p className="font-medium text-gray-800 text-sm">Brouillon créé dans Front</p>
+          <p className="font-medium text-gray-800 text-sm">Mail envoyé via Front</p>
           <p className="text-xs text-gray-400 mt-1">La page va se rafraîchir…</p>
         </div>
       )}

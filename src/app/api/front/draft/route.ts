@@ -23,41 +23,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, fallback: true, mailtoUrl });
   }
 
-  // Upload des pièces jointes
-  const attachmentTokens: string[] = [];
-  for (const [, file] of [["contrat", contratFile], ["pv", pvFile]] as [string, File | null][]) {
+  const htmlBody = body
+    .split(/\n\n+/)
+    .map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`)
+    .join("");
+
+  // Création du brouillon en multipart pour supporter les PJ
+  const draftForm = new FormData();
+  draftForm.append("author_id", `alt:email:${FRONT_AUTHOR_EMAIL}`);
+  draftForm.append("to[]", to);
+  draftForm.append("subject", subject);
+  draftForm.append("body", htmlBody);
+  draftForm.append("type", "email");
+
+  for (const file of [contratFile, pvFile]) {
     if (!file) continue;
     const buf = await file.arrayBuffer();
-    const uploadForm = new FormData();
-    uploadForm.append("attachment", new Blob([buf], { type: file.type }), file.name);
-    const uploadRes = await fetch(`${FRONT_API_URL}/attachments`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${FRONT_TOKEN}` },
-      body: uploadForm,
-    });
-    if (uploadRes.ok) {
-      const uploadData = await uploadRes.json();
-      if (uploadData.token) attachmentTokens.push(uploadData.token);
-    }
+    draftForm.append("attachments[]", new Blob([buf], { type: file.type }), file.name);
   }
 
-  // Création du brouillon dans Front
-  const draftPayload: Record<string, unknown> = {
-    author_id: `alt:email:${FRONT_AUTHOR_EMAIL}`,
-    to: [to],
-    subject,
-    body,
-    type: "email",
-  };
-  if (attachmentTokens.length > 0) draftPayload.attachment_tokens = attachmentTokens;
-
-  const draftRes = await fetch(`${FRONT_API_URL}/channels/${FRONT_CHANNEL_ID}/drafts`, {
+  const draftRes = await fetch(`${FRONT_API_URL}/channels/${FRONT_CHANNEL_ID}/messages`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${FRONT_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(draftPayload),
+    headers: { Authorization: `Bearer ${FRONT_TOKEN}` },
+    body: draftForm,
   });
 
   if (!draftRes.ok) {
@@ -65,6 +53,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Erreur Front API: ${err}` }, { status: 500 });
   }
 
-  const draft = await draftRes.json();
-  return NextResponse.json({ success: true, draftId: draft.id });
+  const message = await draftRes.json();
+  return NextResponse.json({ success: true, messageId: message.id });
 }
