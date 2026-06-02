@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { PIPELINE_STEPS, getDaysUntilEcheance, getUrgenceBadge } from "@/lib/pipeline";
-import { Building2, ChevronUp, ChevronDown } from "lucide-react";
+import { Building2, ChevronUp, ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type PipelineWithCopro = {
@@ -78,17 +78,125 @@ const STATUT_BADGE: Record<string, { label: string; className: string }> = {
   non_assurable: { label: "Non assurable",       className: "bg-red-100 text-red-700" },
 };
 
+function GestionnaireCombobox({
+  gestionnaires,
+  value,
+  onChange,
+}: {
+  gestionnaires: string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const selected = value !== "all" ? value : null;
+  const displayName = selected ? formatGestionnaire(selected) : "";
+
+  const filtered = gestionnaires.filter((g) => {
+    const q = query.toLowerCase();
+    return formatGestionnaire(g).toLowerCase().includes(q) || g.toLowerCase().includes(q);
+  });
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  function select(g: string) {
+    onChange(g);
+    setOpen(false);
+    setQuery("");
+  }
+
+  function clear() {
+    onChange("all");
+    setQuery("");
+    setOpen(false);
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="flex items-center border border-gray-200 rounded-md bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
+        <input
+          type="text"
+          placeholder="Gestionnaire…"
+          value={open ? query : displayName}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          className="text-sm px-3 py-1.5 bg-transparent outline-none w-44 text-gray-700 placeholder-gray-400"
+        />
+        {selected && (
+          <button onClick={clear} className="pr-2 text-gray-400 hover:text-gray-600">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      {open && filtered.length > 0 && (
+        <div className="absolute z-20 top-full mt-1 left-0 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1 max-h-52 overflow-y-auto">
+          {filtered.map((g) => (
+            <button
+              key={g}
+              onMouseDown={(e) => { e.preventDefault(); select(g); }}
+              className={cn(
+                "w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors",
+                value === g ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700"
+              )}
+            >
+              {formatGestionnaire(g)}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type SortKey = "nom" | "echeance" | "statut" | "assureur";
+
+function formatGestionnaire(email: string): string {
+  const prenom = email.split(".")[0];
+  const nom = email.split(".")[1]?.split("@")[0];
+  return prenom && nom
+    ? `${prenom.charAt(0).toUpperCase() + prenom.slice(1)} ${nom.charAt(0).toUpperCase() + nom.slice(1)}`
+    : email.split("@")[0];
+}
 
 export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: PipelineBoardProps) {
   const [sortKey, setSortKey] = useState<SortKey>("echeance");
   const [sortAsc, setSortAsc] = useState(true);
   const [view, setView] = useState<"actions" | "kanban">("actions");
   const [selectedGestionnaire, setSelectedGestionnaire] = useState<string>("all");
+  const [gestionnaireQuery, setGestionnaireQuery] = useState("");
+  const [selectedStatut, setSelectedStatut] = useState<string>("all");
+  const [selectedEcheance, setSelectedEcheance] = useState<string>("all");
+  const [selectedAssureur, setSelectedAssureur] = useState<string>("all");
 
-  const filtered = selectedGestionnaire === "all"
-    ? pipelines
-    : pipelines.filter((p) => p.copro.gestionnaireEmail === selectedGestionnaire);
+  const assureurs = [...new Set(pipelines.map((p) => p.copro.assureurActuel).filter(Boolean) as string[])].sort();
+
+  const hasActiveFilters = selectedGestionnaire !== "all" || selectedStatut !== "all" || selectedEcheance !== "all" || selectedAssureur !== "all";
+
+  const filtered = pipelines.filter((p) => {
+    if (selectedGestionnaire !== "all" && p.copro.gestionnaireEmail !== selectedGestionnaire) return false;
+    if (selectedStatut !== "all" && p.statut !== selectedStatut) return false;
+    if (selectedAssureur !== "all" && p.copro.assureurActuel !== selectedAssureur) return false;
+
+    if (selectedEcheance !== "all") {
+      const days = getDaysUntilEcheance(p.copro.dateEcheance);
+      if (selectedEcheance === "overdue" && (days === null || days >= 0)) return false;
+      if (selectedEcheance === "urgent" && (days === null || days < 0 || days > 60)) return false;
+      if (selectedEcheance === "warning" && (days === null || days <= 60 || days > 120)) return false;
+      if (selectedEcheance === "ok" && (days === null || days <= 120)) return false;
+    }
+    return true;
+  });
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortAsc(!sortAsc);
@@ -146,32 +254,53 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
         </div>
       </div>
 
-      {/* Filtre gestionnaire */}
-      <div className="flex items-center gap-3 mb-4">
-        <label className="text-sm font-medium text-gray-600 whitespace-nowrap">Gestionnaire</label>
-        <select
+      {/* Filtres */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <GestionnaireCombobox
+          gestionnaires={gestionnaires}
           value={selectedGestionnaire}
-          onChange={(e) => setSelectedGestionnaire(e.target.value)}
-          className="text-sm border border-gray-200 rounded-md px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-48"
+          onChange={setSelectedGestionnaire}
+        />
+        <select
+          value={selectedStatut}
+          onChange={(e) => setSelectedStatut(e.target.value)}
+          className="text-sm border border-gray-200 rounded-md px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="all">Tous ({pipelines.length})</option>
-          {gestionnaires.map((g) => {
-            const count = pipelines.filter((p) => p.copro.gestionnaireEmail === g).length;
-            const prenom = g.split(".")[0];
-            const nom = g.split(".")[1]?.split("@")[0];
-            const label = prenom && nom
-              ? `${prenom.charAt(0).toUpperCase() + prenom.slice(1)} ${nom.charAt(0).toUpperCase() + nom.slice(1)}`
-              : g.split("@")[0];
-            return (
-              <option key={g} value={g}>{label} ({count})</option>
-            );
-          })}
+          <option value="all">Toutes les étapes</option>
+          {PIPELINE_STEPS.map((s) => (
+            <option key={s.statut} value={s.statut}>{s.label}</option>
+          ))}
         </select>
-        {selectedGestionnaire !== "all" && (
-          <button onClick={() => setSelectedGestionnaire("all")} className="text-xs text-gray-400 hover:text-gray-600">
-            Réinitialiser
+        <select
+          value={selectedEcheance}
+          onChange={(e) => setSelectedEcheance(e.target.value)}
+          className="text-sm border border-gray-200 rounded-md px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">Toutes les échéances</option>
+          <option value="overdue">Dépassées</option>
+          <option value="urgent">{"< 2 mois"}</option>
+          <option value="warning">2 à 4 mois</option>
+          <option value="ok">{"> 4 mois"}</option>
+        </select>
+        <select
+          value={selectedAssureur}
+          onChange={(e) => setSelectedAssureur(e.target.value)}
+          className="text-sm border border-gray-200 rounded-md px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">Tous les assureurs</option>
+          {assureurs.map((a) => (
+            <option key={a} value={a}>{a}</option>
+          ))}
+        </select>
+        {hasActiveFilters && (
+          <button
+            onClick={() => { setSelectedGestionnaire("all"); setSelectedStatut("all"); setSelectedEcheance("all"); setSelectedAssureur("all"); }}
+            className="text-xs text-gray-400 hover:text-gray-600 underline"
+          >
+            Réinitialiser les filtres
           </button>
         )}
+        <span className="text-xs text-gray-400 ml-auto">{filtered.length} résultat{filtered.length !== 1 ? "s" : ""}</span>
       </div>
 
       {/* Toggle */}
@@ -289,7 +418,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
         // Kanban
         <div className="flex gap-4 overflow-x-auto pb-4">
           {PIPELINE_STEPS.filter((s) => s.statut !== "termine").map((step) => {
-            const items = pipelines.filter((p) => p.statut === step.statut);
+            const items = filtered.filter((p) => p.statut === step.statut);
             return (
               <div key={step.statut} className="min-w-52 flex-shrink-0">
                 <div className="flex items-center gap-2 mb-2 px-1">

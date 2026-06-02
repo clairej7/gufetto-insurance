@@ -57,6 +57,15 @@ function formatDate(date: Date | null | string): string {
   });
 }
 
+function nameFromEmail(email: string | null): string {
+  if (!email) return "";
+  const local = email.split("@")[0];
+  return local
+    .split(".")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function addDays(date: Date | string, days: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
@@ -68,14 +77,14 @@ function buildFirstEmailTemplate(
 ): string {
   return `Bonjour,
 
-Je me permets de vous contacter en tant que syndic professionnel de la copropriété ${copro.nom}${copro.adresse ? `, située ${copro.adresse}` : ""}.
+Je vous contacte en qualité de syndic de la copropriété ${copro.adresse ?? copro.nom}.
 
-Dans le cadre du renouvellement du contrat d'assurance MRI arrivant à échéance le ${formatDate(copro.dateEcheance)}, nous souhaitons étudier les conditions de renouvellement.
+Pourriez-vous nous faire parvenir le relevé de sinistralité des 3 dernières années dans les meilleurs délais ? Vous trouverez en pièce jointe le dernier avis d'échéance.
 
-Pourriez-vous nous faire parvenir le relevé de sinistralité des 3 dernières années dans les meilleurs délais ? Vous trouverez en pièce jointe notre mandat de syndic ainsi que le contrat d'assurance actuel.
+Merci et bonne journée,
 
-Cordialement,
-Matera Syndic`;
+${nameFromEmail(copro.gestionnaireEmail)}
+Matera`;
 }
 
 function buildRelanceTemplate(
@@ -187,7 +196,7 @@ function FirstEmailForm({
   const [pvFile, setPvFile] = useState<DroppedFile | null>(null);
   const [toEmail, setToEmail] = useState("");
   const [subject, setSubject] = useState(
-    `Demande de relevé de sinistralité – ${copro.nom}`
+    `Demande de relevé de sinistralité - Contrat n° [À compléter]`
   );
   const [body, setBody] = useState(() => buildFirstEmailTemplate(copro));
 
@@ -239,7 +248,7 @@ function FirstEmailForm({
             onRemove={() => setContratFile(null)}
           />
           <DropZone
-            label="PV désignant Matera"
+            label="Dernier avis d'échéance"
             hint="PDF, glisser ou cliquer"
             file={pvFile}
             onDrop={(f) => setPvFile({ file: f, name: f.name })}
@@ -748,6 +757,7 @@ export function RSRequestAction({
   rsEvents,
 }: RSRequestActionProps) {
   const [localSentTo, setLocalSentTo] = useState<string | null>(null);
+  const [suiviOpen, setSuiviOpen] = useState(false);
 
   const draftEvents = rsEvents.filter((e) => {
     const m = parseMeta(e.metadata);
@@ -766,40 +776,83 @@ export function RSRequestAction({
 
   const hasSent = !!firstDraftEvent || !!localSentTo;
 
-  if (!hasSent) {
-    return (
-      <FirstEmailForm
-        pipelineId={pipelineId}
-        copro={copro}
-        onSent={(to) => setLocalSentTo(to)}
-      />
-    );
-  }
-
-  if (!firstDraftEvent) {
-    // Just sent locally — show loading/optimistic state until revalidation kicks in
-    return (
-      <div className="text-center py-6">
-        <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
-          <Send className="h-6 w-6 text-green-600" />
-        </div>
-        <p className="font-medium text-gray-800">Brouillon créé dans Front</p>
-        <p className="text-sm text-gray-400 mt-1">
-          La page va se rafraîchir pour afficher le suivi
-        </p>
-      </div>
-    );
-  }
+  // Auto-open the suivi panel once the first draft is confirmed from the server
+  const autoOpen = !!firstDraftEvent && !suiviOpen;
+  const panelOpen = firstDraftEvent ? (suiviOpen || autoOpen) : suiviOpen;
 
   return (
-    <PostSendPanel
-      pipelineId={pipelineId}
-      copro={copro}
-      firstDraftEvent={firstDraftEvent}
-      relance1Event={relance1Event}
-      relance2Event={relance2Event}
-      appellTaskEvent={appellTaskEvent}
-      localSentTo={localSentTo}
-    />
+    <div className="space-y-5">
+      {/* First email form — hidden once sent */}
+      {!hasSent && (
+        <FirstEmailForm
+          pipelineId={pipelineId}
+          copro={copro}
+          onSent={(to) => {
+            setLocalSentTo(to);
+            setSuiviOpen(true);
+          }}
+        />
+      )}
+
+      {/* Optimistic state: sent locally but server not yet revalidated */}
+      {hasSent && !firstDraftEvent && (
+        <div className="text-center py-4">
+          <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-2">
+            <Send className="h-5 w-5 text-green-600" />
+          </div>
+          <p className="font-medium text-gray-800 text-sm">Brouillon créé dans Front</p>
+          <p className="text-xs text-gray-400 mt-1">La page va se rafraîchir…</p>
+        </div>
+      )}
+
+      {/* Suivi & relances — always shown, locked until first email sent */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <button
+          onClick={() => hasSent && setSuiviOpen(!panelOpen)}
+          className={cn(
+            "w-full flex items-center justify-between px-4 py-3 text-left transition-colors",
+            hasSent ? "hover:bg-gray-50 cursor-pointer" : "cursor-default",
+            panelOpen ? "bg-gray-50" : "bg-white"
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <Clock className={cn("h-4 w-4", hasSent ? "text-blue-500" : "text-gray-300")} />
+            <span className={cn("text-sm font-medium", hasSent ? "text-gray-800" : "text-gray-400")}>
+              Suivi des relances
+            </span>
+            {!hasSent && (
+              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                Disponible après envoi du 1er mail
+              </span>
+            )}
+            {hasSent && relance1Event && !relance2Event && (
+              <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Relance 1 envoyée</span>
+            )}
+            {hasSent && relance2Event && (
+              <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Relance 2 envoyée</span>
+            )}
+          </div>
+          {hasSent && (
+            panelOpen
+              ? <ChevronUp className="h-4 w-4 text-gray-400" />
+              : <ChevronDown className="h-4 w-4 text-gray-400" />
+          )}
+        </button>
+
+        {panelOpen && firstDraftEvent && (
+          <div className="px-4 pb-4 pt-2 border-t border-gray-100">
+            <PostSendPanel
+              pipelineId={pipelineId}
+              copro={copro}
+              firstDraftEvent={firstDraftEvent}
+              relance1Event={relance1Event}
+              relance2Event={relance2Event}
+              appellTaskEvent={appellTaskEvent}
+              localSentTo={localSentTo}
+            />
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
