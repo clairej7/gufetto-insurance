@@ -2,7 +2,6 @@
 
 import { prisma } from "@/lib/prisma";
 import { getNextStatut, PIPELINE_STEPS } from "@/lib/pipeline";
-import { PipelineStatut } from "@/generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { MOCK_USER } from "@/lib/mock-session";
 
@@ -104,6 +103,66 @@ export async function goBackStatut(pipelineId: string, note?: string) {
         description: note
           ? `Retour à "${prevStatut}" — ${note}`
           : `Retour à "${prevStatut}"`,
+        createdBy: session.user.email!,
+      },
+    }),
+  ]);
+
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
+export async function marquerRefus(pipelineId: string, note?: string) {
+  const session = await getSession();
+
+  const pipeline = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId } });
+  if (!pipeline) throw new Error("Pipeline introuvable");
+
+  await prisma.$transaction([
+    prisma.insurancePipeline.update({
+      where: { id: pipelineId },
+      data: { statut: "refuse" },
+    }),
+    prisma.pipelineEvent.create({
+      data: {
+        pipelineId,
+        type: "action_manuelle",
+        ancienStatut: pipeline.statut,
+        nouveauStatut: "refuse",
+        description: note
+          ? `Deal perdu — Refus client : ${note}`
+          : "Deal perdu — Refus client",
+        createdBy: session.user.email!,
+      },
+    }),
+  ]);
+
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
+export async function marquerNonAssurable(pipelineId: string, note?: string) {
+  const session = await getSession();
+
+  const pipeline = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId } });
+  if (!pipeline) throw new Error("Pipeline introuvable");
+
+  await prisma.$transaction([
+    prisma.insurancePipeline.update({
+      where: { id: pipelineId },
+      data: { statut: "non_assurable" },
+    }),
+    prisma.pipelineEvent.create({
+      data: {
+        pipelineId,
+        type: "action_manuelle",
+        ancienStatut: pipeline.statut,
+        nouveauStatut: "non_assurable",
+        description: note
+          ? `Deal perdu — Copro non assurable : ${note}`
+          : "Deal perdu — Copro non assurable",
         createdBy: session.user.email!,
       },
     }),

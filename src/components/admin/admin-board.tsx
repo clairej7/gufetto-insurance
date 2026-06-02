@@ -38,7 +38,7 @@ export function AdminBoard({ pipelines, taskTemplates, gestionnaires }: AdminBoa
 
   // Stats per step
   const statsByStep = PIPELINE_STEPS.filter(
-    (s) => s.statut !== "termine" && s.statut !== "abandonne"
+    (s) => s.statut !== "termine"
   ).map((step) => ({
     step,
     count: filtered.filter((p) => p.statut === step.statut).length,
@@ -95,9 +95,9 @@ export function AdminBoard({ pipelines, taskTemplates, gestionnaires }: AdminBoa
         </div>
         <div className="bg-white rounded-lg border p-4">
           <div className="text-2xl font-bold text-blue-600">
-            {filtered.filter((p) => ["contrat_signe", "resiliation_envoyee", "sepa_complete"].includes(p.statut)).length}
+            {filtered.filter((p) => p.statut === "contrat_signe" || p.statut === "termine").length}
           </div>
-          <div className="text-xs text-gray-500">En finalisation</div>
+          <div className="text-xs text-gray-500">Deals gagnés</div>
         </div>
         <div className="bg-white rounded-lg border p-4">
           <div className="text-2xl font-bold text-orange-600">

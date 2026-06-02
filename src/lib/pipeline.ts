@@ -5,78 +5,62 @@ export const PIPELINE_STEPS: {
   label: string;
   shortLabel: string;
   description: string;
+  isWon?: boolean;
 }[] = [
   {
     statut: "identifie",
-    label: "Identifié",
-    shortLabel: "Identifié",
-    description: "Copropriété identifiée comme cible à 6 mois de l'échéance",
+    label: "Aucune action",
+    shortLabel: "Aucune action",
+    description: "Copropriété identifiée, aucune démarche engagée",
   },
   {
     statut: "rs_en_cours",
-    label: "RS en cours",
+    label: "En attente du relevé de sinistralité",
     shortLabel: "RS en cours",
-    description: "Demande du relevé de sinistralité en cours",
-  },
-  {
-    statut: "rs_recu",
-    label: "RS reçu",
-    shortLabel: "RS reçu",
-    description: "Relevé de sinistralité reçu et déposé sur Duomo",
+    description: "Demande du relevé de sinistralité envoyée",
   },
   {
     statut: "devis_demandes",
     label: "Devis demandés",
-    shortLabel: "Devis",
+    shortLabel: "Devis demandés",
     description: "Demandes de devis envoyées aux assureurs partenaires",
   },
   {
     statut: "devis_recus",
-    label: "Devis reçus",
-    shortLabel: "Devis reçus",
-    description: "Devis reçus et déposés sur Duomo",
+    label: "Devis partagés",
+    shortLabel: "Devis partagés",
+    description: "Devis reçus et partagés avec le Conseil Syndical",
   },
   {
     statut: "envoye_cs",
-    label: "Envoyé au CS",
-    shortLabel: "Envoyé CS",
-    description: "Comparaison envoyée au Conseil Syndical",
-  },
-  {
-    statut: "validation_cs",
-    label: "Validation CS",
-    shortLabel: "Validation",
-    description: "En attente de validation du CS (7 jours)",
+    label: "Devis validé",
+    shortLabel: "Devis validé",
+    description: "Devis validé par le Conseil Syndical",
   },
   {
     statut: "contrat_signe",
     label: "Contrat signé",
-    shortLabel: "Signé",
-    description: "Nouveau contrat d'assurance signé",
-  },
-  {
-    statut: "resiliation_envoyee",
-    label: "Résiliation envoyée",
-    shortLabel: "Résiliation",
-    description: "Courrier de résiliation envoyé à l'ancien assureur",
-  },
-  {
-    statut: "sepa_complete",
-    label: "Mandat SEPA",
-    shortLabel: "SEPA",
-    description: "Mandat de prélèvement automatique rempli",
+    shortLabel: "Contrat signé",
+    description: "Nouveau contrat d'assurance signé — deal gagné !",
+    isWon: true,
   },
   {
     statut: "termine",
-    label: "Terminé",
-    shortLabel: "Terminé",
-    description: "Processus complet — nouveau contrat actif",
+    label: "Contrat mis à jour dans Duomo",
+    shortLabel: "Duomo OK",
+    description: "Contrat mis à jour dans Duomo — dossier clôturé",
   },
 ];
 
+export const TERMINAL_STATUTS: PipelineStatut[] = ["termine", "refuse", "non_assurable", "abandonne"];
+
 export const ACTIVE_STEPS = PIPELINE_STEPS.filter(
-  (s) => s.statut !== "termine" && s.statut !== "abandonne" as PipelineStatut
+  (s) => !TERMINAL_STATUTS.includes(s.statut)
 );
+
+export function isTerminalStatut(statut: string): boolean {
+  return TERMINAL_STATUTS.includes(statut as PipelineStatut);
+}
 
 export function getStepIndex(statut: PipelineStatut): number {
   return PIPELINE_STEPS.findIndex((s) => s.statut === statut);

@@ -40,8 +40,8 @@ function mapStatut(salesStatus: string | null): PipelineStatut {
     case "Quote Validated": return "envoye_cs";
     case "Contract Signed": return "contrat_signe";
     case "Contract Uploaded": return "contrat_signe";
-    case "Refused":
-    case "Uninsurable": return "abandonne";
+    case "Refused": return "refuse";
+    case "Uninsurable": return "non_assurable";
     case "No Action":
     default: return "identifie";
   }
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
       where: { buildingId },
       include: {
         pipelines: {
-          where: { statut: { notIn: ["termine", "abandonne"] } },
+          where: { statut: { notIn: ["termine", "abandonne", "refuse", "non_assurable"] } },
         },
       },
     });

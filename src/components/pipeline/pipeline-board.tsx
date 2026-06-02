@@ -66,18 +66,16 @@ function getNextAction(pipeline: PipelineWithCopro, taskTemplates: TaskTemplate[
 }
 
 const STATUT_BADGE: Record<string, { label: string; className: string }> = {
-  identifie:           { label: "Identifié",       className: "bg-gray-100 text-gray-600" },
-  rs_en_cours:         { label: "RS en cours",     className: "bg-blue-100 text-blue-700" },
-  rs_recu:             { label: "RS reçu",         className: "bg-blue-100 text-blue-700" },
-  devis_demandes:      { label: "Devis demandés",  className: "bg-purple-100 text-purple-700" },
-  devis_recus:         { label: "Devis reçus",     className: "bg-purple-100 text-purple-700" },
-  envoye_cs:           { label: "Envoyé CS",       className: "bg-yellow-100 text-yellow-700" },
-  validation_cs:       { label: "Attente CS",      className: "bg-orange-100 text-orange-700" },
-  contrat_signe:       { label: "Signé",           className: "bg-green-100 text-green-700" },
-  resiliation_envoyee: { label: "Résiliation",     className: "bg-green-100 text-green-700" },
-  sepa_complete:       { label: "SEPA fait",       className: "bg-green-100 text-green-700" },
-  termine:             { label: "Terminé ✓",       className: "bg-green-200 text-green-800" },
-  abandonne:           { label: "Abandonné",       className: "bg-red-100 text-red-600" },
+  identifie:     { label: "Aucune action",       className: "bg-gray-100 text-gray-600" },
+  rs_en_cours:   { label: "RS en cours",         className: "bg-blue-100 text-blue-700" },
+  devis_demandes:{ label: "Devis demandés",      className: "bg-purple-100 text-purple-700" },
+  devis_recus:   { label: "Devis partagés",      className: "bg-purple-100 text-purple-700" },
+  envoye_cs:     { label: "Devis validé",        className: "bg-yellow-100 text-yellow-700" },
+  contrat_signe: { label: "Contrat signé 🎉",    className: "bg-green-600 text-white" },
+  termine:       { label: "Duomo OK ✓",          className: "bg-green-200 text-green-800" },
+  abandonne:     { label: "Abandonné",           className: "bg-red-100 text-red-600" },
+  refuse:        { label: "Refus client",        className: "bg-red-100 text-red-700" },
+  non_assurable: { label: "Non assurable",       className: "bg-red-100 text-red-700" },
 };
 
 type SortKey = "nom" | "echeance" | "statut" | "assureur";
@@ -123,7 +121,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
     return d !== null && d <= 60;
   }).length;
 
-  const enAttente = filtered.filter((p) => p.statut === "validation_cs").length;
+  const dealsGagnes = filtered.filter((p) => p.statut === "contrat_signe" || p.statut === "termine").length;
 
   function SortIcon({ k }: { k: SortKey }) {
     if (sortKey !== k) return null;
@@ -143,8 +141,8 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
           <div className="text-sm text-gray-500 mt-0.5">Échéance &lt; 2 mois</div>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="text-2xl font-bold text-orange-500">{enAttente}</div>
-          <div className="text-sm text-gray-500 mt-0.5">En attente CS</div>
+          <div className="text-2xl font-bold text-green-600">{dealsGagnes}</div>
+          <div className="text-sm text-gray-500 mt-0.5">Deals gagnés</div>
         </div>
       </div>
 
@@ -290,7 +288,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
       ) : (
         // Kanban
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {PIPELINE_STEPS.filter((s) => s.statut !== "termine" && s.statut !== "abandonne").map((step) => {
+          {PIPELINE_STEPS.filter((s) => s.statut !== "termine").map((step) => {
             const items = pipelines.filter((p) => p.statut === step.statut);
             return (
               <div key={step.statut} className="min-w-52 flex-shrink-0">

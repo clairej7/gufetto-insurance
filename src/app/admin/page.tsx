@@ -9,7 +9,7 @@ export default async function AdminPage() {
   const user = MOCK_USER;
 
   const pipelines = await prisma.insurancePipeline.findMany({
-    where: { statut: { notIn: ["abandonne"] } },
+    where: { statut: { notIn: ["abandonne", "refuse", "non_assurable"] } },
     include: {
       copro: true,
       taskCompletions: { include: { task: true } },

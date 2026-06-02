@@ -97,6 +97,8 @@ enum PipelineStatut {
   sepa_complete
   termine
   abandonne
+  refuse
+  non_assurable
 }
 
 model InsurancePipeline {

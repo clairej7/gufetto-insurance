@@ -27,9 +27,9 @@ import {
   XCircle,
   ArrowRight,
 } from "lucide-react";
-import { PIPELINE_STEPS, getDaysUntilEcheance, getNextStatut } from "@/lib/pipeline";
+import { PIPELINE_STEPS, getDaysUntilEcheance, getNextStatut, isTerminalStatut } from "@/lib/pipeline";
 import { RSRequestAction } from "@/components/copro/steps/rs-request-action";
-import { advanceStatut, abandonPipeline, toggleTask, addNote, goBackStatut } from "@/lib/actions";
+import { advanceStatut, abandonPipeline, toggleTask, addNote, goBackStatut, marquerRefus, marquerNonAssurable } from "@/lib/actions";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -109,6 +109,10 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
   const [advanceNote, setAdvanceNote] = useState("");
   const [noteText, setNoteText] = useState("");
   const [showAllTasks, setShowAllTasks] = useState(false);
+  const [showRefusDialog, setShowRefusDialog] = useState(false);
+  const [showNonAssurableDialog, setShowNonAssurableDialog] = useState(false);
+  const [refusNote, setRefusNote] = useState("");
+  const [nonAssurableNote, setNonAssurableNote] = useState("");
 
   const currentStep = PIPELINE_STEPS.find((s) => s.statut === pipeline.statut);
   const currentStepIndex = PIPELINE_STEPS.findIndex((s) => s.statut === pipeline.statut);
@@ -128,7 +132,8 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
   const allRequiredDone = completedRequired.length === requiredTasks.length;
   const nextTask = currentStepTasks.find((t) => !completedTaskIds.has(t.id));
 
-  const isTerminal = pipeline.statut === "termine" || pipeline.statut === "abandonne";
+  const isTerminal = isTerminalStatut(pipeline.statut);
+  const isWon = pipeline.statut === "contrat_signe" || pipeline.statut === "termine";
 
   function handleToggleTask(taskId: string) {
     startTransition(async () => {
@@ -159,6 +164,24 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
     });
   }
 
+  function handleRefus() {
+    startTransition(async () => {
+      await marquerRefus(pipeline.id, refusNote || undefined);
+      toast.success("Deal marqué comme perdu — Refus client");
+      setShowRefusDialog(false);
+      setRefusNote("");
+    });
+  }
+
+  function handleNonAssurable() {
+    startTransition(async () => {
+      await marquerNonAssurable(pipeline.id, nonAssurableNote || undefined);
+      toast.success("Deal marqué comme perdu — Non assurable");
+      setShowNonAssurableDialog(false);
+      setNonAssurableNote("");
+    });
+  }
+
   function handleAddNote() {
     if (!noteText.trim()) return;
     startTransition(async () => {
@@ -184,10 +207,16 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
             )}
           </div>
           <div className="flex items-center gap-2">
-            {pipeline.statut === "abandonne" ? (
+            {pipeline.statut === "refuse" ? (
+              <Badge variant="destructive">Deal perdu — Refus client</Badge>
+            ) : pipeline.statut === "non_assurable" ? (
+              <Badge variant="destructive">Deal perdu — Non assurable</Badge>
+            ) : pipeline.statut === "abandonne" ? (
               <Badge variant="destructive">Abandonné</Badge>
             ) : pipeline.statut === "termine" ? (
-              <Badge className="bg-green-100 text-green-700">Terminé ✓</Badge>
+              <Badge className="bg-green-100 text-green-700 border border-green-200">Contrat mis à jour dans Duomo ✓</Badge>
+            ) : pipeline.statut === "contrat_signe" ? (
+              <Badge className="bg-green-600 text-white">Deal gagné — Contrat signé 🎉</Badge>
             ) : (
               <Badge variant="secondary">{currentStep?.label} — étape {currentStepIndex + 1}/{PIPELINE_STEPS.length - 1}</Badge>
             )}
@@ -275,12 +304,27 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
         {/* Col 2: action centrale */}
         <div className="space-y-4">
           {isTerminal ? (
-            <Card className="p-8 text-center">
+            <Card className={cn("p-8 text-center border-2",
+              (pipeline.statut === "termine") && "border-green-200 bg-green-50",
+              (pipeline.statut === "refuse" || pipeline.statut === "non_assurable" || pipeline.statut === "abandonne") && "border-red-200 bg-red-50"
+            )}>
               {pipeline.statut === "termine" ? (
                 <>
                   <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
-                  <p className="font-semibold text-gray-800">Processus terminé</p>
-                  <p className="text-sm text-gray-400 mt-1">Nouveau contrat actif</p>
+                  <p className="font-semibold text-gray-800">Contrat mis à jour dans Duomo</p>
+                  <p className="text-sm text-gray-500 mt-1">Dossier clôturé avec succès</p>
+                </>
+              ) : pipeline.statut === "refuse" ? (
+                <>
+                  <XCircle className="h-12 w-12 text-red-400 mx-auto mb-3" />
+                  <p className="font-semibold text-gray-700">Deal perdu — Refus client</p>
+                  <p className="text-sm text-gray-400 mt-1">Le copropriétaire a refusé le changement</p>
+                </>
+              ) : pipeline.statut === "non_assurable" ? (
+                <>
+                  <XCircle className="h-12 w-12 text-red-400 mx-auto mb-3" />
+                  <p className="font-semibold text-gray-700">Deal perdu — Non assurable</p>
+                  <p className="text-sm text-gray-400 mt-1">La copropriété ne peut pas être assurée par nos partenaires</p>
                 </>
               ) : (
                 <>
@@ -391,7 +435,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                   <Button
                     onClick={() => allRequiredDone ? handleAdvance(false) : setShowAdvanceDialog(true)}
                     disabled={isPending}
-                    className="w-full"
+                    className={cn("w-full", isWon && "bg-green-600 hover:bg-green-700")}
                     size="lg"
                   >
                     Passer à : {nextStep.label}
@@ -414,14 +458,31 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                     Revenir à : {prevStep.label}
                   </Button>
                 )}
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowAbandonDialog(true)}
-                  disabled={isPending}
-                  className="w-full text-red-400 hover:text-red-600 hover:bg-red-50 text-sm"
-                >
-                  Abandonner ce pipeline
-                </Button>
+              </Card>
+
+              {/* Bloc deal perdu */}
+              <Card className="p-4 border-2 border-red-100 bg-red-50">
+                <p className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-3">Deal perdu</p>
+                <div className="space-y-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowRefusDialog(true)}
+                    disabled={isPending}
+                    className="w-full border-red-200 text-red-700 hover:bg-red-100 hover:border-red-300 text-sm"
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Refus du client
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowNonAssurableDialog(true)}
+                    disabled={isPending}
+                    className="w-full border-red-200 text-red-700 hover:bg-red-100 hover:border-red-300 text-sm"
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Copro non assurable
+                  </Button>
+                </div>
               </Card>
             </>
           )}
@@ -482,6 +543,34 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
           <div className="flex gap-2 justify-end">
             <Button variant="outline" onClick={() => setShowAbandonDialog(false)}>Annuler</Button>
             <Button variant="destructive" onClick={handleAbandon} disabled={isPending}>Confirmer</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showRefusDialog} onOpenChange={setShowRefusDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Refus du client</DialogTitle>
+            <DialogDescription>Le client a refusé le changement d&apos;assurance. Ajoutez une note si besoin.</DialogDescription>
+          </DialogHeader>
+          <Textarea value={refusNote} onChange={(e) => setRefusNote(e.target.value)} placeholder="Note (optionnelle)..." className="min-h-20" />
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setShowRefusDialog(false)}>Annuler</Button>
+            <Button variant="destructive" onClick={handleRefus} disabled={isPending}>Confirmer — Deal perdu</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showNonAssurableDialog} onOpenChange={setShowNonAssurableDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Copro non assurable</DialogTitle>
+            <DialogDescription>La copropriété ne peut pas être assurée par nos partenaires. Ajoutez une note si besoin.</DialogDescription>
+          </DialogHeader>
+          <Textarea value={nonAssurableNote} onChange={(e) => setNonAssurableNote(e.target.value)} placeholder="Note (optionnelle)..." className="min-h-20" />
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setShowNonAssurableDialog(false)}>Annuler</Button>
+            <Button variant="destructive" onClick={handleNonAssurable} disabled={isPending}>Confirmer — Deal perdu</Button>
           </div>
         </DialogContent>
       </Dialog>
