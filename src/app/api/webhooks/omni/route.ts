@@ -42,6 +42,7 @@ function mapStatut(salesStatus: string | null): PipelineStatut {
     case "Contract Uploaded": return "contrat_signe";
     case "Refused":
     case "Uninsurable": return "abandonne";
+    case "No Action":
     default: return "identifie";
   }
 }
