@@ -173,6 +173,53 @@ export async function marquerNonAssurable(pipelineId: string, note?: string) {
   return { success: true };
 }
 
+export async function logRSDraftSent(
+  pipelineId: string,
+  toEmail: string,
+  relanceNum: number
+) {
+  const session = await getSession();
+  const description =
+    relanceNum === 0
+      ? `Brouillon demande RS créé dans Front — ${toEmail}`
+      : `Relance ${relanceNum} RS créée dans Front — ${toEmail}`;
+
+  await prisma.pipelineEvent.create({
+    data: {
+      pipelineId,
+      type: "action_manuelle",
+      description,
+      metadata: { rsType: "draft_sent", to: toEmail, relanceNum },
+      createdBy: session.user.email!,
+    },
+  });
+
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
+export async function marquerRSRecu(pipelineId: string) {
+  return advanceStatut(pipelineId, true, "RS reçu — passage aux devis");
+}
+
+export async function createAppelCourtierTask(pipelineId: string) {
+  const session = await getSession();
+
+  await prisma.pipelineEvent.create({
+    data: {
+      pipelineId,
+      type: "action_manuelle",
+      description:
+        "Tâche créée : Appeler le courtier pour récupérer le RS (J+28 sans réponse)",
+      metadata: { rsType: "appel_courtier_task" },
+      createdBy: session.user.email!,
+    },
+  });
+
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
 export async function abandonPipeline(pipelineId: string, raison: string) {
   const session = await getSession();
 

@@ -66,6 +66,7 @@ type Pipeline = {
     description: string;
     createdBy: string;
     createdAt: Date;
+    metadata?: unknown;
   }>;
 };
 
@@ -344,6 +345,17 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                   <RSRequestAction
                     pipelineId={pipeline.id}
                     copro={pipeline.copro}
+                    rsEvents={[...pipeline.events]
+                      .reverse()
+                      .filter((e) => {
+                        const m = e.metadata;
+                        if (!m || typeof m !== "object") return false;
+                        const meta = m as Record<string, unknown>;
+                        return (
+                          meta.rsType === "draft_sent" ||
+                          meta.rsType === "appel_courtier_task"
+                        );
+                      })}
                   />
                 </Card>
               )}
