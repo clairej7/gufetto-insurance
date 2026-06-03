@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,17 +10,18 @@ import {
   FileText,
   X,
   Star,
-  Trash2,
-  ChevronDown,
-  ChevronUp,
   CheckCircle2,
   Loader2,
   Mail,
+  Sparkles,
+  RefreshCw,
+  ArrowRight,
 } from "lucide-react";
 import {
   addDevisRecu,
   deleteDevisRecu,
   setRecommandeDevis,
+  saveContratActuelData,
 } from "@/lib/actions";
 import { toast } from "sonner";
 
@@ -31,8 +32,6 @@ type ExtractedData = {
   numeroContrat?: string | null;
   primeTTC?: number;
   primeHT?: number | null;
-  taxes?: number | null;
-  fraisCourtage?: number | null;
   franchiseIncendie?: string | null;
   franchiseDDE?: string | null;
   franchiseVol?: string | null;
@@ -60,6 +59,7 @@ type ExtractedData = {
   };
   pointsForts?: string[];
   pointsFaibles?: string[];
+  _pdfName?: string;
 };
 
 type DevisRecu = {
@@ -77,6 +77,7 @@ type DevisRecu = {
 interface DevisRecusActionProps {
   pipelineId: string;
   devisRecus: DevisRecu[];
+  contratActuelData: string | null;
   copro: {
     nom: string;
     adresse: string | null;
@@ -85,18 +86,15 @@ interface DevisRecusActionProps {
     courtierActuel: string | null;
     contactCsEmail: string | null;
     contactCsNom: string | null;
+    gestionnaireEmail: string | null;
   };
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function parseData(raw: string | null): ExtractedData {
   if (!raw) return {};
-  try {
-    return JSON.parse(raw) as ExtractedData;
-  } catch {
-    return {};
-  }
+  try { return JSON.parse(raw) as ExtractedData; } catch { return {}; }
 }
 
 function formatPrime(val: number | null | undefined): string {
@@ -104,483 +102,211 @@ function formatPrime(val: number | null | undefined): string {
   return val.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " €";
 }
 
-// ─── DropZone ───────────────────────────────────────────────────────────────
+async function extractPdf(file: File): Promise<ExtractedData> {
+  const formData = new FormData();
+  formData.append("pdf", file, file.name);
+  const res = await fetch("/api/devis/extract", { method: "POST", body: formData });
+  const json = await res.json() as { success?: boolean; data?: ExtractedData; error?: string };
+  if (!json.success || !json.data) throw new Error(json.error ?? "Extraction échouée");
+  return { ...json.data, _pdfName: file.name };
+}
 
-function DropZone({
-  onDrop,
-  loading,
+// ─── UploadZone ───────────────────────────────────────────────────────────────
+
+function UploadZone({
+  label,
+  subtitle,
+  file,
+  onFile,
+  disabled,
 }: {
-  onDrop: (file: File) => void;
-  loading: boolean;
+  label: string;
+  subtitle?: string;
+  file: File | null;
+  onFile: (f: File | null) => void;
+  disabled?: boolean;
 }) {
   const [isDragging, setIsDragging] = useState(false);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
-  const handleDragLeave = useCallback(() => setIsDragging(false), []);
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragging(false);
-      const dropped = e.dataTransfer.files[0];
-      if (dropped) onDrop(dropped);
-    },
-    [onDrop]
-  );
-  const handleClick = useCallback(() => {
+  function handleClick() {
+    if (disabled) return;
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".pdf";
     input.onchange = (e) => {
       const f = (e.target as HTMLInputElement).files?.[0];
-      if (f) onDrop(f);
+      if (f) onFile(f);
     };
     input.click();
-  }, [onDrop]);
-
-  return (
-    <div
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      onClick={loading ? undefined : handleClick}
-      className={cn(
-        "border-2 border-dashed rounded-xl p-6 text-center transition-colors",
-        loading ? "cursor-not-allowed opacity-60" : "cursor-pointer",
-        isDragging
-          ? "border-[#4E49FC] bg-[#F0EFFF]"
-          : "border-[#E8E8EC] hover:border-[#8784FD] hover:bg-[#F7F7F8]"
-      )}
-    >
-      {loading ? (
-        <div className="flex flex-col items-center gap-2">
-          <Loader2 className="h-6 w-6 animate-spin" style={{ color: "#4E49FC" }} />
-          <p className="text-sm font-medium" style={{ color: "#4E49FC" }}>
-            Analyse du devis par Claude…
-          </p>
-          <p className="text-xs" style={{ color: "#A2A1AF" }}>
-            Extraction des données en cours
-          </p>
-        </div>
-      ) : (
-        <>
-          <Upload className="h-6 w-6 mx-auto mb-2" style={{ color: "#A2A1AF" }} />
-          <p className="text-sm font-medium" style={{ color: "#656576" }}>
-            Déposer un devis PDF ici
-          </p>
-          <p className="text-xs mt-1" style={{ color: "#A2A1AF" }}>
-            ou cliquer pour parcourir — PDF uniquement
-          </p>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── GarantieChip ────────────────────────────────────────────────────────────
-
-function GarantieChip({ label, value }: { label: string; value: boolean | undefined }) {
-  if (value === undefined) return null;
-  return (
-    <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-      style={
-        value
-          ? { backgroundColor: "#EFFBF2", color: "#13762C" }
-          : { backgroundColor: "#F7F7F8", color: "#A2A1AF" }
-      }
-    >
-      {value ? "✓" : "✗"} {label}
-    </span>
-  );
-}
-
-// ─── Section A: Upload + Form ────────────────────────────────────────────────
-
-function UploadSection({
-  pipelineId,
-  onSaved,
-}: {
-  pipelineId: string;
-  onSaved: () => void;
-}) {
-  const [loading, setLoading] = useState(false);
-  const [extracted, setExtracted] = useState<ExtractedData | null>(null);
-  const [pdfName, setPdfName] = useState<string | null>(null);
-
-  // Editable form fields
-  const [assureur, setAssureur] = useState("");
-  const [numeroContrat, setNumeroContrat] = useState("");
-  const [primeTTC, setPrimeTTC] = useState("");
-  const [notes, setNotes] = useState("");
-
-  const [isPending, startTransition] = useTransition();
-
-  async function handleFile(file: File) {
-    setLoading(true);
-    setPdfName(file.name);
-    try {
-      const formData = new FormData();
-      formData.append("pdf", file, file.name);
-      const res = await fetch("/api/devis/extract", { method: "POST", body: formData });
-      const json = await res.json() as { success?: boolean; data?: ExtractedData; error?: string };
-
-      if (!json.success || !json.data) {
-        toast.error(`Erreur d'extraction : ${json.error ?? "inconnu"}`);
-        setLoading(false);
-        return;
-      }
-
-      const d = json.data;
-      setExtracted(d);
-      setAssureur(d.assureur ?? "");
-      setNumeroContrat(d.numeroContrat ?? "");
-      setPrimeTTC(d.primeTTC != null ? String(d.primeTTC) : "");
-      setNotes("");
-      toast.success("Données extraites avec succès !");
-    } catch (err) {
-      toast.error("Erreur réseau lors de l'extraction");
-      console.error(err);
-    }
-    setLoading(false);
   }
 
-  function handleCancel() {
-    setExtracted(null);
-    setPdfName(null);
-    setAssureur("");
-    setNumeroContrat("");
-    setPrimeTTC("");
-    setNotes("");
-  }
-
-  function handleSave() {
-    const prime = parseFloat(primeTTC);
-    if (!assureur.trim()) { toast.error("Le nom de l'assureur est requis"); return; }
-    if (isNaN(prime) || prime <= 0) { toast.error("La prime TTC doit être un nombre positif"); return; }
-
-    startTransition(async () => {
-      const result = await addDevisRecu(pipelineId, {
-        assureur: assureur.trim(),
-        numeroContrat: numeroContrat.trim() || null,
-        primeTTC: prime,
-        data: extracted ? JSON.stringify(extracted) : null,
-        notes: notes.trim() || null,
-        pdfName,
-      });
-
-      if (result.success) {
-        toast.success("Devis enregistré !");
-        handleCancel();
-        onSaved();
-      }
-    });
-  }
-
-  if (!extracted) {
+  if (file) {
     return (
-      <div className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>
-          Ajouter un devis reçu
-        </p>
-        <DropZone onDrop={handleFile} loading={loading} />
+      <div
+        className="rounded-2xl border-2 p-5 space-y-3 transition-all"
+        style={{ borderColor: "#4E49FC", background: "#F0EFFF" }}
+      >
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#8784FD" }}>
+            {label}
+          </p>
+          {!disabled && (
+            <button
+              onClick={() => onFile(null)}
+              className="rounded-full p-0.5 hover:opacity-70"
+              style={{ color: "#8784FD" }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "#E8E7FF" }}>
+            <FileText className="h-4 w-4" style={{ color: "#4E49FC" }} />
+          </div>
+          <p className="text-sm font-medium truncate" style={{ color: "#4E49FC" }}>{file.name}</p>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "#4E49FC" }}>
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Prêt pour l&apos;analyse
+        </div>
       </div>
     );
   }
 
-  const g = extracted.garanties ?? {};
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>
-          Données extraites — vérifier et enregistrer
+    <div
+      onClick={disabled ? undefined : handleClick}
+      onDragOver={(e) => { e.preventDefault(); if (!disabled) setIsDragging(true); }}
+      onDragLeave={() => setIsDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDragging(false);
+        if (disabled) return;
+        const f = e.dataTransfer.files[0];
+        if (f) onFile(f);
+      }}
+      className={cn(
+        "rounded-2xl border-2 border-dashed p-5 flex flex-col items-center justify-center gap-3 transition-all",
+        disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer",
+        isDragging
+          ? "border-[#4E49FC] bg-[#F0EFFF]"
+          : "border-[#E8E8EC] hover:border-[#8784FD] hover:bg-[#F7F7F8]"
+      )}
+      style={{ minHeight: 150 }}
+    >
+      <div
+        className="w-12 h-12 rounded-2xl flex items-center justify-center"
+        style={{ background: isDragging ? "#E8E7FF" : "#F0EFFF" }}
+      >
+        <Upload className="h-6 w-6" style={{ color: "#4E49FC" }} />
+      </div>
+      <div className="text-center">
+        <p className="text-sm font-semibold" style={{ color: "#26262C" }}>{label}</p>
+        {subtitle && (
+          <p className="text-xs mt-0.5" style={{ color: "#A2A1AF" }}>{subtitle}</p>
+        )}
+        <p className="text-xs mt-1.5" style={{ color: "#A2A1AF" }}>
+          Glisser-déposer ou cliquer · PDF
         </p>
-        <button onClick={handleCancel} style={{ color: "#A2A1AF" }} className="hover:opacity-70">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* PDF name */}
-      {pdfName && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{ background: "#F0EFFF" }}>
-          <FileText className="h-4 w-4 flex-shrink-0" style={{ color: "#4E49FC" }} />
-          <span style={{ color: "#4E49FC" }}>{pdfName}</span>
-        </div>
-      )}
-
-      {/* Editable fields */}
-      <div className="grid grid-cols-1 gap-3">
-        <div className="space-y-1">
-          <Label className="text-sm font-medium" style={{ color: "#26262C" }}>
-            Assureur <span style={{ color: "#4E49FC" }}>*</span>
-          </Label>
-          <Input
-            value={assureur}
-            onChange={(e) => setAssureur(e.target.value)}
-            placeholder="Ex : AXA, Allianz…"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <Label className="text-sm font-medium" style={{ color: "#26262C" }}>
-            N° contrat / devis
-          </Label>
-          <Input
-            value={numeroContrat}
-            onChange={(e) => setNumeroContrat(e.target.value)}
-            placeholder="Optionnel"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <Label className="text-sm font-medium" style={{ color: "#26262C" }}>
-            Prime TTC annuelle (€) <span style={{ color: "#4E49FC" }}>*</span>
-          </Label>
-          <Input
-            type="number"
-            value={primeTTC}
-            onChange={(e) => setPrimeTTC(e.target.value)}
-            placeholder="Ex : 3500"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <Label className="text-sm font-medium" style={{ color: "#26262C" }}>
-            Notes
-          </Label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={3}
-            placeholder="Observations sur ce devis…"
-            className="w-full rounded-xl border px-3 py-2 text-sm leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-[#4E49FC] focus:border-transparent font-[inherit]"
-            style={{ background: "#FAFAFA", borderColor: "#E8E8EC", color: "#26262C" }}
-          />
-        </div>
-      </div>
-
-      {/* Extracted summary: franchises */}
-      {(extracted.franchiseIncendie || extracted.franchiseDDE || extracted.franchiseVol || extracted.franchiseClimatique) && (
-        <div className="rounded-xl border p-3 space-y-2" style={{ borderColor: "#E8E8EC" }}>
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>
-            Franchises extraites
-          </p>
-          <div className="space-y-1 text-xs" style={{ color: "#656576" }}>
-            {extracted.franchiseIncendie && <div><span style={{ color: "#26262C", fontWeight: 500 }}>Incendie :</span> {extracted.franchiseIncendie}</div>}
-            {extracted.franchiseDDE && <div><span style={{ color: "#26262C", fontWeight: 500 }}>Dégâts des eaux :</span> {extracted.franchiseDDE}</div>}
-            {extracted.franchiseVol && <div><span style={{ color: "#26262C", fontWeight: 500 }}>Vol :</span> {extracted.franchiseVol}</div>}
-            {extracted.franchiseClimatique && <div><span style={{ color: "#26262C", fontWeight: 500 }}>Climatique :</span> {extracted.franchiseClimatique}</div>}
-          </div>
-        </div>
-      )}
-
-      {/* Garanties chips */}
-      {Object.keys(g).length > 0 && (
-        <div className="rounded-xl border p-3 space-y-2" style={{ borderColor: "#E8E8EC" }}>
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>
-            Garanties détectées
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            <GarantieChip label="Incendie" value={g.incendie} />
-            <GarantieChip label="Dom. élec." value={g.dommagesElectriques} />
-            <GarantieChip label="Événements clim." value={g.evenementsClimatiques} />
-            <GarantieChip label="Cat. nat." value={g.catastrophesNaturelles} />
-            <GarantieChip label="Dégâts eaux" value={g.degatsDesEaux} />
-            <GarantieChip label="Vol" value={g.vol} />
-            <GarantieChip label="Bris de glace" value={g.brisDeGlace} />
-            <GarantieChip label="RC" value={g.rc} />
-            <GarantieChip label="Vandalisme" value={g.vandalisme} />
-            <GarantieChip label="Effondrement" value={g.effondrement} />
-            <GarantieChip label="Bris machines" value={g.brisDeMachines} />
-            <GarantieChip label="Prot. juridique" value={g.protectionJuridique} />
-            <GarantieChip label="Prot. CS" value={g.protectionCS} />
-            <GarantieChip label="Hono. syndic" value={g.honoSyndic} />
-          </div>
-        </div>
-      )}
-
-      {/* Points forts / faibles */}
-      {((extracted.pointsForts?.length ?? 0) > 0 || (extracted.pointsFaibles?.length ?? 0) > 0) && (
-        <div className="grid grid-cols-2 gap-3">
-          {(extracted.pointsForts?.length ?? 0) > 0 && (
-            <div className="rounded-xl border p-3 space-y-1.5" style={{ borderColor: "#BBF1C8", background: "#EFFBF2" }}>
-              <p className="text-xs font-semibold" style={{ color: "#13762C" }}>Points forts</p>
-              {extracted.pointsForts!.map((pt, i) => (
-                <p key={i} className="text-xs" style={{ color: "#13762C" }}>✓ {pt}</p>
-              ))}
-            </div>
-          )}
-          {(extracted.pointsFaibles?.length ?? 0) > 0 && (
-            <div className="rounded-xl border p-3 space-y-1.5" style={{ borderColor: "#F5C97A", background: "#FFF7EB" }}>
-              <p className="text-xs font-semibold" style={{ color: "#955804" }}>Points faibles</p>
-              {extracted.pointsFaibles!.map((pt, i) => (
-                <p key={i} className="text-xs" style={{ color: "#955804" }}>✗ {pt}</p>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex gap-2 pt-1">
-        <Button
-          variant="outline"
-          onClick={handleCancel}
-          className="flex-1"
-          disabled={isPending}
-        >
-          Annuler
-        </Button>
-        <Button
-          onClick={handleSave}
-          disabled={isPending || !assureur.trim() || !primeTTC.trim()}
-          className="flex-1 font-medium"
-          style={{ backgroundColor: "#4E49FC", color: "#ffffff" }}
-        >
-          {isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin mr-1" />
-              Enregistrement…
-            </>
-          ) : (
-            "Enregistrer ce devis"
-          )}
-        </Button>
       </div>
     </div>
   );
 }
 
-// ─── Section B: Devis Card ────────────────────────────────────────────────────
+// ─── SummaryCard ──────────────────────────────────────────────────────────────
 
-function DevisCard({
-  devis,
-  pipelineId,
-  onDelete,
-  onRecommande,
+function SummaryCard({
+  label,
+  data,
+  isCurrent,
+  isRecommande,
+  primeActuelle,
 }: {
-  devis: DevisRecu;
-  pipelineId: string;
-  onDelete: () => void;
-  onRecommande: () => void;
+  label: string;
+  data: ExtractedData;
+  isCurrent?: boolean;
+  isRecommande?: boolean;
+  primeActuelle?: number | null;
 }) {
-  const [open, setOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
-  const d = parseData(devis.data);
-
-  const dateLabel = new Date(devis.createdAt).toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  const econ =
+    !isCurrent && primeActuelle != null && data.primeTTC != null
+      ? primeActuelle - data.primeTTC
+      : null;
 
   return (
     <div
-      className={cn(
-        "rounded-xl border overflow-hidden transition-all",
-        devis.recommande
-          ? "border-[#4E49FC]"
-          : "border-[#E8E8EC]"
-      )}
+      className={cn("rounded-2xl border-2 p-5 space-y-3 transition-all")}
+      style={{
+        borderColor: isRecommande ? "#4E49FC" : isCurrent ? "#E8E8EC" : "#E8E8EC",
+        background: isRecommande ? "#F0EFFF" : isCurrent ? "#F7F7F8" : "#FFFFFF",
+      }}
     >
-      <div
-        className="flex items-center justify-between px-4 py-3 cursor-pointer"
-        style={{ background: devis.recommande ? "#F0EFFF" : "#F7F7F8" }}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <div className="flex items-center gap-3">
-          {devis.recommande && (
-            <Star className="h-4 w-4 fill-[#4E49FC]" style={{ color: "#4E49FC" }} />
-          )}
-          <div>
-            <p className="text-sm font-semibold" style={{ color: "#26262C" }}>
-              {devis.assureur}
-            </p>
-            <p className="text-xs" style={{ color: "#A2A1AF" }}>
-              {formatPrime(devis.primeTTC)} · ajouté le {dateLabel}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {!devis.recommande && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                startTransition(async () => {
-                  await setRecommandeDevis(devis.id, pipelineId);
-                  onRecommande();
-                  toast.success(`${devis.assureur} recommandé !`);
-                });
-              }}
-              disabled={isPending}
-              title="Recommander ce devis"
-              className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border transition-colors hover:border-[#4E49FC] hover:text-[#4E49FC]"
-              style={{ borderColor: "#E8E8EC", color: "#A2A1AF" }}
-            >
-              <Star className="h-3.5 w-3.5" />
-              Recommander
-            </button>
-          )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              startTransition(async () => {
-                await deleteDevisRecu(devis.id, pipelineId);
-                onDelete();
-                toast.success("Devis supprimé");
-              });
-            }}
-            disabled={isPending}
-            title="Supprimer"
-            className="p-1 rounded transition-colors hover:text-red-500"
-            style={{ color: "#A2A1AF" }}
+      <div className="flex items-center justify-between">
+        <p
+          className="text-xs font-semibold uppercase tracking-wide"
+          style={{ color: isRecommande ? "#4E49FC" : "#A2A1AF" }}
+        >
+          {label}
+        </p>
+        {isRecommande && (
+          <div
+            className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
+            style={{ background: "#4E49FC", color: "#ffffff" }}
           >
-            <Trash2 className="h-4 w-4" />
-          </button>
-          {open ? (
-            <ChevronUp className="h-4 w-4" style={{ color: "#A2A1AF" }} />
-          ) : (
-            <ChevronDown className="h-4 w-4" style={{ color: "#A2A1AF" }} />
-          )}
-        </div>
+            <Star className="h-3 w-3 fill-white" />
+            Recommandé
+          </div>
+        )}
       </div>
 
-      {open && (
-        <div className="px-4 py-3 border-t space-y-3" style={{ borderColor: "#E8E8EC" }}>
-          {devis.pdfName && (
-            <div className="flex items-center gap-2 text-xs" style={{ color: "#656576" }}>
-              <FileText className="h-3.5 w-3.5" />
-              {devis.pdfName}
-            </div>
+      <div>
+        <p className="text-base font-bold truncate" style={{ color: "#26262C" }}>
+          {data.assureur ?? "—"}
+        </p>
+        <p
+          className="text-2xl font-bold mt-1"
+          style={{ color: isRecommande ? "#4E49FC" : "#26262C" }}
+        >
+          {formatPrime(data.primeTTC)}
+        </p>
+        <p className="text-xs mt-0.5" style={{ color: "#A2A1AF" }}>/ an TTC</p>
+      </div>
+
+      {econ != null && (
+        <div
+          className="flex items-center gap-1.5 text-sm font-semibold rounded-xl px-3 py-2"
+          style={
+            econ > 0
+              ? { background: "#EFFBF2", color: "#13762C" }
+              : { background: "#FFF7EB", color: "#955804" }
+          }
+        >
+          {econ > 0 ? (
+            <>
+              <ArrowRight className="h-3.5 w-3.5" />
+              Économie {econ.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €/an
+            </>
+          ) : (
+            <>
+              <ArrowRight className="h-3.5 w-3.5" />
+              +{Math.abs(econ).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €/an
+            </>
           )}
-          {devis.numeroContrat && (
-            <p className="text-xs" style={{ color: "#656576" }}>
-              N° contrat : <span style={{ color: "#26262C" }}>{devis.numeroContrat}</span>
-            </p>
-          )}
-          {devis.notes && (
-            <p className="text-xs leading-relaxed" style={{ color: "#656576" }}>
-              {devis.notes}
-            </p>
-          )}
-          {(d.franchiseIncendie || d.franchiseDDE || d.franchiseVol || d.franchiseClimatique) && (
-            <div className="text-xs space-y-0.5" style={{ color: "#656576" }}>
-              {d.franchiseIncendie && <div><strong>Incendie :</strong> {d.franchiseIncendie}</div>}
-              {d.franchiseDDE && <div><strong>DDE :</strong> {d.franchiseDDE}</div>}
-              {d.franchiseVol && <div><strong>Vol :</strong> {d.franchiseVol}</div>}
-              {d.franchiseClimatique && <div><strong>Clim. :</strong> {d.franchiseClimatique}</div>}
-            </div>
-          )}
+        </div>
+      )}
+
+      {data._pdfName && (
+        <div className="flex items-center gap-1.5 text-xs" style={{ color: "#A2A1AF" }}>
+          <FileText className="h-3 w-3" />
+          {data._pdfName}
         </div>
       )}
     </div>
   );
 }
 
-// ─── Section C: Comparison Table ─────────────────────────────────────────────
+// ─── ComparisonTable ──────────────────────────────────────────────────────────
 
 type ColDef = {
   label: string;
@@ -593,7 +319,7 @@ type ColDef = {
 function BoolCell({ value }: { value: boolean | undefined }) {
   if (value === undefined) return <span style={{ color: "#A2A1AF" }}>—</span>;
   if (value) return <span style={{ color: "#13762C", fontWeight: 600 }}>✓</span>;
-  return <span style={{ color: "#A2A1AF" }}>✗</span>;
+  return <span style={{ color: "#D1D0DB" }}>✗</span>;
 }
 
 function TextCell({ value }: { value: string | null | undefined }) {
@@ -601,20 +327,17 @@ function TextCell({ value }: { value: string | null | undefined }) {
   return <span style={{ color: "#26262C" }}>{value}</span>;
 }
 
-function ComparisonTable({
-  cols,
-}: {
-  cols: ColDef[];
-}) {
+function ComparisonTable({ cols }: { cols: ColDef[] }) {
   const currentPrime = cols[0]?.prime ?? null;
 
-  const rows: Array<
+  type TableRow =
     | { type: "separator"; label: string }
     | { type: "prime" }
     | { type: "economy" }
     | { type: "text"; label: string; field: keyof ExtractedData }
-    | { type: "bool"; label: string; garantieKey: keyof NonNullable<ExtractedData["garanties"]> }
-  > = [
+    | { type: "bool"; label: string; garantieKey: keyof NonNullable<ExtractedData["garanties"]> };
+
+  const rows: TableRow[] = [
     { type: "prime" },
     { type: "economy" },
     { type: "separator", label: "Franchises" },
@@ -628,9 +351,12 @@ function ComparisonTable({
     { type: "separator", label: "Garanties" },
     { type: "bool", label: "Incendie", garantieKey: "incendie" },
     { type: "bool", label: "Dom. électriques", garantieKey: "dommagesElectriques" },
+    { type: "bool", label: "Événements clim.", garantieKey: "evenementsClimatiques" },
+    { type: "bool", label: "Cat. naturelles", garantieKey: "catastrophesNaturelles" },
     { type: "bool", label: "Dégâts des eaux", garantieKey: "degatsDesEaux" },
     { type: "bool", label: "Vol", garantieKey: "vol" },
     { type: "bool", label: "Bris de glace", garantieKey: "brisDeGlace" },
+    { type: "bool", label: "RC", garantieKey: "rc" },
     { type: "bool", label: "Vandalisme", garantieKey: "vandalisme" },
     { type: "bool", label: "Effondrement", garantieKey: "effondrement" },
     { type: "bool", label: "Bris machines", garantieKey: "brisDeMachines" },
@@ -641,47 +367,35 @@ function ComparisonTable({
   ];
 
   return (
-    <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "#E8E8EC" }}>
-      <table className="w-full text-xs border-collapse">
+    <div className="overflow-x-auto rounded-2xl border" style={{ borderColor: "#E8E8EC" }}>
+      <table className="w-full text-sm border-collapse">
         <thead>
           <tr>
-            {/* Criterion label col */}
             <th
-              className="text-left px-3 py-2.5 text-xs font-semibold sticky left-0 z-10"
-              style={{
-                backgroundColor: "#F7F7F8",
-                color: "#656576",
-                minWidth: 140,
-                borderBottom: "1px solid #E8E8EC",
-              }}
+              className="text-left px-4 py-3 text-xs font-semibold sticky left-0 z-10"
+              style={{ backgroundColor: "#F7F7F8", color: "#656576", minWidth: 160, borderBottom: "2px solid #E8E8EC" }}
             >
               Critère
             </th>
             {cols.map((col, i) => (
               <th
                 key={i}
-                className="px-3 py-2.5 text-center font-semibold"
+                className="px-4 py-3 text-center font-semibold"
                 style={{
-                  backgroundColor: col.isCurrent
-                    ? "#F7F7F8"
-                    : col.isRecommande
-                    ? "#F0EFFF"
-                    : "#FFFFFF",
+                  backgroundColor: col.isCurrent ? "#F7F7F8" : col.isRecommande ? "#F0EFFF" : "#FFFFFF",
                   color: col.isCurrent ? "#656576" : col.isRecommande ? "#4E49FC" : "#26262C",
-                  minWidth: 130,
-                  borderBottom: "1px solid #E8E8EC",
+                  minWidth: 160,
+                  borderBottom: "2px solid #E8E8EC",
                   borderLeft: "1px solid #E8E8EC",
                 }}
               >
-                <div className="flex items-center justify-center gap-1">
-                  {col.isRecommande && <Star className="h-3 w-3 fill-[#4E49FC]" style={{ color: "#4E49FC" }} />}
+                <div className="flex items-center justify-center gap-1.5">
+                  {col.isRecommande && <Star className="h-3.5 w-3.5 fill-[#4E49FC]" style={{ color: "#4E49FC" }} />}
                   {col.label}
                 </div>
-                {col.isCurrent && (
-                  <div className="text-xs font-normal mt-0.5" style={{ color: "#A2A1AF" }}>
-                    Contrat actuel
-                  </div>
-                )}
+                <div className="text-xs font-normal mt-0.5" style={{ color: col.isRecommande ? "#8784FD" : "#A2A1AF" }}>
+                  {col.isCurrent ? "Contrat actuel" : `Devis ${i}`}
+                </div>
               </th>
             ))}
           </tr>
@@ -693,7 +407,7 @@ function ComparisonTable({
                 <tr key={rowIdx}>
                   <td
                     colSpan={cols.length + 1}
-                    className="px-3 py-2 text-xs font-semibold uppercase tracking-wide"
+                    className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wide"
                     style={{ backgroundColor: "#F7F7F8", color: "#A2A1AF", borderTop: "1px solid #E8E8EC" }}
                   >
                     {row.label}
@@ -708,25 +422,12 @@ function ComparisonTable({
             if (row.type === "prime") {
               return (
                 <tr key={rowIdx} style={{ borderTop: "1px solid #E8E8EC" }}>
-                  <td
-                    className="px-3 py-3 font-semibold sticky left-0"
-                    style={{ backgroundColor: rowBg, color: "#26262C", borderRight: "1px solid #E8E8EC" }}
-                  >
+                  <td className="px-4 py-4 font-semibold sticky left-0" style={{ backgroundColor: rowBg, color: "#26262C", borderRight: "1px solid #E8E8EC" }}>
                     Prime TTC annuelle
                   </td>
                   {cols.map((col, i) => (
-                    <td
-                      key={i}
-                      className="px-3 py-3 text-center"
-                      style={{
-                        backgroundColor: col.isCurrent ? "#F7F7F8" : col.isRecommande ? "#F0EFFF" : rowBg,
-                        borderLeft: "1px solid #E8E8EC",
-                      }}
-                    >
-                      <span
-                        className="text-base font-bold"
-                        style={{ color: col.isCurrent ? "#26262C" : col.isRecommande ? "#4E49FC" : "#26262C" }}
-                      >
+                    <td key={i} className="px-4 py-4 text-center" style={{ backgroundColor: col.isCurrent ? "#F7F7F8" : col.isRecommande ? "#F0EFFF" : rowBg, borderLeft: "1px solid #E8E8EC" }}>
+                      <span className="text-xl font-bold" style={{ color: col.isCurrent ? "#26262C" : col.isRecommande ? "#4E49FC" : "#26262C" }}>
                         {formatPrime(col.prime)}
                       </span>
                     </td>
@@ -738,42 +439,20 @@ function ComparisonTable({
             if (row.type === "economy") {
               return (
                 <tr key={rowIdx} style={{ borderTop: "1px solid #E8E8EC" }}>
-                  <td
-                    className="px-3 py-2 font-medium sticky left-0"
-                    style={{ backgroundColor: rowBg, color: "#656576", borderRight: "1px solid #E8E8EC" }}
-                  >
+                  <td className="px-4 py-3 font-medium sticky left-0" style={{ backgroundColor: rowBg, color: "#656576", borderRight: "1px solid #E8E8EC" }}>
                     Économie annuelle
                   </td>
                   {cols.map((col, i) => {
                     if (col.isCurrent || currentPrime == null || col.prime == null) {
                       return (
-                        <td
-                          key={i}
-                          className="px-3 py-2 text-center"
-                          style={{
-                            backgroundColor: col.isCurrent ? "#F7F7F8" : col.isRecommande ? "#F0EFFF" : rowBg,
-                            borderLeft: "1px solid #E8E8EC",
-                            color: "#A2A1AF",
-                          }}
-                        >
-                          —
-                        </td>
+                        <td key={i} className="px-4 py-3 text-center" style={{ backgroundColor: col.isCurrent ? "#F7F7F8" : col.isRecommande ? "#F0EFFF" : rowBg, borderLeft: "1px solid #E8E8EC", color: "#A2A1AF" }}>—</td>
                       );
                     }
                     const econ = currentPrime - col.prime;
-                    const isPositive = econ > 0;
+                    const isPos = econ > 0;
                     return (
-                      <td
-                        key={i}
-                        className="px-3 py-2 text-center font-semibold"
-                        style={{
-                          backgroundColor: col.isRecommande ? "#F0EFFF" : rowBg,
-                          borderLeft: "1px solid #E8E8EC",
-                          color: isPositive ? "#13762C" : "#CA1E12",
-                        }}
-                      >
-                        {isPositive ? "−" : "+"}
-                        {Math.abs(econ).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €
+                      <td key={i} className="px-4 py-3 text-center font-bold" style={{ backgroundColor: col.isRecommande ? "#F0EFFF" : rowBg, borderLeft: "1px solid #E8E8EC", color: isPos ? "#13762C" : "#CA1E12" }}>
+                        {isPos ? "−" : "+"}{Math.abs(econ).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €
                       </td>
                     );
                   })}
@@ -784,23 +463,11 @@ function ComparisonTable({
             if (row.type === "text") {
               return (
                 <tr key={rowIdx} style={{ borderTop: "1px solid #E8E8EC" }}>
-                  <td
-                    className="px-3 py-2 sticky left-0"
-                    style={{ backgroundColor: rowBg, color: "#656576", borderRight: "1px solid #E8E8EC" }}
-                  >
-                    {row.label}
-                  </td>
+                  <td className="px-4 py-3 sticky left-0" style={{ backgroundColor: rowBg, color: "#656576", borderRight: "1px solid #E8E8EC" }}>{row.label}</td>
                   {cols.map((col, i) => {
                     const val = col.data[row.field as keyof ExtractedData];
                     return (
-                      <td
-                        key={i}
-                        className="px-3 py-2 text-center"
-                        style={{
-                          backgroundColor: col.isCurrent ? "#F7F7F8" : col.isRecommande ? "#F0EFFF" : rowBg,
-                          borderLeft: "1px solid #E8E8EC",
-                        }}
-                      >
+                      <td key={i} className="px-4 py-3 text-center" style={{ backgroundColor: col.isCurrent ? "#F7F7F8" : col.isRecommande ? "#F0EFFF" : rowBg, borderLeft: "1px solid #E8E8EC" }}>
                         <TextCell value={typeof val === "string" ? val : null} />
                       </td>
                     );
@@ -812,31 +479,15 @@ function ComparisonTable({
             if (row.type === "bool") {
               return (
                 <tr key={rowIdx} style={{ borderTop: "1px solid #E8E8EC" }}>
-                  <td
-                    className="px-3 py-2 sticky left-0"
-                    style={{ backgroundColor: rowBg, color: "#656576", borderRight: "1px solid #E8E8EC" }}
-                  >
-                    {row.label}
-                  </td>
-                  {cols.map((col, i) => {
-                    const val = col.data.garanties?.[row.garantieKey];
-                    return (
-                      <td
-                        key={i}
-                        className="px-3 py-2 text-center"
-                        style={{
-                          backgroundColor: col.isCurrent ? "#F7F7F8" : col.isRecommande ? "#F0EFFF" : rowBg,
-                          borderLeft: "1px solid #E8E8EC",
-                        }}
-                      >
-                        <BoolCell value={val} />
-                      </td>
-                    );
-                  })}
+                  <td className="px-4 py-3 sticky left-0" style={{ backgroundColor: rowBg, color: "#656576", borderRight: "1px solid #E8E8EC" }}>{row.label}</td>
+                  {cols.map((col, i) => (
+                    <td key={i} className="px-4 py-3 text-center" style={{ backgroundColor: col.isCurrent ? "#F7F7F8" : col.isRecommande ? "#F0EFFF" : rowBg, borderLeft: "1px solid #E8E8EC" }}>
+                      <BoolCell value={col.data.garanties?.[row.garantieKey]} />
+                    </td>
+                  ))}
                 </tr>
               );
             }
-
             return null;
           })}
         </tbody>
@@ -845,183 +496,232 @@ function ComparisonTable({
   );
 }
 
-// ─── Section D: Recommendation Email ─────────────────────────────────────────
+// ─── RecoAndEmailSection ─────────────────────────────────────────────────────
 
-function RecommandationEmail({
+function RecoAndEmailSection({
   pipelineId,
-  recommande,
   copro,
+  contratActuelData,
   allDevis,
 }: {
   pipelineId: string;
-  recommande: DevisRecu;
   copro: DevisRecusActionProps["copro"];
+  contratActuelData: ExtractedData;
   allDevis: DevisRecu[];
 }) {
-  const d = parseData(recommande.data);
-  const econ =
-    copro.primeActuelle != null
-      ? copro.primeActuelle - recommande.primeTTC
-      : null;
-
-  function buildBody(): string {
-    const lines: string[] = [
-      `Bonjour${copro.contactCsNom ? ` ${copro.contactCsNom}` : ""},`,
-      "",
-      `Suite à notre appel d'offres pour la copropriété ${copro.nom}${copro.adresse ? ` (${copro.adresse})` : ""}, nous avons analysé les devis reçus et souhaitons vous présenter notre recommandation.`,
-      "",
-      `Nous vous recommandons le devis proposé par ${recommande.assureur}.`,
-      "",
-      "── Résumé de l'offre ──",
-      "",
-      `Prime annuelle TTC : ${formatPrime(recommande.primeTTC)}`,
-    ];
-
-    if (econ != null) {
-      if (econ > 0) {
-        lines.push(
-          `Économie par rapport au contrat actuel : ${econ.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} € / an`
-        );
-      } else {
-        lines.push(
-          `Variation par rapport au contrat actuel : +${Math.abs(econ).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} € / an`
-        );
-      }
-    }
-
-    if (d.rcPlafond) lines.push(`RC plafond : ${d.rcPlafond}`);
-    if (d.lci) lines.push(`LCI : ${d.lci}`);
-
-    if ((d.pointsForts?.length ?? 0) > 0) {
-      lines.push("", "Points forts :", ...(d.pointsForts ?? []).map((p) => `  ✓ ${p}`));
-    }
-
-    if (allDevis.length > 1) {
-      lines.push(
-        "",
-        "── Comparatif des devis reçus ──",
-        ""
-      );
-      for (const dv of allDevis) {
-        lines.push(
-          `${dv.recommande ? "★ " : "  "}${dv.assureur} : ${formatPrime(dv.primeTTC)}${dv.recommande ? " (recommandé)" : ""}`
-        );
-      }
-    }
-
-    lines.push(
-      "",
-      "Nous restons disponibles pour tout renseignement complémentaire.",
-      "",
-      "Cordialement,",
-      "L'équipe Matera"
-    );
-
-    return lines.join("\n");
-  }
-
+  const [isPending, startTransition] = useTransition();
+  const [isChanging, setIsChanging] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [recommendation, setRecommendation] = useState<string | null>(null);
   const [to, setTo] = useState(copro.contactCsEmail ?? "");
-  const [subject, setSubject] = useState(
-    `Recommandation assurance MRI — ${copro.nom}`
-  );
-  const [body, setBody] = useState(() => buildBody());
+  const [subject, setSubject] = useState("Matera - Renégociation de votre contrat MRI");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
 
+  const recommande = allDevis.find((d) => d.recommande) ?? null;
+  const primeActuelle = contratActuelData.primeTTC ?? copro.primeActuelle;
+  const hasAutoGenRef = useRef<string | null>(null);
+
+  async function generateEmail(d: DevisRecu) {
+    setIsGenerating(true);
+    setRecommendation(null);
+    try {
+      const res = await fetch("/api/devis/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          copro: {
+            nom: copro.nom,
+            adresse: copro.adresse,
+            contactCsNom: copro.contactCsNom,
+            primeActuelle: copro.primeActuelle,
+            gestionnaireEmail: copro.gestionnaireEmail,
+          },
+          contratActuel: contratActuelData,
+          devis: allDevis.map((dv) => ({
+            assureur: dv.assureur,
+            primeTTC: dv.primeTTC,
+            data: parseData(dv.data),
+          })),
+          recommandeAssureur: d.assureur,
+        }),
+      });
+      const json = await res.json() as { success?: boolean; recommendation?: string; error?: string };
+      if (json.success && json.recommendation) {
+        setRecommendation(json.recommendation);
+      } else {
+        toast.error(`Erreur : ${json.error ?? "inconnu"}`);
+      }
+    } catch { toast.error("Erreur réseau"); }
+    setIsGenerating(false);
+  }
+
+  // Auto-génération au montage si un devis est déjà recommandé
+  useEffect(() => {
+    if (recommande && !isGenerating && hasAutoGenRef.current !== recommande.id) {
+      hasAutoGenRef.current = recommande.id;
+      generateEmail(recommande);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleSelectDevis(d: DevisRecu) {
+    hasAutoGenRef.current = d.id;
+    setIsChanging(false);
+    toast.success(`${d.assureur} sélectionné`);
+    startTransition(async () => { await setRecommandeDevis(d.id, pipelineId); });
+    generateEmail(d);
+  }
+
   async function handleSend() {
-    if (!to.trim()) { toast.error("L'adresse email du CS est requise"); return; }
+    if (!to.trim() || !recommendation?.trim()) return;
     setSending(true);
     try {
       const formData = new FormData();
       formData.append("to", to);
       formData.append("subject", subject);
-      formData.append("body", body);
+      formData.append("body", recommendation);
       const res = await fetch("/api/front/draft", { method: "POST", body: formData });
       const json = await res.json() as { success?: boolean; fallback?: boolean; mailtoUrl?: string; error?: string };
       if (json.success) {
         if (json.fallback && json.mailtoUrl) window.open(json.mailtoUrl, "_blank");
         setSent(true);
-        toast.success("Email de recommandation envoyé au CS !");
-        // Log the event
-        await fetch(`/api/pipeline/${pipelineId}/log-recommandation`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ assureur: recommande.assureur, to }),
-        }).catch(() => {});
+        toast.success("Email envoyé au CS !");
       } else {
         toast.error(`Erreur : ${json.error ?? "inconnu"}`);
       }
-    } catch {
-      toast.error("Erreur réseau");
-    }
+    } catch { toast.error("Erreur réseau"); }
     setSending(false);
   }
 
-  return (
-    <div className="rounded-xl border-2 border-[#4E49FC] p-4 space-y-4" style={{ background: "#FAFEFF" }}>
-      <div className="flex items-center gap-2">
-        <Star className="h-4 w-4 fill-[#4E49FC]" style={{ color: "#4E49FC" }} />
-        <p className="text-sm font-semibold" style={{ color: "#4E49FC" }}>
-          Envoyer la recommandation au Conseil Syndical
-        </p>
-      </div>
-      <p className="text-xs" style={{ color: "#656576" }}>
-        <strong style={{ color: "#26262C" }}>{recommande.assureur}</strong> est recommandé à{" "}
-        <strong style={{ color: "#26262C" }}>{formatPrime(recommande.primeTTC)}</strong>
-        {econ != null && econ > 0 && (
-          <> — économie de <strong style={{ color: "#13762C" }}>{econ.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €/an</strong></>
-        )}
-      </p>
-
+  // Pas encore de sélection ou en train de changer
+  if ((!recommande || isChanging) && !isGenerating) {
+    return (
       <div className="space-y-3">
+        {isChanging && (
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold" style={{ color: "#26262C" }}>Choisir un autre devis</p>
+            <button onClick={() => setIsChanging(false)} className="text-sm" style={{ color: "#A2A1AF" }}>Annuler</button>
+          </div>
+        )}
+        {!isChanging && (
+          <p className="text-sm" style={{ color: "#656576" }}>
+            Sélectionnez le devis à recommander au Conseil Syndical — l&apos;email sera généré automatiquement.
+          </p>
+        )}
+        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${allDevis.length}, 1fr)` }}>
+          {allDevis.map((d) => {
+            const econ = primeActuelle != null ? primeActuelle - d.primeTTC : null;
+            return (
+              <div key={d.id} className="rounded-2xl border-2 p-4 space-y-3" style={{ borderColor: "#E8E8EC", background: "#FAFAFA" }}>
+                <div>
+                  <p className="text-sm font-bold" style={{ color: "#26262C" }}>{d.assureur}</p>
+                  <p className="text-xl font-bold mt-1">{formatPrime(d.primeTTC)}</p>
+                  {econ != null && (
+                    <p className="text-sm font-semibold mt-0.5" style={{ color: econ > 0 ? "#13762C" : "#CA1E12" }}>
+                      {econ > 0 ? `Économie ${econ.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €/an` : `+${Math.abs(econ).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €/an`}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  className="w-full font-medium flex items-center gap-2"
+                  style={{ backgroundColor: "#4E49FC", color: "#ffffff" }}
+                  disabled={isPending}
+                  onClick={() => handleSelectDevis(d)}
+                >
+                  <Star className="h-4 w-4" />
+                  Recommander ce devis
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // Génération en cours
+  if (isGenerating) {
+    const currentName = recommande?.assureur ?? "ce devis";
+    return (
+      <div className="rounded-2xl border-2 border-[#4E49FC] p-5 space-y-3" style={{ background: "#FAFEFF" }}>
+        <div className="flex items-center gap-2">
+          <Star className="h-4 w-4 fill-[#13762C]" style={{ color: "#13762C" }} />
+          <p className="text-sm font-semibold" style={{ color: "#26262C" }}>{currentName} sélectionné</p>
+        </div>
+        <div className="flex items-center gap-3 py-3">
+          <Loader2 className="h-5 w-5 animate-spin flex-shrink-0" style={{ color: "#4E49FC" }} />
+          <p className="text-sm" style={{ color: "#656576" }}>
+            Claude rédige l&apos;email de recommandation…
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Email prêt
+  return (
+    <div className="rounded-2xl border-2 border-[#4E49FC] p-5 space-y-4" style={{ background: "#FAFEFF" }}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Star className="h-4 w-4 fill-[#13762C]" style={{ color: "#13762C" }} />
+          <p className="text-base font-semibold" style={{ color: "#26262C" }}>
+            Recommandation : <span style={{ color: "#4E49FC" }}>{recommande?.assureur}</span>
+          </p>
+        </div>
+        <button
+          onClick={() => { setIsChanging(true); setRecommendation(null); setSent(false); }}
+          className="text-xs font-medium"
+          style={{ color: "#A2A1AF" }}
+        >
+          Changer
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium" style={{ color: "#656576" }}>Corps du mail — modifiable avant envoi</p>
+        <button
+          onClick={() => { if (recommande) { hasAutoGenRef.current = null; generateEmail(recommande); } }}
+          className="text-xs font-medium flex items-center gap-1"
+          style={{ color: "#8784FD" }}
+        >
+          <RefreshCw className="h-3 w-3" />
+          Regénérer
+        </button>
+      </div>
+
+      <textarea
+        value={recommendation ?? ""}
+        onChange={(e) => setRecommendation(e.target.value)}
+        rows={14}
+        className="w-full rounded-xl border px-4 py-3 text-sm leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-[#4E49FC] focus:border-transparent font-[inherit]"
+        style={{ background: "#FAFAFA", borderColor: "#E8E8EC", color: "#26262C" }}
+      />
+
+      <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
-          <Label className="text-xs font-medium" style={{ color: "#656576" }}>Destinataire</Label>
-          <Input
-            type="email"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            placeholder="email@cs.fr"
-          />
+          <Label className="text-xs font-medium" style={{ color: "#656576" }}>Destinataire (CS)</Label>
+          <Input type="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="email@cs.fr" />
         </div>
         <div className="space-y-1">
           <Label className="text-xs font-medium" style={{ color: "#656576" }}>Objet</Label>
-          <Input
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs font-medium" style={{ color: "#656576" }}>Corps du mail</Label>
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            rows={16}
-            className="w-full rounded-xl border px-3 py-2 text-sm leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-[#4E49FC] focus:border-transparent font-[inherit]"
-            style={{ background: "#FAFAFA", borderColor: "#E8E8EC", color: "#26262C" }}
-          />
+          <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
         </div>
       </div>
 
       {sent ? (
-        <div
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm"
-          style={{ backgroundColor: "#EFFBF2", color: "#13762C" }}
-        >
-          <CheckCircle2 className="h-4 w-4" />
-          Email de recommandation envoyé au CS
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl font-medium" style={{ backgroundColor: "#EFFBF2", color: "#13762C" }}>
+          <CheckCircle2 className="h-5 w-5" />
+          Email envoyé au CS
         </div>
       ) : (
         <Button
           onClick={handleSend}
-          disabled={sending || !to.trim()}
+          disabled={sending || !to.trim() || !recommendation?.trim()}
           className="w-full font-medium flex items-center gap-2"
           style={{ backgroundColor: "#4E49FC", color: "#ffffff" }}
         >
-          {sending ? (
-            <><Loader2 className="h-4 w-4 animate-spin" />Envoi en cours…</>
-          ) : (
-            <><Mail className="h-4 w-4" />Envoyer au CS</>
-          )}
+          {sending ? <><Loader2 className="h-4 w-4 animate-spin" />Envoi en cours…</> : <><Mail className="h-4 w-4" />Envoyer au CS</>}
         </Button>
       )}
     </div>
@@ -1033,86 +733,252 @@ function RecommandationEmail({
 export function DevisRecusAction({
   pipelineId,
   devisRecus,
+  contratActuelData,
   copro,
 }: DevisRecusActionProps) {
-  // We use a key trick to force re-renders after saves by incrementing
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [localDevis, setLocalDevis] = useState<DevisRecu[]>(devisRecus ?? []);
+  type Phase = "upload" | "comparing" | "results";
 
-  // Sync with server props (after revalidatePath)
-  // Since it's a client component, we rely on server revalidation
-  // but localDevis will be in-sync after the parent re-renders
+  const hasExistingData = Boolean(contratActuelData && (devisRecus ?? []).length > 0);
+  const [phase, setPhase] = useState<Phase>(hasExistingData ? "results" : "upload");
 
-  // Update local when server props change (parent revalidation)
-  // This is a simplified approach — proper pattern with useEffect
-  const recommande = localDevis.find((d) => d.recommande) ?? null;
+  // Upload phase files
+  const [contratFile, setContratFile] = useState<File | null>(null);
+  const [devis1File, setDevis1File] = useState<File | null>(null);
+  const [devis2File, setDevis2File] = useState<File | null>(null);
 
-  // Build comparison columns
-  const cols: ColDef[] = [];
+  // Freshly extracted data (after comparison, before DB sync)
+  const [freshContrat, setFreshContrat] = useState<ExtractedData | null>(null);
+  const [freshDevis, setFreshDevis] = useState<ExtractedData[]>([]);
 
-  // Column 0: current contract
-  cols.push({
-    label: copro.assureurActuel ?? "Contrat actuel",
-    prime: copro.primeActuelle,
-    data: {},
-    isCurrent: true,
-  });
+  // Display data: fresh extraction takes priority, then DB props
+  const displayContrat = freshContrat ?? parseData(contratActuelData);
+  const displayDevisList = freshDevis.length > 0
+    ? freshDevis.map((d, i) => ({
+        assureur: d.assureur ?? `Devis ${i + 1}`,
+        primeTTC: d.primeTTC ?? 0,
+        data: d,
+        recommande: false,
+      }))
+    : (devisRecus ?? []).map((d) => ({
+        assureur: d.assureur,
+        primeTTC: d.primeTTC,
+        data: parseData(d.data),
+        recommande: d.recommande,
+      }));
 
-  // Columns 1+: received devis
-  for (const d of localDevis) {
-    cols.push({
+  const contratPrime = displayContrat.primeTTC ?? copro.primeActuelle;
+
+  const cols: ColDef[] = [
+    {
+      label: displayContrat.assureur ?? copro.assureurActuel ?? "Contrat actuel",
+      prime: contratPrime,
+      data: displayContrat,
+      isCurrent: true,
+    },
+    ...displayDevisList.map((d) => ({
       label: d.assureur,
       prime: d.primeTTC,
-      data: parseData(d.data),
+      data: d.data,
       isRecommande: d.recommande,
-    });
+    })),
+  ];
+
+  async function handleCompare() {
+    if (!contratFile || !devis1File) return;
+    setPhase("comparing");
+    try {
+      const filesToExtract = [contratFile, devis1File, devis2File].filter(Boolean) as File[];
+      const results = await Promise.all(filesToExtract.map(extractPdf));
+      const [contratData, ...devisData] = results;
+
+      // Show results immediately from memory
+      setFreshContrat(contratData);
+      setFreshDevis(devisData);
+      setPhase("results");
+
+      // Save to DB in background
+      await saveContratActuelData(pipelineId, JSON.stringify(contratData));
+      for (const d of (devisRecus ?? [])) {
+        await deleteDevisRecu(d.id, pipelineId);
+      }
+      for (let i = 0; i < devisData.length; i++) {
+        const d = devisData[i];
+        await addDevisRecu(pipelineId, {
+          assureur: d.assureur ?? `Devis ${i + 1}`,
+          primeTTC: d.primeTTC ?? 0,
+          data: JSON.stringify(d),
+          pdfName: [devis1File, devis2File].filter(Boolean)[i]?.name ?? null,
+        });
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur lors de l'analyse");
+      setPhase("upload");
+    }
   }
 
-  return (
-    <div className="space-y-6" key={refreshKey}>
-      {/* Section A: Upload */}
-      <UploadSection
-        pipelineId={pipelineId}
-        onSaved={() => setRefreshKey((k) => k + 1)}
-      />
+  const numFiles = [contratFile, devis1File, devis2File].filter(Boolean).length;
+  const canCompare = Boolean(contratFile && devis1File);
 
-      {/* Section B: List of received devis */}
-      {localDevis.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>
-            Devis reçus ({localDevis.length})
+  // ── Phase: Upload ──────────────────────────────────────────────────────────
+
+  if (phase === "upload") {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h3 className="text-base font-semibold mb-1" style={{ color: "#26262C" }}>
+            Comparez les offres d&apos;assurance
+          </h3>
+          <p className="text-sm" style={{ color: "#A2A1AF" }}>
+            Uploadez le contrat actuel et les devis reçus — Claude analyse tout en parallèle.
           </p>
-          {localDevis.map((devis) => (
-            <DevisCard
-              key={devis.id}
-              devis={devis}
-              pipelineId={pipelineId}
-              onDelete={() => setRefreshKey((k) => k + 1)}
-              onRecommande={() => setRefreshKey((k) => k + 1)}
-            />
+        </div>
+
+        <div className="grid grid-cols-3 gap-4">
+          <UploadZone
+            label="Contrat actuel"
+            file={contratFile}
+            onFile={setContratFile}
+          />
+          <UploadZone
+            label="Devis 1"
+            file={devis1File}
+            onFile={setDevis1File}
+          />
+          <UploadZone
+            label="Devis 2"
+            subtitle="Optionnel"
+            file={devis2File}
+            onFile={setDevis2File}
+          />
+        </div>
+
+        <Button
+          onClick={handleCompare}
+          disabled={!canCompare}
+          className="w-full font-semibold text-base flex items-center gap-2 py-6"
+          style={{
+            backgroundColor: canCompare ? "#4E49FC" : "#E8E8EC",
+            color: canCompare ? "#ffffff" : "#A2A1AF",
+          }}
+        >
+          <Sparkles className="h-5 w-5" />
+          Lancer la comparaison
+          {numFiles > 0 && ` · ${numFiles} document${numFiles > 1 ? "s" : ""}`}
+        </Button>
+
+        {hasExistingData && (
+          <button
+            onClick={() => setPhase("results")}
+            className="w-full text-center text-sm font-medium"
+            style={{ color: "#8784FD" }}
+          >
+            Voir la dernière analyse →
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // ── Phase: Comparing ───────────────────────────────────────────────────────
+
+  if (phase === "comparing") {
+    return (
+      <div className="py-16 flex flex-col items-center gap-6">
+        <div className="relative">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "#F0EFFF" }}>
+            <Loader2 className="h-8 w-8 animate-spin" style={{ color: "#4E49FC" }} />
+          </div>
+        </div>
+        <div className="text-center space-y-2">
+          <p className="text-lg font-semibold" style={{ color: "#26262C" }}>Analyse en cours…</p>
+          <p className="text-sm" style={{ color: "#656576" }}>
+            Claude lit {numFiles} document{numFiles > 1 ? "s" : ""} en parallèle et extrait les données clés
+          </p>
+        </div>
+        <div className="flex gap-6">
+          {[contratFile, devis1File, devis2File].filter(Boolean).map((f, i) => (
+            <div key={i} className="flex items-center gap-1.5 text-xs" style={{ color: "#A2A1AF" }}>
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {f!.name.length > 20 ? f!.name.slice(0, 20) + "…" : f!.name}
+            </div>
           ))}
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {/* Section C: Comparison table */}
-      {localDevis.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>
-            Tableau comparatif
+  // ── Phase: Results ─────────────────────────────────────────────────────────
+
+  const dbDevis = devisRecus ?? [];
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-base font-semibold" style={{ color: "#26262C" }}>Résultats de la comparaison</h3>
+          <p className="text-sm mt-0.5" style={{ color: "#A2A1AF" }}>
+            {displayDevisList.length} devis comparé{displayDevisList.length > 1 ? "s" : ""} au contrat actuel
           </p>
-          <ComparisonTable cols={cols} />
         </div>
-      )}
+        <button
+          onClick={() => {
+            setFreshContrat(null);
+            setFreshDevis([]);
+            setContratFile(null);
+            setDevis1File(null);
+            setDevis2File(null);
+            setPhase("upload");
+          }}
+          className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors hover:bg-[#F7F7F8]"
+          style={{ borderColor: "#E8E8EC", color: "#656576" }}
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Nouvelle analyse
+        </button>
+      </div>
 
-      {/* Section D: Recommendation email */}
-      {recommande && (
-        <RecommandationEmail
-          pipelineId={pipelineId}
-          recommande={recommande}
-          copro={copro}
-          allDevis={localDevis}
+      {/* Summary cards */}
+      <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${1 + displayDevisList.length}, 1fr)` }}>
+        <SummaryCard
+          label="Contrat actuel"
+          data={displayContrat}
+          isCurrent
         />
-      )}
+        {displayDevisList.map((d, i) => (
+          <SummaryCard
+            key={i}
+            label={`Devis ${i + 1}`}
+            data={d.data}
+            isRecommande={d.recommande}
+            primeActuelle={contratPrime}
+          />
+        ))}
+      </div>
+
+      {/* Comparison table */}
+      <div className="space-y-3">
+        <p className="text-sm font-semibold" style={{ color: "#26262C" }}>Comparatif détaillé</p>
+        <ComparisonTable cols={cols} />
+      </div>
+
+      {/* Reco + Email CS fusionnés */}
+      <div className="space-y-3">
+        <p className="text-sm font-semibold" style={{ color: "#26262C" }}>Recommandation et email au CS</p>
+        {dbDevis.length > 0 ? (
+          <RecoAndEmailSection
+            pipelineId={pipelineId}
+            copro={copro}
+            contratActuelData={displayContrat}
+            allDevis={dbDevis}
+          />
+        ) : (
+          <div className="flex items-center gap-2 text-sm rounded-xl px-4 py-3" style={{ background: "#F0EFFF", color: "#8784FD" }}>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Sauvegarde en cours…
+          </div>
+        )}
+      </div>
     </div>
   );
 }

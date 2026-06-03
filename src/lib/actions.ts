@@ -492,6 +492,16 @@ export async function deleteDevisRecu(id: string, pipelineId: string) {
   return { success: true };
 }
 
+export async function saveContratActuelData(pipelineId: string, data: string) {
+  await getSession();
+  await prisma.insurancePipeline.update({
+    where: { id: pipelineId },
+    data: { contratActuelData: data },
+  });
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
 export async function setRecommandeDevis(id: string, pipelineId: string) {
   await getSession();
 

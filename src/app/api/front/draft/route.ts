@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
   }
 
   const htmlBody = body
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .split(/\n\n+/)
     .map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`)
     .join("");

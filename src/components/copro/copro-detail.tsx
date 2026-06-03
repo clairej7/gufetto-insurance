@@ -88,6 +88,7 @@ type Pipeline = {
     createdAt: Date;
     metadata?: unknown;
   }>;
+  contratActuelData: string | null;
   devisRecus: Array<{
     id: string;
     assureur: string;
@@ -481,10 +482,58 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
         )}
       </div>
 
+      {/* Comparateur pleine largeur — étape devis_recus uniquement */}
+      {pipeline.statut === "devis_recus" && (
+        <div className="space-y-4 mb-6">
+          <Card className="p-6">
+            <DevisRecusAction
+              pipelineId={pipeline.id}
+              devisRecus={pipeline.devisRecus}
+              contratActuelData={pipeline.contratActuelData}
+              copro={{
+                nom: pipeline.copro.nom,
+                adresse: pipeline.copro.adresse,
+                assureurActuel: pipeline.copro.assureurActuel,
+                primeActuelle: pipeline.copro.primeActuelle,
+                courtierActuel: pipeline.copro.courtierActuel,
+                contactCsEmail: pipeline.copro.contactCsEmail,
+                contactCsNom: pipeline.copro.contactCsNom,
+                gestionnaireEmail: pipeline.copro.gestionnaireEmail,
+              }}
+            />
+          </Card>
+          <Card className="p-4 space-y-3">
+            {nextStep && (
+              <Button
+                onClick={() => allRequiredDone ? handleAdvance(false) : setShowAdvanceDialog(true)}
+                disabled={isPending}
+                className="w-full"
+                size="lg"
+              >
+                Passer à : {nextStep.label}
+                <ArrowRight className="h-4 w-4 ml-1" />
+              </Button>
+            )}
+            {prevStep && (
+              <Button
+                variant="outline"
+                onClick={() => startTransition(async () => { await goBackStatut(pipeline.id); toast.success(`Retour à : ${prevStep.label}`); })}
+                disabled={isPending}
+                className="w-full"
+                style={{ color: "#656576" }}
+              >
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Revenir à : {prevStep.label}
+              </Button>
+            )}
+          </Card>
+        </div>
+      )}
+
       {/* 3-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Col 1: infos */}
+        {/* Col 1: Contrat actuel (toujours visible) + Infos copro (masqué pour devis_recus qui a sa propre col) */}
         <div className="space-y-4">
           <Card className="p-4">
             <div className="flex items-center justify-between mb-3">
@@ -506,26 +555,28 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
             </dl>
           </Card>
 
-          <Card className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C" }}>
-                <Building2 className="h-4 w-4" />
-                Infos copropriété
-              </h3>
-              <button onClick={() => setShowCaracDialog(true)} className="transition-colors" style={{ color: "#A2A1AF" }}>
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <dl className="space-y-2">
-              <InfoRow label="Surface développée" value={pipeline.copro.surfaceDeveloppee ? `${pipeline.copro.surfaceDeveloppee} m²` : null} />
-              <InfoRow label="Période de construction" value={PERIODE_LABELS[pipeline.copro.periodeConstruction ?? ""] ?? null} />
-              <InfoRow label="Nature de l'occupation" value={OCCUPATION_LABELS[pipeline.copro.natureOccupation ?? ""] ?? null} />
-              <InfoRow label="Activités aggravantes" value={pipeline.copro.activitesAggravantes} />
-              <InfoRow label="Caractéristiques particulières" value={pipeline.copro.caracteristiquesParticulieres} />
-              <InfoRow label="Logements inoccupés" value={INOCCUPEE_LABELS[pipeline.copro.proportionInoccupee ?? ""] ?? null} />
-              <InfoRow label="Représentant légal" value={pipeline.copro.representantLegal} />
-            </dl>
-          </Card>
+          {pipeline.statut !== "devis_recus" && (
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C" }}>
+                  <Building2 className="h-4 w-4" />
+                  Infos copropriété
+                </h3>
+                <button onClick={() => setShowCaracDialog(true)} className="transition-colors" style={{ color: "#A2A1AF" }}>
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <dl className="space-y-2">
+                <InfoRow label="Surface développée" value={pipeline.copro.surfaceDeveloppee ? `${pipeline.copro.surfaceDeveloppee} m²` : null} />
+                <InfoRow label="Période de construction" value={PERIODE_LABELS[pipeline.copro.periodeConstruction ?? ""] ?? null} />
+                <InfoRow label="Nature de l'occupation" value={OCCUPATION_LABELS[pipeline.copro.natureOccupation ?? ""] ?? null} />
+                <InfoRow label="Activités aggravantes" value={pipeline.copro.activitesAggravantes} />
+                <InfoRow label="Caractéristiques particulières" value={pipeline.copro.caracteristiquesParticulieres} />
+                <InfoRow label="Logements inoccupés" value={INOCCUPEE_LABELS[pipeline.copro.proportionInoccupee ?? ""] ?? null} />
+                <InfoRow label="Représentant légal" value={pipeline.copro.representantLegal} />
+              </dl>
+            </Card>
+          )}
         </div>
 
         {/* Col 2: action centrale */}
@@ -571,6 +622,30 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
             </Card>
           ) : (
             <>
+              {/* Infos copropriété (pour devis_recus, col 1 ne la montre pas) */}
+              {pipeline.statut === "devis_recus" && (
+                <Card className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C" }}>
+                      <Building2 className="h-4 w-4" />
+                      Infos copropriété
+                    </h3>
+                    <button onClick={() => setShowCaracDialog(true)} className="transition-colors" style={{ color: "#A2A1AF" }}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <dl className="space-y-2">
+                    <InfoRow label="Surface développée" value={pipeline.copro.surfaceDeveloppee ? `${pipeline.copro.surfaceDeveloppee} m²` : null} />
+                    <InfoRow label="Période de construction" value={PERIODE_LABELS[pipeline.copro.periodeConstruction ?? ""] ?? null} />
+                    <InfoRow label="Nature de l'occupation" value={OCCUPATION_LABELS[pipeline.copro.natureOccupation ?? ""] ?? null} />
+                    <InfoRow label="Activités aggravantes" value={pipeline.copro.activitesAggravantes} />
+                    <InfoRow label="Caractéristiques particulières" value={pipeline.copro.caracteristiquesParticulieres} />
+                    <InfoRow label="Logements inoccupés" value={INOCCUPEE_LABELS[pipeline.copro.proportionInoccupee ?? ""] ?? null} />
+                    <InfoRow label="Représentant légal" value={pipeline.copro.representantLegal} />
+                  </dl>
+                </Card>
+              )}
+
               {/* Action spécifique à l'étape */}
               {pipeline.statut === "rs_en_cours" && (
                 <Card className="p-5">
@@ -624,26 +699,6 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                 </Card>
               )}
 
-              {pipeline.statut === "devis_recus" && (
-                <Card className="p-5">
-                  <div className="text-xs font-semibold uppercase tracking-wide mb-4" style={{ color: "#A2A1AF" }}>
-                    Comparateur de devis reçus
-                  </div>
-                  <DevisRecusAction
-                    pipelineId={pipeline.id}
-                    devisRecus={pipeline.devisRecus}
-                    copro={{
-                      nom: pipeline.copro.nom,
-                      adresse: pipeline.copro.adresse,
-                      assureurActuel: pipeline.copro.assureurActuel,
-                      primeActuelle: pipeline.copro.primeActuelle,
-                      courtierActuel: pipeline.copro.courtierActuel,
-                      contactCsEmail: pipeline.copro.contactCsEmail,
-                      contactCsNom: pipeline.copro.contactCsNom,
-                    }}
-                  />
-                </Card>
-              )}
 
               {/* Prochaine action mise en avant (autres étapes) */}
               {pipeline.statut !== "rs_en_cours" && pipeline.statut !== "devis_demandes" && pipeline.statut !== "devis_recus" && <Card className="p-5">

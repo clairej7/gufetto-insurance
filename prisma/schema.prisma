@@ -122,7 +122,8 @@ model InsurancePipeline {
   copro          Copro          @relation(fields: [coproId], references: [id], onDelete: Cascade)
   statut         PipelineStatut @default(identifie)
   anneeEcheance  Int
-  notes          String?        @db.Text
+  notes             String?        @db.Text
+  contratActuelData String?        @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
