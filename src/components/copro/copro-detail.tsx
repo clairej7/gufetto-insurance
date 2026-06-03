@@ -32,6 +32,7 @@ import {
   Trash2,
   X,
   Check,
+  RotateCcw,
 } from "lucide-react";
 import { PIPELINE_STEPS, getDaysUntilEcheance, getNextStatut, isTerminalStatut } from "@/lib/pipeline";
 import { RSRequestAction } from "@/components/copro/steps/rs-request-action";
@@ -264,6 +265,81 @@ function NoteItem({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function RecoSentBlock({
+  to,
+  subject,
+  body,
+  sentAt,
+  pipelineId,
+}: {
+  to: string;
+  subject: string;
+  body: string;
+  sentAt: Date;
+  pipelineId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  const dateLabel = new Date(sentAt).toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-sm font-medium" style={{ color: "#13762C" }}>
+        <CheckCircle2 className="h-4 w-4" />
+        Envoyé à <span style={{ color: "#26262C" }}>{to}</span>
+        <span className="font-normal" style={{ color: "#A2A1AF" }}>· {dateLabel}</span>
+      </div>
+
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 text-xs font-medium"
+        style={{ color: "#8784FD" }}
+      >
+        {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        {open ? "Masquer l'email" : "Voir l'email envoyé"}
+      </button>
+
+      {open && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium" style={{ color: "#A2A1AF" }}>Objet : {subject}</p>
+          <div
+            className="rounded-xl border p-3 text-xs leading-relaxed whitespace-pre-wrap"
+            style={{ borderColor: "#E8E8EC", color: "#656576", background: "#FAFAFA" }}
+          >
+            {body}
+          </div>
+        </div>
+      )}
+
+      <div className="pt-1 border-t" style={{ borderColor: "#E8E8EC" }}>
+        <p className="text-xs mb-2" style={{ color: "#A2A1AF" }}>
+          Le CS souhaite comparer d&apos;autres devis ?
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => startTransition(async () => {
+            await goBackStatut(pipelineId);
+            toast.success("Retour à : Devis partagés");
+          })}
+          disabled={isPending}
+          className="w-full flex items-center gap-2 text-sm"
+          style={{ color: "#656576" }}
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Recommencer la comparaison
+        </Button>
+      </div>
     </div>
   );
 }
@@ -700,8 +776,33 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
               )}
 
 
+              {pipeline.statut === "envoye_cs" && (() => {
+                const recoEvents = pipeline.events.filter(e => {
+                  const m = e.metadata as Record<string, unknown> | null;
+                  return m?.recoType === "reco_sent";
+                });
+                const latest = recoEvents[0];
+                const meta = latest?.metadata as { to?: string; subject?: string; body?: string } | null;
+                return (
+                  <Card className="p-5 space-y-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>
+                      Recommandation envoyée au CS
+                    </div>
+                    {latest && meta && (
+                      <RecoSentBlock
+                        to={meta.to ?? ""}
+                        subject={meta.subject ?? ""}
+                        body={meta.body ?? ""}
+                        sentAt={latest.createdAt}
+                        pipelineId={pipeline.id}
+                      />
+                    )}
+                  </Card>
+                );
+              })()}
+
               {/* Prochaine action mise en avant (autres étapes) */}
-              {pipeline.statut !== "rs_en_cours" && pipeline.statut !== "devis_demandes" && pipeline.statut !== "devis_recus" && <Card className="p-5">
+              {pipeline.statut !== "rs_en_cours" && pipeline.statut !== "devis_demandes" && pipeline.statut !== "devis_recus" && pipeline.statut !== "envoye_cs" && <Card className="p-5">
                 <div className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: "#A2A1AF" }}>
                   Prochaine action
                 </div>

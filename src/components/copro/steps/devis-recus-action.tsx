@@ -22,6 +22,8 @@ import {
   deleteDevisRecu,
   setRecommandeDevis,
   saveContratActuelData,
+  advanceStatut,
+  logRecoSent,
 } from "@/lib/actions";
 import { toast } from "sonner";
 
@@ -587,6 +589,8 @@ function RecoAndEmailSection({
         if (json.fallback && json.mailtoUrl) window.open(json.mailtoUrl, "_blank");
         setSent(true);
         toast.success("Email envoyé au CS !");
+        await logRecoSent(pipelineId, to, subject, recommendation);
+        await advanceStatut(pipelineId, true);
       } else {
         toast.error(`Erreur : ${json.error ?? "inconnu"}`);
       }

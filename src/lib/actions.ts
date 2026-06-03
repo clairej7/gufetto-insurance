@@ -401,6 +401,26 @@ export async function logDevisSent(
   return { success: true };
 }
 
+export async function logRecoSent(
+  pipelineId: string,
+  toEmail: string,
+  subject: string,
+  body: string
+) {
+  const session = await getSession();
+  await prisma.pipelineEvent.create({
+    data: {
+      pipelineId,
+      type: "action_manuelle",
+      description: `Email de recommandation envoyé au CS — ${toEmail}`,
+      metadata: { recoType: "reco_sent", to: toEmail, subject, body },
+      createdBy: session.user.email!,
+    },
+  });
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
 export async function deleteNote(pipelineId: string, eventId: string) {
   await getSession();
   await prisma.pipelineEvent.delete({ where: { id: eventId } });
