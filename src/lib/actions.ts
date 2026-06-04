@@ -551,3 +551,13 @@ export async function getPdfSignedUrl(storagePath: string): Promise<string | nul
   if (error || !data) return null;
   return data.signedUrl;
 }
+
+export async function saveSignedPdfUrl(pipelineId: string, signedPdfUrl: string) {
+  await getSession();
+  await prisma.insurancePipeline.update({
+    where: { id: pipelineId },
+    data: { signedPdfUrl },
+  });
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}

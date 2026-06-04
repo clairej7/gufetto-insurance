@@ -124,6 +124,7 @@ model InsurancePipeline {
   anneeEcheance  Int
   notes             String?        @db.Text
   contratActuelData String?        @db.Text
+  signedPdfUrl      String?        @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

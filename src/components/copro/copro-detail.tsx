@@ -33,12 +33,13 @@ import {
   X,
   Check,
   RotateCcw,
+  Loader2,
 } from "lucide-react";
 import { PIPELINE_STEPS, getDaysUntilEcheance, getNextStatut, isTerminalStatut } from "@/lib/pipeline";
 import { RSRequestAction } from "@/components/copro/steps/rs-request-action";
 import { DevisRequestAction } from "@/components/copro/steps/devis-request-action";
 import { DevisRecusAction } from "@/components/copro/steps/devis-recus-action";
-import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl } from "@/lib/actions";
+import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl, saveSignedPdfUrl } from "@/lib/actions";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -416,6 +417,8 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
   }, [dealPerduOpen]);
   const [showSignerDialog, setShowSignerDialog] = useState(false);
   const [signatureFile, setSignatureFile] = useState<File | null | undefined>(undefined);
+  const [isSigning, setIsSigning] = useState(false);
+  const [signedPdfPath, setSignedPdfPath] = useState<string | null>(null);
   const [showContratDialog, setShowContratDialog] = useState(false);
   const [contratForm, setContratForm] = useState({
     assureurActuel: pipeline.copro.assureurActuel ?? "",
@@ -1325,7 +1328,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
             {pipeline.devisRecus.find(d => d.recommande) && (() => {
               const devis = pipeline.devisRecus.find(d => d.recommande)!;
               return (
-                <div className="rounded-lg border p-3 space-y-2" style={{ borderColor: "#BBF1C8", backgroundColor: "#EFFBF2" }}>
+                <div className="rounded-lg border p-3 space-y-3" style={{ borderColor: "#BBF1C8", backgroundColor: "#EFFBF2" }}>
                   <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>Devis sélectionné</p>
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -1350,6 +1353,73 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                       </button>
                     )}
                   </div>
+
+                  {/* Bouton tampon Matera */}
+                  {devis.pdfUrl && (
+                    <div className="pt-2 border-t" style={{ borderColor: "#BBF1C8" }}>
+                      {signedPdfPath ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-sm font-medium" style={{ color: "#13762C" }}>
+                            <CheckCircle2 className="h-4 w-4" />
+                            Contrat signé avec le tampon Matera
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={async () => {
+                                const url = await getPdfSignedUrl(signedPdfPath);
+                                if (url) window.open(url, "_blank");
+                              }}
+                              className="text-xs underline"
+                              style={{ color: "#13762C" }}
+                            >
+                              Voir le PDF signé
+                            </button>
+                            <button
+                              onClick={() => setSignedPdfPath(null)}
+                              className="text-xs flex items-center gap-1"
+                              style={{ color: "#A2A1AF" }}
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              Regénérer
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          disabled={isSigning}
+                          style={{ borderColor: "#BBF1C8", color: "#13762C" }}
+                          onClick={async () => {
+                            setIsSigning(true);
+                            try {
+                              const res = await fetch("/api/storage/sign-pdf", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ pdfPath: devis.pdfUrl, pipelineId: pipeline.id }),
+                              });
+                              const json = await res.json() as { success?: boolean; signedPath?: string; error?: string };
+                              if (json.success && json.signedPath) {
+                                setSignedPdfPath(json.signedPath);
+                                await saveSignedPdfUrl(pipeline.id, json.signedPath);
+                                toast.success("Tampon appliqué !");
+                              } else {
+                                toast.error(json.error ?? "Erreur lors de la signature");
+                              }
+                            } catch { toast.error("Erreur réseau"); }
+                            setIsSigning(false);
+                          }}
+                        >
+                          {isSigning ? (
+                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Application du tampon…</>
+                          ) : (
+                            <>🖊️ Signer avec le tampon Matera</>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -1385,13 +1455,14 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
             </div>
           </div>
           <div className="flex gap-2 justify-end pt-2">
-            <Button variant="outline" onClick={() => { setShowSignerDialog(false); setSignatureFile(undefined); }}>Annuler</Button>
+            <Button variant="outline" onClick={() => { setShowSignerDialog(false); setSignatureFile(undefined); setSignedPdfPath(null); }}>Annuler</Button>
             <Button
               disabled={isPending}
               style={{ backgroundColor: "#13762C" }}
               onClick={() => {
                 setShowSignerDialog(false);
                 setSignatureFile(undefined);
+                setSignedPdfPath(null);
                 handleAdvance(true);
               }}
             >
