@@ -885,36 +885,38 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
               )}
 
               {/* Boutons navigation */}
-              <Card className="p-4 space-y-3">
-                {nextStep && (
-                  <Button
-                    onClick={() => allRequiredDone ? handleAdvance(false) : setShowAdvanceDialog(true)}
-                    disabled={isPending}
-                    className={cn("w-full", isWon && "bg-[#13762C] hover:bg-[#13762C]/90")}
-                    size="lg"
-                  >
-                    Passer à : {nextStep.label}
-                    <ArrowRight className="h-4 w-4 ml-1" />
-                  </Button>
-                )}
-                {prevStep && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      startTransition(async () => {
-                        await goBackStatut(pipeline.id);
-                        toast.success(`Retour à : ${prevStep.label}`);
-                      });
-                    }}
-                    disabled={isPending}
-                    className="w-full"
-                    style={{ color: "#656576" }}
-                  >
-                    <ArrowLeft className="h-4 w-4 mr-1" />
-                    Revenir à : {prevStep.label}
-                  </Button>
-                )}
-              </Card>
+              {pipeline.statut !== "devis_recus" && (
+                <Card className="p-4 space-y-3">
+                  {nextStep && (
+                    <Button
+                      onClick={() => allRequiredDone ? handleAdvance(false) : setShowAdvanceDialog(true)}
+                      disabled={isPending}
+                      className={cn("w-full", isWon && "bg-[#13762C] hover:bg-[#13762C]/90")}
+                      size="lg"
+                    >
+                      Passer à : {nextStep.label}
+                      <ArrowRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  )}
+                  {prevStep && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        startTransition(async () => {
+                          await goBackStatut(pipeline.id);
+                          toast.success(`Retour à : ${prevStep.label}`);
+                        });
+                      }}
+                      disabled={isPending}
+                      className="w-full"
+                      style={{ color: "#656576" }}
+                    >
+                      <ArrowLeft className="h-4 w-4 mr-1" />
+                      Revenir à : {prevStep.label}
+                    </Button>
+                  )}
+                </Card>
+              )}
 
             </>
           )}

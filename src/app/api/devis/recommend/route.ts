@@ -156,6 +156,40 @@ function buildPrompt(
     ? devis.find((d) => d.assureur === recommandeAssureur)
     : devis[0];
 
+  // Inject partner knowledge if the recommended devis is AXA or MILA
+  const rec = recommandeAssureur ?? devis[0]?.assureur ?? "";
+  if (rec.toUpperCase().includes("AXA")) {
+    lines.push(
+      "",
+      "=== RÉFÉRENCE INTERNE AXA (à utiliser pour argumenter, ne pas citer mot pour mot) ===",
+      "Points forts à valoriser :",
+      "- AXA est un acteur historique et incontournable de l'assurance en France : marque reconnue, solidité financière garantie, très rassurant pour les copropriétaires",
+      "- Couverture très large : quasiment tous les risques majeurs pour l'immeuble sont inclus",
+      "- Pas d'avance de frais en cas de sinistre (hors franchise)",
+      "- Protection du conseil syndical et responsabilité du syndic bénévole incluse",
+      "- Réseau d'entreprises partenaires AXA pour la gestion des sinistres",
+      "- Contrat reconductible automatiquement : continuité de couverture garantie",
+      "- Franchise temporaire qui disparaît après 6 mois sans sinistre",
+      "Points de vigilance à mentionner avec tact si pertinent :",
+      "- Franchise générale temporaire les 6 premiers mois (3 fois l'indice FFB en cas de sinistre)",
+      "- Indexation annuelle sur l'indice FFB (cotisation et garanties évoluent automatiquement)",
+    );
+  } else if (rec.toUpperCase().includes("MILA")) {
+    lines.push(
+      "",
+      "=== RÉFÉRENCE INTERNE MILA (à utiliser pour argumenter, ne pas citer mot pour mot) ===",
+      "Points forts à valoriser :",
+      "- Couverture complète incluant des risques souvent exclus : graffitis, recherche de fuite, consommation d'eau supplémentaire",
+      "- Forts plafonds de garantie : Effondrement 3 M€, RC propriétaire 6 M€, Bris de machine 100 000 €, Vol/vandalisme 40 000 €",
+      "- Garantie spécifique pour le conseil syndical (rare dans les contrats concurrents)",
+      "- Possibilité d'ajouter la RC du syndic bénévole (adaptée aux petites copropriétés)",
+      "- Indexation automatique FFB : protection contre l'inflation des coûts de construction",
+      "Points de vigilance à mentionner avec tact si pertinent :",
+      "- Responsabilité personnelle des copropriétaires non couverte (contrats individuels nécessaires)",
+      "- Obligation d'entretien imposée (ex. nettoyage gouttières, extincteurs parkings)",
+    );
+  }
+
   lines.push(
     "",
     "=== INSTRUCTIONS ===",
