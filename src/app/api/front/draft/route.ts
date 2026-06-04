@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin, STORAGE_BUCKET } from "@/lib/supabase";
 
 const FRONT_API_URL = "https://api2.frontapp.com";
 const FRONT_TOKEN = process.env.FRONT_API_TOKEN;
@@ -12,6 +13,7 @@ export async function POST(req: NextRequest) {
   const body = formData.get("body") as string;
   const contratFile = formData.get("contrat") as File | null;
   const pvFile = formData.get("pv") as File | null;
+  const signedPdfPath = formData.get("signedPdfPath") as string | null;
 
   if (!to || !subject || !body) {
     return NextResponse.json({ error: "to, subject et body sont requis" }, { status: 400 });
@@ -41,6 +43,20 @@ export async function POST(req: NextRequest) {
     if (!file) continue;
     const buf = await file.arrayBuffer();
     draftForm.append("attachments[]", new Blob([buf], { type: file.type }), file.name);
+  }
+
+  // PJ contrat signé depuis Supabase Storage (chemin direct)
+  console.log("[front/draft] signedPdfPath reçu:", signedPdfPath);
+  if (signedPdfPath) {
+    const { data: pdfData, error } = await supabaseAdmin.storage
+      .from(STORAGE_BUCKET)
+      .download(signedPdfPath);
+    console.log("[front/draft] download Supabase:", { ok: !!pdfData, error: error?.message });
+    if (!error && pdfData) {
+      const buf = await pdfData.arrayBuffer();
+      console.log("[front/draft] PDF size bytes:", buf.byteLength);
+      draftForm.append("attachments[]", new Blob([buf], { type: "application/pdf" }), "contrat_signe_matera.pdf");
+    }
   }
 
   const draftRes = await fetch(`${FRONT_API_URL}/channels/${FRONT_CHANNEL_ID}/messages`, {

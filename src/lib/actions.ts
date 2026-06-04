@@ -5,6 +5,9 @@ import { getNextStatut, PIPELINE_STEPS } from "@/lib/pipeline";
 import { revalidatePath } from "next/cache";
 import { MOCK_USER } from "@/lib/mock-session";
 import { supabaseAdmin, STORAGE_BUCKET } from "@/lib/supabase";
+import Anthropic from "@anthropic-ai/sdk";
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function getSession() {
   return { user: MOCK_USER };
@@ -355,6 +358,7 @@ export async function updateCoproCaracteristiques(
   pipelineId: string,
   data: {
     assureurActuel?: string | null;
+    numeroContrat?: string | null;
     courtierActuel?: string | null;
     primeActuelle?: number | null;
     dateDebutContrat?: Date | null;
@@ -395,6 +399,46 @@ export async function logDevisSent(
       type: "action_manuelle",
       description: `Demande de devis envoyée à ${assureur.toUpperCase()} — ${toEmail}`,
       metadata: { devisType: "devis_sent", assureur, to: toEmail, body: body ?? null },
+      createdBy: session.user.email!,
+    },
+  });
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
+export async function logInsureurEmailSent(
+  pipelineId: string,
+  toEmail: string,
+  subject: string,
+  body: string
+) {
+  const session = await getSession();
+  await prisma.pipelineEvent.create({
+    data: {
+      pipelineId,
+      type: "action_manuelle",
+      description: `Email envoyé au nouvel assureur — ${toEmail}`,
+      metadata: { insureurType: "insureur_sent", to: toEmail, subject, body },
+      createdBy: session.user.email!,
+    },
+  });
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
+export async function logResiliationEmailSent(
+  pipelineId: string,
+  toEmail: string,
+  subject: string,
+  body: string
+) {
+  const session = await getSession();
+  await prisma.pipelineEvent.create({
+    data: {
+      pipelineId,
+      type: "action_manuelle",
+      description: `Email de résiliation envoyé à l'ancien assureur — ${toEmail}`,
+      metadata: { resiliationType: "resiliation_sent", to: toEmail, subject, body },
       createdBy: session.user.email!,
     },
   });
@@ -554,10 +598,68 @@ export async function getPdfSignedUrl(storagePath: string): Promise<string | nul
 
 export async function saveSignedPdfUrl(pipelineId: string, signedPdfUrl: string) {
   await getSession();
+
   await prisma.insurancePipeline.update({
     where: { id: pipelineId },
     data: { signedPdfUrl },
   });
+
+  // Extraction automatique des données du contrat signé
+  try {
+    const { data: pdfData, error } = await supabaseAdmin.storage
+      .from(STORAGE_BUCKET)
+      .download(signedPdfUrl);
+
+    if (!error && pdfData) {
+      const buf = await pdfData.arrayBuffer();
+      const base64 = Buffer.from(buf).toString("base64");
+
+      const response = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 512,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
+            { type: "text", text: `Extrait ces 3 informations du contrat d'assurance MRI. Retourne UNIQUEMENT un JSON valide sans markdown.
+
+Indices selon l'assureur :
+- Numéro de contrat : champ "Votre contrat", "N° de contrat", ou référence commençant par PO-, MRI-, etc.
+- Date d'effet : champ "Date d'effet", "Date de prise d'effet", ou "Date d'effet" dans un bloc références
+- Prime TTC : montant annuel toutes taxes comprises — peut apparaître en gros (ex: "1489,20 € TTC"), dans un paragraphe ("soit 3 978,75 € frais et taxes inclus"), ou dans un tableau de cotisation
+
+{
+  "numeroContrat": "numéro de contrat exact tel qu'il apparaît (string ou null)",
+  "dateEffet": "date d'effet au format YYYY-MM-DD (string ou null)",
+  "primeTTC": "prime annuelle TTC en euros, nombre seul sans symbole (number ou null)"
+}` },
+          ],
+        }],
+      });
+
+      const raw = (response.content[0] as { type: string; text: string }).text
+        .trim().replace(/^```json?\s*/i, "").replace(/\s*```$/i, "");
+      const extracted = JSON.parse(raw) as { numeroContrat?: string | null; dateEffet?: string | null; primeTTC?: number | null };
+
+      const updateData: Record<string, unknown> = {};
+      if (extracted.numeroContrat) updateData.nouveauNumeroContrat = extracted.numeroContrat;
+      if (extracted.primeTTC) updateData.nouveauPrimeTTC = extracted.primeTTC;
+      if (extracted.dateEffet) updateData.nouveauDateEffet = new Date(extracted.dateEffet);
+
+      if (Object.keys(updateData).length > 0) {
+        await prisma.insurancePipeline.update({ where: { id: pipelineId }, data: updateData });
+
+        // Synchronise aussi le numéro de contrat sur la copro pour le mail de résiliation
+        if (extracted.numeroContrat) {
+          const pipeline = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId } });
+          if (pipeline) await prisma.copro.update({ where: { id: pipeline.coproId }, data: { numeroContrat: extracted.numeroContrat } });
+        }
+      }
+    }
+  } catch {
+    // L'extraction est best-effort — on ne bloque pas si Claude échoue
+  }
+
   revalidatePath(`/pipeline/${pipelineId}`);
   return { success: true };
 }

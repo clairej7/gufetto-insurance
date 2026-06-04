@@ -39,6 +39,8 @@ import { PIPELINE_STEPS, getDaysUntilEcheance, getNextStatut, isTerminalStatut }
 import { RSRequestAction } from "@/components/copro/steps/rs-request-action";
 import { DevisRequestAction } from "@/components/copro/steps/devis-request-action";
 import { DevisRecusAction } from "@/components/copro/steps/devis-recus-action";
+import { ContratSigneAction } from "@/components/copro/steps/contrat-signe-action";
+import { ResiliationAction } from "@/components/copro/steps/resiliation-action";
 import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl, saveSignedPdfUrl } from "@/lib/actions";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -54,6 +56,7 @@ type Pipeline = {
     adresse: string | null;
     buildingId: string;
     assureurActuel: string | null;
+    numeroContrat: string | null;
     courtierActuel: string | null;
     primeActuelle: number | null;
     dateEcheance: Date | null;
@@ -91,6 +94,10 @@ type Pipeline = {
     metadata?: unknown;
   }>;
   contratActuelData: string | null;
+  signedPdfUrl: string | null;
+  nouveauNumeroContrat: string | null;
+  nouveauDateEffet: Date | null;
+  nouveauPrimeTTC: number | null;
   devisRecus: Array<{
     id: string;
     assureur: string;
@@ -423,6 +430,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
   const [contratForm, setContratForm] = useState({
     assureurActuel: pipeline.copro.assureurActuel ?? "",
     courtierActuel: pipeline.copro.courtierActuel ?? "",
+    numeroContrat: pipeline.copro.numeroContrat ?? "",
     primeActuelle: pipeline.copro.primeActuelle?.toString() ?? "",
     dateDebutContrat: pipeline.copro.dateDebutContrat ? new Date(pipeline.copro.dateDebutContrat).toISOString().split("T")[0] : "",
     contactCourtierEmail: pipeline.copro.contactCourtierEmail ?? "",
@@ -434,6 +442,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
       setContratForm({
         assureurActuel: pipeline.copro.assureurActuel ?? "",
         courtierActuel: pipeline.copro.courtierActuel ?? "",
+        numeroContrat: pipeline.copro.numeroContrat ?? "",
         primeActuelle: pipeline.copro.primeActuelle?.toString() ?? "",
         dateDebutContrat: pipeline.copro.dateDebutContrat ? new Date(pipeline.copro.dateDebutContrat).toISOString().split("T")[0] : "",
         contactCourtierEmail: pipeline.copro.contactCourtierEmail ?? "",
@@ -674,6 +683,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
             </div>
             <dl className="space-y-2">
               <InfoRow label="Assureur" value={pipeline.copro.assureurActuel} />
+              <InfoRow label="N° de contrat" value={pipeline.copro.numeroContrat} />
               <InfoRow label="Courtier" value={pipeline.copro.courtierActuel} />
               <InfoRow label="Prime annuelle" value={pipeline.copro.primeActuelle ? `${pipeline.copro.primeActuelle.toLocaleString("fr-FR")} €` : null} />
               <InfoRow label="Début contrat" value={pipeline.copro.dateDebutContrat ? new Date(pipeline.copro.dateDebutContrat).toLocaleDateString("fr-FR") : null} />
@@ -718,6 +728,9 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                   <CheckCircle2 className="h-12 w-12 mx-auto mb-3" style={{ color: "#13762C" }} />
                   <p className="font-semibold" style={{ color: "#26262C" }}>Contrat mis à jour dans Duomo</p>
                   <p className="text-sm mt-1" style={{ color: "#656576" }}>Dossier clôturé avec succès</p>
+                  <Button variant="outline" size="sm" className="mt-4" disabled={isPending} onClick={() => startTransition(async () => { await goBackStatut(pipeline.id); })}>
+                    Revenir en arrière
+                  </Button>
                 </>
               ) : pipeline.statut === "refuse" ? (
                 <>
@@ -903,8 +916,85 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                 );
               })()}
 
+              {pipeline.statut === "contrat_signe" && (
+                <Card className="p-5 space-y-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>
+                    Nouveau contrat
+                  </div>
+                  {pipeline.nouveauNumeroContrat || pipeline.nouveauDateEffet || pipeline.nouveauPrimeTTC ? (
+                    <dl className="space-y-2">
+                      {pipeline.nouveauNumeroContrat && (
+                        <div className="flex justify-between items-center">
+                          <dt className="text-xs" style={{ color: "#A2A1AF" }}>N° de contrat</dt>
+                          <dd className="text-sm font-semibold" style={{ color: "#26262C" }}>{pipeline.nouveauNumeroContrat}</dd>
+                        </div>
+                      )}
+                      {pipeline.nouveauDateEffet && (
+                        <div className="flex justify-between items-center">
+                          <dt className="text-xs" style={{ color: "#A2A1AF" }}>Date d&apos;effet</dt>
+                          <dd className="text-sm font-semibold" style={{ color: "#26262C" }}>{new Date(pipeline.nouveauDateEffet).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</dd>
+                        </div>
+                      )}
+                      {pipeline.nouveauPrimeTTC && (
+                        <div className="flex justify-between items-center">
+                          <dt className="text-xs" style={{ color: "#A2A1AF" }}>Prime TTC</dt>
+                          <dd className="text-sm font-semibold" style={{ color: "#26262C" }}>{pipeline.nouveauPrimeTTC.toLocaleString("fr-FR", { minimumFractionDigits: 2 })} €</dd>
+                        </div>
+                      )}
+                    </dl>
+                  ) : (
+                    <p className="text-xs" style={{ color: "#A2A1AF" }}>Extraction en cours depuis le PDF signé…</p>
+                  )}
+                </Card>
+              )}
+
+              {pipeline.statut === "contrat_signe" && (
+                <Card className="p-5 space-y-4">
+                  <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>
+                    Notification nouvel assureur
+                  </div>
+                  <ContratSigneAction
+                    pipelineId={pipeline.id}
+                    signedPdfUrl={pipeline.signedPdfUrl}
+                    devisRecommande={pipeline.devisRecus.find(d => d.recommande) ?? null}
+                    copro={{
+                      nom: pipeline.copro.nom,
+                      adresse: pipeline.copro.adresse,
+                      gestionnaireEmail: pipeline.copro.gestionnaireEmail,
+                    }}
+                    sentEvents={pipeline.events.filter(e => {
+                      const m = e.metadata as Record<string, unknown> | null;
+                      return m?.insureurType === "insureur_sent";
+                    })}
+                  />
+                </Card>
+              )}
+
+              {pipeline.statut === "contrat_signe" && (
+                <Card className="p-5 space-y-4">
+                  <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>
+                    Résiliation ancien assureur
+                  </div>
+                  <ResiliationAction
+                    pipelineId={pipeline.id}
+                    assureurActuel={pipeline.copro.assureurActuel}
+                    copro={{
+                      nom: pipeline.copro.nom,
+                      adresse: pipeline.copro.adresse,
+                      gestionnaireEmail: pipeline.copro.gestionnaireEmail,
+                      dateEcheance: pipeline.copro.dateEcheance,
+                      numeroContrat: pipeline.copro.numeroContrat,
+                    }}
+                    sentEvents={pipeline.events.filter(e => {
+                      const m = e.metadata as Record<string, unknown> | null;
+                      return m?.resiliationType === "resiliation_sent";
+                    })}
+                  />
+                </Card>
+              )}
+
               {/* Prochaine action mise en avant (autres étapes) */}
-              {pipeline.statut !== "rs_en_cours" && pipeline.statut !== "devis_demandes" && pipeline.statut !== "devis_recus" && pipeline.statut !== "envoye_cs" && <Card className="p-5">
+              {pipeline.statut !== "rs_en_cours" && pipeline.statut !== "devis_demandes" && pipeline.statut !== "devis_recus" && pipeline.statut !== "envoye_cs" && pipeline.statut !== "contrat_signe" && <Card className="p-5">
                 <div className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: "#A2A1AF" }}>
                   Prochaine action
                 </div>
@@ -1163,6 +1253,10 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
               <input className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm" value={contratForm.assureurActuel} onChange={e => setContratForm(f => ({ ...f, assureurActuel: e.target.value }))} placeholder="Ex : Allianz" />
             </div>
             <div>
+              <label className="text-xs font-medium" style={{ color: "#656576" }}>N° de contrat</label>
+              <input className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm" value={contratForm.numeroContrat} onChange={e => setContratForm(f => ({ ...f, numeroContrat: e.target.value }))} placeholder="Ex : MRI-2021-00123" />
+            </div>
+            <div>
               <label className="text-xs font-medium" style={{ color: "#656576" }}>Courtier</label>
               <input className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm" value={contratForm.courtierActuel} onChange={e => setContratForm(f => ({ ...f, courtierActuel: e.target.value }))} placeholder="Nom du courtier" />
             </div>
@@ -1191,6 +1285,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                 await updateCoproCaracteristiques(pipeline.coproId, pipeline.id, {
                   assureurActuel: contratForm.assureurActuel || null,
                   courtierActuel: contratForm.courtierActuel || null,
+                  numeroContrat: contratForm.numeroContrat || null,
                   primeActuelle: isNaN(prime) ? null : prime,
                   dateDebutContrat: contratForm.dateDebutContrat ? new Date(contratForm.dateDebutContrat) : null,
                   contactCourtierEmail: contratForm.contactCourtierEmail || null,

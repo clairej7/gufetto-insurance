@@ -65,6 +65,7 @@ model Copro {
 
   // Contrat d'assurance actuel
   assureurActuel    String?
+  numeroContrat     String?
   courtierActuel    String?
   primeActuelle     Float?
   dateEcheance      DateTime?
@@ -125,6 +126,11 @@ model InsurancePipeline {
   notes             String?        @db.Text
   contratActuelData String?        @db.Text
   signedPdfUrl      String?        @db.Text
+
+  // Données extraites du contrat signé
+  nouveauNumeroContrat    String?
+  nouveauDateEffet        DateTime?
+  nouveauPrimeTTC         Float?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

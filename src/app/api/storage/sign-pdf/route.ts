@@ -1,43 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument } from "pdf-lib";
 import { supabaseAdmin, STORAGE_BUCKET } from "@/lib/supabase";
+import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
 import path from "path";
 
-async function findSouscripteurPosition(
-  pdfBytes: ArrayBuffer
-): Promise<{ pageIndex: number; x: number; y: number } | null> {
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+async function findSignatureZone(
+  pdfBase64: string,
+  totalPages: number
+): Promise<{ pageIndex: number; yPercent: number } | null> {
   try {
-    // Import dynamique pour éviter les problèmes de worker côté serveur
-    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 128,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfBase64 } },
+          {
+            type: "text",
+            text: `Ce document est un contrat d'assurance. Trouve la zone de signature "Pour le souscripteur" ou "Le souscripteur" (là où le client doit signer, côté gauche).
 
-    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(pdfBytes), useWorkerFetch: false, isEvalSupported: false }).promise;
+Retourne UNIQUEMENT ce JSON (sans markdown) :
+{"page": <numéro de page 1-indexé>, "yPercent": <position Y en % depuis le HAUT de la page où commence la zone de signature, entre 0 et 100>}
 
-    const searchTerms = ["le souscripteur", "pour le souscripteur", "souscripteur"];
+Nombre total de pages : ${totalPages}. La signature est généralement sur la dernière page.`,
+          },
+        ],
+      }],
+    });
 
-    // On cherche en partant de la dernière page (page de signature)
-    for (let pageNum = doc.numPages; pageNum >= 1; pageNum--) {
-      const page = await doc.getPage(pageNum);
-      const textContent = await page.getTextContent();
-
-      for (const term of searchTerms) {
-        for (const item of textContent.items) {
-          if ("str" in item && item.str.toLowerCase().includes(term)) {
-            // transform[4] = x, transform[5] = y (coords PDF, origine bas-gauche)
-            return {
-              pageIndex: pageNum - 1,
-              x: item.transform[4],
-              y: item.transform[5], // Y baseline du texte
-            };
-          }
-        }
-      }
-    }
+    const raw = (response.content[0] as { type: string; text: string }).text
+      .trim().replace(/^```json?\s*/i, "").replace(/\s*```$/i, "");
+    const result = JSON.parse(raw) as { page: number; yPercent: number };
+    return { pageIndex: result.page - 1, yPercent: result.yPercent };
   } catch (e) {
-    console.error("[sign-pdf] pdfjs error:", e);
+    console.error("[sign-pdf] Claude position detection failed:", e);
+    return null;
   }
-  return null;
 }
 
 export async function POST(req: NextRequest) {
@@ -47,7 +49,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "pdfPath et pipelineId requis" }, { status: 400 });
   }
 
-  // Télécharger le PDF depuis Supabase
   const { data: pdfData, error: downloadError } = await supabaseAdmin.storage
     .from(STORAGE_BUCKET)
     .download(pdfPath);
@@ -57,18 +58,17 @@ export async function POST(req: NextRequest) {
   }
 
   const pdfBytes = await pdfData.arrayBuffer();
+  const pdfBase64 = Buffer.from(pdfBytes).toString("base64");
 
-  // Chercher la position "Le souscripteur" dans le PDF
-  const souscripteurPos = await findSouscripteurPosition(pdfBytes);
+  const pdfDoc = await PDFDocument.load(pdfBytes);
+  const pages = pdfDoc.getPages();
 
-  // Charger le tampon Matera
+  const signatureZone = await findSignatureZone(pdfBase64, pages.length);
+  console.log("[sign-pdf] signature zone:", signatureZone);
+
   const stampPath = path.join(process.cwd(), "public", "tampon_matera.jpg");
   const stampBytes = fs.readFileSync(stampPath);
-
-  // Modifier le PDF
-  const pdfDoc = await PDFDocument.load(pdfBytes);
   const stampImage = await pdfDoc.embedJpg(stampBytes);
-  const pages = pdfDoc.getPages();
 
   const stampWidth = 160;
   const stampHeight = (stampImage.height / stampImage.width) * stampWidth;
@@ -78,15 +78,20 @@ export async function POST(req: NextRequest) {
   let x = margin;
   let y = margin + 20;
 
-  if (souscripteurPos) {
-    targetPage = pages[souscripteurPos.pageIndex] ?? targetPage;
-    x = souscripteurPos.x;
-    y = souscripteurPos.y - stampHeight - 10; // 10pt sous la baseline du texte
+  if (signatureZone) {
+    const page = pages[signatureZone.pageIndex] ?? pages[pages.length - 1];
+    targetPage = page;
+    const { height: pageHeight } = page.getSize();
+    // yPercent est depuis le haut → convertir en coords pdf-lib (origine bas-gauche)
+    const yFromTop = (signatureZone.yPercent / 100) * pageHeight;
+    const yFromBottom = pageHeight - yFromTop;
+    // Placer le tampon juste sous l'ancre, clampé dans la page
+    y = Math.max(margin, Math.min(yFromBottom - stampHeight - 10, pageHeight - stampHeight - margin));
+    x = margin;
   }
 
   targetPage.drawImage(stampImage, { x, y, width: stampWidth, height: stampHeight });
 
-  // Sauvegarder le PDF signé
   const signedPdfBytes = await pdfDoc.save();
   const signedPath = `devis/${pipelineId}/signed-${Date.now()}.pdf`;
 
