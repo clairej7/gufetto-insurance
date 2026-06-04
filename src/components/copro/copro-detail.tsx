@@ -875,7 +875,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                         </p>
                       </div>
                     </div>
-                    {delaiPasse && (
+                    {delaiPasse ? (
                       <Button
                         onClick={() => setShowSignerDialog(true)}
                         disabled={isPending}
@@ -886,6 +886,15 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                         <CheckCircle2 className="h-4 w-4 mr-2" />
                         Signer le contrat
                       </Button>
+                    ) : (
+                      <button
+                        onClick={() => setShowSignerDialog(true)}
+                        className="w-full flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-left hover:opacity-80 transition-opacity"
+                        style={{ borderColor: "#F5C97A", backgroundColor: "#FFF0CC", color: "#955804" }}
+                      >
+                        <span>🤝</span>
+                        <span>Le CS a donné son accord — signer maintenant</span>
+                      </button>
                     )}
                   </Card>
                 );
