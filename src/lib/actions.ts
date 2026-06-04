@@ -446,6 +446,31 @@ export async function logResiliationEmailSent(
   return { success: true };
 }
 
+export async function toggleTermineTask(pipelineId: string, taskKey: string, done: boolean) {
+  const session = await getSession();
+  if (done) {
+    await prisma.pipelineEvent.create({
+      data: {
+        pipelineId,
+        type: "action_manuelle",
+        description: `Tâche finale cochée — ${taskKey}`,
+        metadata: { termineTask: taskKey },
+        createdBy: session.user.email!,
+      },
+    });
+  } else {
+    await prisma.pipelineEvent.deleteMany({
+      where: {
+        pipelineId,
+        type: "action_manuelle",
+        metadata: { path: ["termineTask"], equals: taskKey },
+      },
+    });
+  }
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
 export async function logRecoSent(
   pipelineId: string,
   toEmail: string,

@@ -41,7 +41,7 @@ import { DevisRequestAction } from "@/components/copro/steps/devis-request-actio
 import { DevisRecusAction } from "@/components/copro/steps/devis-recus-action";
 import { ContratSigneAction } from "@/components/copro/steps/contrat-signe-action";
 import { ResiliationAction } from "@/components/copro/steps/resiliation-action";
-import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl, saveSignedPdfUrl } from "@/lib/actions";
+import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl, saveSignedPdfUrl, toggleTermineTask } from "@/lib/actions";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -606,11 +606,11 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
           </div>
         </div>
 
-        {(!isTerminal || isLost) && (
+        {(!isTerminal || isLost || pipeline.statut === "termine") && (
           <div className="mt-4">
             <StepProgressBar
               steps={PIPELINE_STEPS.filter((s) => s.statut !== "termine" && s.statut !== "abandonne")}
-              currentStatut={lostAtStatut ?? pipeline.statut}
+              currentStatut={lostAtStatut ?? (pipeline.statut === "termine" ? "contrat_signe" : pipeline.statut)}
               lost={isLost}
               onStepClick={(statut) => startTransition(async () => { await goToStatut(pipeline.id, statut); })}
             />
@@ -718,21 +718,90 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
 
         {/* Col 2: action centrale */}
         <div className="space-y-4">
-          {isTerminal ? (
+          {(() => {
+            const FINALE_TASKS = [
+              { key: "update_duomo_contrat", label: "Va dans \"Mes contrats\" et mets à jour le nouveau contrat d'assurance" },
+              { key: "mandat_prelevement", label: "Remplis le mandat de prélèvement pour le nouveau contrat MRI" },
+            ];
+            const doneKeys = new Set(
+              pipeline.events
+                .map(e => (e.metadata as Record<string, unknown> | null)?.termineTask as string | undefined)
+                .filter(Boolean)
+            );
+            const allDone = FINALE_TASKS.every(t => doneKeys.has(t.key));
+            return isTerminal ? (
+              pipeline.statut === "termine" ? (
+              <div className="space-y-4">
+                {/* Données du nouveau contrat */}
+                {(pipeline.nouveauNumeroContrat || pipeline.nouveauDateEffet || pipeline.nouveauPrimeTTC) && (
+                  <Card className="p-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: "#A2A1AF" }}>Nouveau contrat</p>
+                    <dl className="space-y-2">
+                      {pipeline.nouveauNumeroContrat && (
+                        <div className="flex justify-between items-center">
+                          <dt className="text-xs" style={{ color: "#A2A1AF" }}>N° de contrat</dt>
+                          <dd className="text-sm font-semibold" style={{ color: "#26262C" }}>{pipeline.nouveauNumeroContrat}</dd>
+                        </div>
+                      )}
+                      {pipeline.nouveauDateEffet && (
+                        <div className="flex justify-between items-center">
+                          <dt className="text-xs" style={{ color: "#A2A1AF" }}>Date d&apos;effet</dt>
+                          <dd className="text-sm font-semibold" style={{ color: "#26262C" }}>{new Date(pipeline.nouveauDateEffet).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</dd>
+                        </div>
+                      )}
+                      {pipeline.nouveauPrimeTTC && (
+                        <div className="flex justify-between items-center">
+                          <dt className="text-xs" style={{ color: "#A2A1AF" }}>Prime TTC</dt>
+                          <dd className="text-sm font-semibold" style={{ color: "#26262C" }}>{pipeline.nouveauPrimeTTC.toLocaleString("fr-FR", { minimumFractionDigits: 2 })} €</dd>
+                        </div>
+                      )}
+                    </dl>
+                  </Card>
+                )}
+
+                {/* Checklist finale */}
+                <Card className="p-5 space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>Dernières actions avant clôture</p>
+                  {FINALE_TASKS.map((task) => {
+                    const done = doneKeys.has(task.key);
+                    return (
+                      <button
+                        key={task.key}
+                        disabled={isPending}
+                        onClick={() => startTransition(async () => { await toggleTermineTask(pipeline.id, task.key, !done); })}
+                        className="flex items-start gap-3 w-full text-left group"
+                      >
+                        <div className={cn(
+                          "mt-0.5 h-4 w-4 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-colors",
+                          done ? "border-[#13762C] bg-[#13762C]" : "border-[#D0CFDB] group-hover:border-[#4E49FC]"
+                        )}>
+                          {done && <CheckCircle2 className="h-3 w-3 text-white" />}
+                        </div>
+                        <p className={cn("text-sm transition-colors", done ? "line-through" : "")} style={{ color: done ? "#A2A1AF" : "#26262C" }}>
+                          {task.label}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </Card>
+
+                {/* Célébration — uniquement quand tout est coché */}
+                {allDone && (
+                  <Card className="p-6 text-center border-2" style={{ borderColor: "#BBF1C8", backgroundColor: "#EFFBF2" }}>
+                    <div className="text-4xl mb-2">🎉</div>
+                    <p className="text-lg font-bold" style={{ color: "#13762C" }}>Bravo, dossier bouclé !</p>
+                  </Card>
+                )}
+
+                <Button variant="outline" size="sm" className="w-full" disabled={isPending} onClick={() => startTransition(async () => { await goBackStatut(pipeline.id); })}>
+                  Revenir en arrière
+                </Button>
+              </div>
+            ) : (
             <Card className={cn("p-8 text-center border-2",
-              (pipeline.statut === "termine") && "border-[#BBF1C8] bg-[#EFFBF2]",
               (pipeline.statut === "refuse" || pipeline.statut === "non_assurable" || pipeline.statut === "abandonne") && "border-[#FFF5F5] bg-[#FFF5F5]"
             )}>
-              {pipeline.statut === "termine" ? (
-                <>
-                  <CheckCircle2 className="h-12 w-12 mx-auto mb-3" style={{ color: "#13762C" }} />
-                  <p className="font-semibold" style={{ color: "#26262C" }}>Contrat mis à jour dans Duomo</p>
-                  <p className="text-sm mt-1" style={{ color: "#656576" }}>Dossier clôturé avec succès</p>
-                  <Button variant="outline" size="sm" className="mt-4" disabled={isPending} onClick={() => startTransition(async () => { await goBackStatut(pipeline.id); })}>
-                    Revenir en arrière
-                  </Button>
-                </>
-              ) : pipeline.statut === "refuse" ? (
+              {pipeline.statut === "refuse" ? (
                 <>
                   <XCircle className="h-12 w-12 mx-auto mb-3" style={{ color: "#CA1E12" }} />
                   <p className="font-semibold" style={{ color: "#26262C" }}>Deal perdu — Refus client</p>
@@ -760,7 +829,10 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                 </>
               )}
             </Card>
-          ) : (
+            )
+            ) : null;
+          })()}
+          {!isTerminal && (
             <>
               {/* Infos copropriété (pour devis_recus, col 1 ne la montre pas) */}
               {pipeline.statut === "devis_recus" && (
