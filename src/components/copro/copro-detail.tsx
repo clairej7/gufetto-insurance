@@ -38,7 +38,7 @@ import { PIPELINE_STEPS, getDaysUntilEcheance, getNextStatut, isTerminalStatut }
 import { RSRequestAction } from "@/components/copro/steps/rs-request-action";
 import { DevisRequestAction } from "@/components/copro/steps/devis-request-action";
 import { DevisRecusAction } from "@/components/copro/steps/devis-recus-action";
-import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques } from "@/lib/actions";
+import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl } from "@/lib/actions";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -98,6 +98,7 @@ type Pipeline = {
     data: string | null;
     notes: string | null;
     pdfName: string | null;
+    pdfUrl: string | null;
     recommande: boolean;
     createdAt: Date;
   }>;
@@ -269,35 +270,39 @@ function NoteItem({
   );
 }
 
+type RecoEvent = {
+  id: string;
+  createdAt: Date;
+  metadata?: unknown;
+};
+
 function RecoSentBlock({
-  to,
-  subject,
-  body,
-  sentAt,
+  events,
   pipelineId,
 }: {
-  to: string;
-  subject: string;
-  body: string;
-  sentAt: Date;
+  events: RecoEvent[];
   pipelineId: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  const dateLabel = new Date(sentAt).toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
+  const latest = events[0];
+  const previous = events.slice(1);
+  const meta = latest?.metadata as { to?: string; subject?: string; body?: string } | null;
+
+  const fmtDate = (d: Date) => new Date(d).toLocaleDateString("fr-FR", {
+    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
   });
+
+  if (!latest || !meta) return null;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 text-sm font-medium" style={{ color: "#13762C" }}>
+      <div className="flex items-center gap-2 text-sm font-medium flex-wrap" style={{ color: "#13762C" }}>
         <CheckCircle2 className="h-4 w-4" />
-        Envoyé à <span style={{ color: "#26262C" }}>{to}</span>
-        <span className="font-normal" style={{ color: "#A2A1AF" }}>· {dateLabel}</span>
+        Envoyé à <span style={{ color: "#26262C" }}>{meta.to}</span>
+        <span className="font-normal" style={{ color: "#A2A1AF" }}>· {fmtDate(latest.createdAt)}</span>
       </div>
 
       <button
@@ -311,14 +316,25 @@ function RecoSentBlock({
 
       {open && (
         <div className="space-y-2">
-          <p className="text-xs font-medium" style={{ color: "#A2A1AF" }}>Objet : {subject}</p>
+          <p className="text-xs font-medium" style={{ color: "#A2A1AF" }}>Objet : {meta.subject}</p>
           <div
             className="rounded-xl border p-3 text-xs leading-relaxed whitespace-pre-wrap"
             style={{ borderColor: "#E8E8EC", color: "#656576", background: "#FAFAFA" }}
           >
-            {body}
+            {meta.body}
           </div>
         </div>
+      )}
+
+      {previous.length > 0 && (
+        <button
+          onClick={() => setShowHistory(true)}
+          className="text-xs flex items-center gap-1"
+          style={{ color: "#A2A1AF" }}
+        >
+          <Clock className="h-3 w-3" />
+          {previous.length} envoi{previous.length > 1 ? "s" : ""} précédent{previous.length > 1 ? "s" : ""}
+        </button>
       )}
 
       <div className="pt-1 border-t" style={{ borderColor: "#E8E8EC" }}>
@@ -340,6 +356,36 @@ function RecoSentBlock({
           Recommencer la comparaison
         </Button>
       </div>
+
+      <Dialog open={showHistory} onOpenChange={setShowHistory}>
+        <DialogContent className="max-w-md max-h-[70vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Historique des envois</DialogTitle>
+            <DialogDescription>Tous les emails de recommandation envoyés pour ce dossier.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            {events.map((ev, i) => {
+              const m = ev.metadata as { to?: string; subject?: string } | null;
+              return (
+                <div key={ev.id} className="flex items-start gap-3 p-3 rounded-lg border" style={{ borderColor: "#E8E8EC" }}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      {i === 0 && (
+                        <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: "#EFFBF2", color: "#13762C" }}>
+                          Dernier
+                        </span>
+                      )}
+                      <span className="text-xs" style={{ color: "#A2A1AF" }}>{fmtDate(ev.createdAt)}</span>
+                    </div>
+                    <p className="text-sm mt-1" style={{ color: "#26262C" }}>À : {m?.to ?? "—"}</p>
+                    <p className="text-xs mt-0.5 truncate" style={{ color: "#A2A1AF" }}>{m?.subject ?? "—"}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -368,6 +414,8 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
     if (dealPerduOpen) document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [dealPerduOpen]);
+  const [showSignerDialog, setShowSignerDialog] = useState(false);
+  const [signatureFile, setSignatureFile] = useState<File | null | undefined>(undefined);
   const [showContratDialog, setShowContratDialog] = useState(false);
   const [contratForm, setContratForm] = useState({
     assureurActuel: pipeline.copro.assureurActuel ?? "",
@@ -781,21 +829,63 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                   const m = e.metadata as Record<string, unknown> | null;
                   return m?.recoType === "reco_sent";
                 });
-                const latest = recoEvents[0];
-                const meta = latest?.metadata as { to?: string; subject?: string; body?: string } | null;
                 return (
                   <Card className="p-5 space-y-4">
                     <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>
                       Recommandation envoyée au CS
                     </div>
-                    {latest && meta && (
+                    {recoEvents.length > 0 && (
                       <RecoSentBlock
-                        to={meta.to ?? ""}
-                        subject={meta.subject ?? ""}
-                        body={meta.body ?? ""}
-                        sentAt={latest.createdAt}
+                        events={recoEvents}
                         pipelineId={pipeline.id}
                       />
+                    )}
+                  </Card>
+                );
+              })()}
+
+              {pipeline.statut === "envoye_cs" && (() => {
+                const lastReco = pipeline.events.find(e => {
+                  const m = e.metadata as Record<string, unknown> | null;
+                  return m?.recoType === "reco_sent";
+                });
+                if (!lastReco) return null;
+                const sentAt = new Date(lastReco.createdAt);
+                const joursEcoules = Math.floor((Date.now() - sentAt.getTime()) / (1000 * 60 * 60 * 24));
+                const joursRestants = 7 - joursEcoules;
+                const delaiPasse = joursEcoules >= 7;
+                return (
+                  <Card className="p-5 space-y-4" style={delaiPasse ? { borderColor: "#BBF1C8", backgroundColor: "#EFFBF2" } : { borderColor: "#F5C97A", backgroundColor: "#FFF7EB" }}>
+                    <div className="flex items-start gap-3">
+                      {delaiPasse ? (
+                        <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-0.5" style={{ color: "#13762C" }} />
+                      ) : (
+                        <Clock className="h-5 w-5 flex-shrink-0 mt-0.5" style={{ color: "#955804" }} />
+                      )}
+                      <div>
+                        <p className="font-semibold text-sm" style={{ color: delaiPasse ? "#13762C" : "#955804" }}>
+                          {delaiPasse
+                            ? "Délai écoulé — vous pouvez procéder à la signature"
+                            : `Délai en cours — encore ${joursRestants} jour${joursRestants > 1 ? "s" : ""} avant signature`}
+                        </p>
+                        <p className="text-xs mt-1" style={{ color: delaiPasse ? "#13762C" : "#955804" }}>
+                          {delaiPasse
+                            ? `Email envoyé il y a ${joursEcoules} jours. Le conseil syndical n'a pas répondu dans les 7 jours.`
+                            : `Email envoyé le ${sentAt.toLocaleDateString("fr-FR", { day: "2-digit", month: "long" })}. Signature possible à partir du ${new Date(sentAt.getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString("fr-FR", { day: "2-digit", month: "long" })}.`}
+                        </p>
+                      </div>
+                    </div>
+                    {delaiPasse && (
+                      <Button
+                        onClick={() => setShowSignerDialog(true)}
+                        disabled={isPending}
+                        className="w-full"
+                        size="lg"
+                        style={{ backgroundColor: "#13762C" }}
+                      >
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        Signer le contrat
+                      </Button>
                     )}
                   </Card>
                 );
@@ -1210,6 +1300,95 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                 toast.success("Informations enregistrées");
               });
             }}>Enregistrer</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modale signature contrat */}
+      <Dialog open={showSignerDialog} onOpenChange={(o) => { setShowSignerDialog(o); if (!o) setSignatureFile(undefined); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Signer le contrat</DialogTitle>
+            <DialogDescription>Confirmez la signature du contrat pour cette copropriété.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Devis recommandé */}
+            {pipeline.devisRecus.find(d => d.recommande) && (() => {
+              const devis = pipeline.devisRecus.find(d => d.recommande)!;
+              return (
+                <div className="rounded-lg border p-3 space-y-2" style={{ borderColor: "#BBF1C8", backgroundColor: "#EFFBF2" }}>
+                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>Devis sélectionné</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold" style={{ color: "#26262C" }}>{devis.assureur}</p>
+                      <p className="text-sm" style={{ color: "#656576" }}>
+                        {devis.primeTTC.toLocaleString("fr-FR")} € / an
+                        {devis.pdfName && <span className="ml-2 text-xs" style={{ color: "#A2A1AF" }}>· {devis.pdfName}</span>}
+                      </p>
+                    </div>
+                    {devis.pdfUrl && (
+                      <button
+                        onClick={async () => {
+                          const url = await getPdfSignedUrl(devis.pdfUrl!);
+                          if (url) window.open(url, "_blank");
+                          else toast.error("Impossible d'ouvrir le PDF");
+                        }}
+                        className="flex items-center gap-1 text-xs px-2 py-1 rounded border flex-shrink-0 hover:opacity-80 transition-opacity"
+                        style={{ borderColor: "#BBF1C8", color: "#13762C" }}
+                      >
+                        <ChevronRight className="h-3 w-3" />
+                        Voir le PDF
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Toggle autre document */}
+            <div>
+              <button
+                onClick={() => setSignatureFile(signatureFile === undefined ? null : undefined)}
+                className="flex items-center gap-1.5 text-sm"
+                style={{ color: "#8784FD" }}
+              >
+                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", signatureFile !== undefined && "rotate-180")} />
+                Signer un autre document
+              </button>
+
+              {signatureFile !== undefined && (
+                <div className="mt-2">
+                  {signatureFile ? (
+                    <div className="flex items-center justify-between rounded-lg border px-3 py-2" style={{ borderColor: "#E8E8EC" }}>
+                      <span className="text-sm truncate" style={{ color: "#26262C" }}>{signatureFile.name}</span>
+                      <button onClick={() => setSignatureFile(null)} style={{ color: "#A2A1AF" }}>
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center w-full h-20 rounded-lg border-2 border-dashed cursor-pointer hover:bg-[#F7F7F8] transition-colors" style={{ borderColor: "#E8E8EC" }}>
+                      <p className="text-xs" style={{ color: "#A2A1AF" }}>Glisser un PDF ou cliquer pour uploader</p>
+                      <input type="file" accept=".pdf" className="hidden" onChange={e => setSignatureFile(e.target.files?.[0] ?? null)} />
+                    </label>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end pt-2">
+            <Button variant="outline" onClick={() => { setShowSignerDialog(false); setSignatureFile(undefined); }}>Annuler</Button>
+            <Button
+              disabled={isPending}
+              style={{ backgroundColor: "#13762C" }}
+              onClick={() => {
+                setShowSignerDialog(false);
+                setSignatureFile(undefined);
+                handleAdvance(true);
+              }}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+              Confirmer la signature
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -1,0 +1,1 @@
+ALTER TABLE "DevisRecu" ADD COLUMN "pdfUrl" TEXT;

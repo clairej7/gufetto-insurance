@@ -25,6 +25,20 @@ import {
   advanceStatut,
   logRecoSent,
 } from "@/lib/actions";
+
+async function uploadPdf(file: File, pipelineId: string): Promise<string | null> {
+  try {
+    const path = `devis/${pipelineId}/${Date.now()}-${file.name}`;
+    const formData = new FormData();
+    formData.append("file", file, file.name);
+    formData.append("path", path);
+    const res = await fetch("/api/storage/upload", { method: "POST", body: formData });
+    const json = await res.json() as { success?: boolean; path?: string };
+    return json.success ? json.path ?? null : null;
+  } catch {
+    return null;
+  }
+}
 import { toast } from "sonner";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -558,9 +572,11 @@ function RecoAndEmailSection({
     setIsGenerating(false);
   }
 
-  // Auto-génération au montage si un devis est déjà recommandé
+  // Auto-sélection si un seul devis, ou auto-génération si devis déjà recommandé
   useEffect(() => {
-    if (recommande && !isGenerating && hasAutoGenRef.current !== recommande.id) {
+    if (!recommande && allDevis.length === 1) {
+      handleSelectDevis(allDevis[0]);
+    } else if (recommande && !isGenerating && hasAutoGenRef.current !== recommande.id) {
       hasAutoGenRef.current = recommande.id;
       generateEmail(recommande);
     }
@@ -791,9 +807,16 @@ export function DevisRecusAction({
     if (!contratFile || !devis1File) return;
     setPhase("comparing");
     try {
-      const filesToExtract = [contratFile, devis1File, devis2File].filter(Boolean) as File[];
-      const results = await Promise.all(filesToExtract.map(extractPdf));
-      const [contratData, ...devisData] = results;
+      const devisFiles = [devis1File, devis2File].filter(Boolean) as File[];
+      const filesToExtract = [contratFile, ...devisFiles];
+
+      // Extraction + upload en parallèle
+      const [results, ...pdfUrls] = await Promise.all([
+        Promise.all(filesToExtract.map(extractPdf)),
+        ...devisFiles.map((f) => uploadPdf(f, pipelineId)),
+      ]);
+      const [contratData, ...devisData] = results as ExtractedData[];
+      const uploadedUrls = pdfUrls as (string | null)[];
 
       // Show results immediately from memory
       setFreshContrat(contratData);
@@ -811,7 +834,8 @@ export function DevisRecusAction({
           assureur: d.assureur ?? `Devis ${i + 1}`,
           primeTTC: d.primeTTC ?? 0,
           data: JSON.stringify(d),
-          pdfName: [devis1File, devis2File].filter(Boolean)[i]?.name ?? null,
+          pdfName: devisFiles[i]?.name ?? null,
+          pdfUrl: uploadedUrls[i] ?? null,
         });
       }
     } catch (err) {

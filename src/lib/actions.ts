@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getNextStatut, PIPELINE_STEPS } from "@/lib/pipeline";
 import { revalidatePath } from "next/cache";
 import { MOCK_USER } from "@/lib/mock-session";
+import { supabaseAdmin, STORAGE_BUCKET } from "@/lib/supabase";
 
 async function getSession() {
   return { user: MOCK_USER };
@@ -460,6 +461,7 @@ export async function addDevisRecu(
     data?: string | null;
     notes?: string | null;
     pdfName?: string | null;
+    pdfUrl?: string | null;
   }
 ) {
   await getSession();
@@ -473,6 +475,7 @@ export async function addDevisRecu(
       data: data.data ?? null,
       notes: data.notes ?? null,
       pdfName: data.pdfName ?? null,
+      pdfUrl: data.pdfUrl ?? null,
     },
   });
 
@@ -539,4 +542,12 @@ export async function setRecommandeDevis(id: string, pipelineId: string) {
 
   revalidatePath(`/pipeline/${pipelineId}`);
   return { success: true };
+}
+
+export async function getPdfSignedUrl(storagePath: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin.storage
+    .from(STORAGE_BUCKET)
+    .createSignedUrl(storagePath, 60 * 60); // 1 heure
+  if (error || !data) return null;
+  return data.signedUrl;
 }
