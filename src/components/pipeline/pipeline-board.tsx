@@ -347,70 +347,92 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
               </tr>
             </thead>
             <tbody>
-              {sorted.map((pipeline) => {
-                const days = getDaysUntilEcheance(pipeline.copro.dateEcheance);
-                const urgence = getUrgenceBadge(days);
-                const nextAction = getNextAction(pipeline, taskTemplates);
-                const badge = STATUT_BADGE[pipeline.statut];
+              {(() => {
+                const active = sorted.filter(p => p.statut !== "termine");
+                const clotures = sorted.filter(p => p.statut === "termine");
+
+                const renderRow = (pipeline: PipelineWithCopro, green = false) => {
+                  const days = getDaysUntilEcheance(pipeline.copro.dateEcheance);
+                  const urgence = getUrgenceBadge(days);
+                  const nextAction = getNextAction(pipeline, taskTemplates);
+                  const badge = STATUT_BADGE[pipeline.statut];
+                  return (
+                    <tr key={pipeline.id}
+                      className="transition-colors cursor-pointer group"
+                      style={{ borderTop: "1px solid #F7F7F8", backgroundColor: green ? "#F7FDF9" : undefined }}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = green ? "#EFFBF2" : "#F7F7F8")}
+                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = green ? "#F7FDF9" : "")}
+                      onClick={() => window.location.href = `/pipeline/${pipeline.id}`}>
+                      <td className="px-4 py-3">
+                        <div className="font-medium group-hover:underline truncate max-w-48" style={{ color: "#4E49FC" }}>
+                          {pipeline.copro.nom}
+                        </div>
+                        {pipeline.copro.adresse && (
+                          <div className="text-xs truncate max-w-48 mt-0.5" style={{ color: "#A2A1AF" }}>
+                            {pipeline.copro.adresse}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-medium", badge?.className)}>
+                          {badge?.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {nextAction && (
+                          <span className={cn(
+                            "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
+                            ACTION_BADGE[nextAction.actionType]?.className || ACTION_BADGE.other.className
+                          )}>
+                            {nextAction.shortLabel}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {pipeline.copro.assureurActuel ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: "#F7F7F8", color: "#656576" }}>
+                            {pipeline.copro.assureurActuel}
+                          </span>
+                        ) : (
+                          <span className="text-xs" style={{ color: "#A2A1AF" }}>—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm" style={{ color: "#656576" }}>
+                        {pipeline.copro.dateEcheance
+                          ? new Date(pipeline.copro.dateEcheance).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })
+                          : <span style={{ color: "#A2A1AF" }}>—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {days !== null ? (
+                          <span className="text-sm font-medium" style={{
+                            color: urgence === "overdue" ? "#CA1E12" : urgence === "urgent" ? "#955804" : urgence === "warning" ? "#955804" : "#A2A1AF"
+                          }}>
+                            {days < 0 ? `+${Math.abs(days)}j` : `J-${days}`}
+                          </span>
+                        ) : <span style={{ color: "#A2A1AF" }}>—</span>}
+                      </td>
+                    </tr>
+                  );
+                };
 
                 return (
-                  <tr key={pipeline.id}
-                    className="transition-colors cursor-pointer group"
-                    style={{ borderTop: "1px solid #F7F7F8" }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#F7F7F8")}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "")}
-                    onClick={() => window.location.href = `/pipeline/${pipeline.id}`}>
-                    <td className="px-4 py-3">
-                      <div className="font-medium group-hover:underline truncate max-w-48" style={{ color: "#4E49FC" }}>
-                        {pipeline.copro.nom}
-                      </div>
-                      {pipeline.copro.adresse && (
-                        <div className="text-xs truncate max-w-48 mt-0.5" style={{ color: "#A2A1AF" }}>
-                          {pipeline.copro.adresse}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-medium", badge?.className)}>
-                        {badge?.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {nextAction && (
-                        <span className={cn(
-                          "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
-                          ACTION_BADGE[nextAction.actionType]?.className || ACTION_BADGE.other.className
-                        )}>
-                          {nextAction.shortLabel}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {pipeline.copro.assureurActuel ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: "#F7F7F8", color: "#656576" }}>
-                          {pipeline.copro.assureurActuel}
-                        </span>
-                      ) : (
-                        <span className="text-xs" style={{ color: "#A2A1AF" }}>—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm" style={{ color: "#656576" }}>
-                      {pipeline.copro.dateEcheance
-                        ? new Date(pipeline.copro.dateEcheance).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })
-                        : <span style={{ color: "#A2A1AF" }}>—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {days !== null ? (
-                        <span className="text-sm font-medium" style={{
-                          color: urgence === "overdue" ? "#CA1E12" : urgence === "urgent" ? "#955804" : urgence === "warning" ? "#955804" : "#A2A1AF"
-                        }}>
-                          {days < 0 ? `+${Math.abs(days)}j` : `J-${days}`}
-                        </span>
-                      ) : <span style={{ color: "#A2A1AF" }}>—</span>}
-                    </td>
-                  </tr>
+                  <>
+                    {active.map(p => renderRow(p))}
+                    {clotures.length > 0 && (
+                      <>
+                        <tr>
+                          <td colSpan={6} className="px-4 pt-5 pb-2">
+                            <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#13762C" }}>
+                              🎉 Dossiers clôturés — {clotures.length}
+                            </span>
+                          </td>
+                        </tr>
+                        {clotures.map(p => renderRow(p, true))}
+                      </>
+                    )}
+                  </>
                 );
-              })}
+              })()}
             </tbody>
           </table>
         </div>
