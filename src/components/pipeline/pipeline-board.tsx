@@ -2,9 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { PIPELINE_STEPS, getDaysUntilEcheance, getUrgenceBadge } from "@/lib/pipeline";
-import { Building2, ChevronUp, ChevronDown, X } from "lucide-react";
+import { X, Search, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type PipelineWithCopro = {
@@ -33,56 +32,91 @@ type TaskTemplate = {
   order: number;
 };
 
-const ACTION_BADGE: Record<string, { className: string }> = {
-  email:     { className: "bg-[#F5F5FF] text-[#4E49FC]" },
-  document:  { className: "bg-[#F5F5FF] text-[#4E49FC]" },
-  waiting:   { className: "bg-[#F7F7F8] text-[#656576]" },
-  signature: { className: "bg-[#EFFBF2] text-[#13762C]" },
-  update:    { className: "bg-[#F2F9FD] text-[#206E92]" },
-  other:     { className: "bg-[#F7F7F8] text-[#656576]" },
-};
-
 interface PipelineBoardProps {
   pipelines: PipelineWithCopro[];
   taskTemplates: TaskTemplate[];
   gestionnaires: string[];
 }
 
-function getNextAction(pipeline: PipelineWithCopro, taskTemplates: TaskTemplate[]): { label: string; shortLabel: string; actionType: string } | null {
+type TagVariant = "primary" | "warning" | "success" | "success-filled" | "error" | "neutral" | "info";
+
+const TAG_STYLES: Record<TagVariant, { bg: string; fg: string }> = {
+  primary:          { bg: "#F5F5FF", fg: "#4E49FC" },
+  warning:          { bg: "#FFF7EB", fg: "#955804" },
+  success:          { bg: "#EFFBF2", fg: "#13762C" },
+  "success-filled": { bg: "#13762C", fg: "#ffffff" },
+  error:            { bg: "#FFF5F5", fg: "#CA1E12" },
+  neutral:          { bg: "#F7F7F8", fg: "#656576" },
+  info:             { bg: "#F2F9FD", fg: "#206E92" },
+};
+
+function Tag({ children, variant = "neutral" }: { children: React.ReactNode; variant?: TagVariant }) {
+  const s = TAG_STYLES[variant];
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      height: 22, padding: "0 8px", borderRadius: 11,
+      fontSize: 11, fontWeight: 500, lineHeight: "1",
+      letterSpacing: "-0.08px",
+      backgroundColor: s.bg, color: s.fg,
+      whiteSpace: "nowrap",
+      flexShrink: 0,
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "currentColor", opacity: 0.9, flexShrink: 0 }} />
+      {children}
+    </span>
+  );
+}
+
+const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
+  identifie:      { label: "Non démarré",    variant: "neutral" },
+  rs_en_cours:    { label: "RS en cours",    variant: "primary" },
+  devis_demandes: { label: "Devis demandés", variant: "primary" },
+  devis_recus:    { label: "Devis partagés", variant: "primary" },
+  envoye_cs:      { label: "Devis validé",   variant: "warning" },
+  contrat_signe:  { label: "Contrat signé",  variant: "success-filled" },
+  termine:        { label: "Clôturé",        variant: "success" },
+  abandonne:      { label: "Abandonné",      variant: "error" },
+  refuse:         { label: "Refus client",   variant: "error" },
+  non_assurable:  { label: "Non assurable",  variant: "error" },
+};
+
+const ACTION_VARIANT: Record<string, TagVariant> = {
+  email:     "primary",
+  document:  "primary",
+  signature: "success",
+  update:    "info",
+  waiting:   "neutral",
+  other:     "neutral",
+};
+
+function getUrgencyBorderColor(days: number | null): string {
+  if (days === null) return "#E8E8EC";
+  if (days < 0 || days <= 60) return "#CA1E12";
+  if (days <= 120) return "#955804";
+  return "#E8E8EC";
+}
+
+function getNextAction(pipeline: PipelineWithCopro, taskTemplates: TaskTemplate[]) {
   const completedIds = new Set(pipeline.taskCompletions.map((tc) => tc.taskId));
-  const stepTasks = taskTemplates
-    .filter((t) => t.statut === pipeline.statut)
-    .sort((a, b) => a.order - b.order);
+  const stepTasks = taskTemplates.filter((t) => t.statut === pipeline.statut).sort((a, b) => a.order - b.order);
   const nextTask = stepTasks.find((t) => !completedIds.has(t.id));
-  if (nextTask) return {
-    label: nextTask.label,
-    shortLabel: nextTask.shortLabel || nextTask.label,
-    actionType: nextTask.actionType || "other",
-  };
+  if (nextTask) return { shortLabel: nextTask.shortLabel || nextTask.label, actionType: nextTask.actionType || "other" };
   const step = PIPELINE_STEPS.find((s) => s.statut === pipeline.statut);
   const idx = PIPELINE_STEPS.indexOf(step!);
   const nextStep = PIPELINE_STEPS[idx + 1];
-  return nextStep ? { label: `Passer à : ${nextStep.label}`, shortLabel: `→ ${nextStep.label}`, actionType: "other" } : null;
+  return nextStep ? { shortLabel: `→ ${nextStep.label}`, actionType: "other" } : null;
 }
 
-const STATUT_BADGE: Record<string, { label: string; className: string }> = {
-  identifie:     { label: "Aucune action",       className: "bg-[#F7F7F8] text-[#656576]" },
-  rs_en_cours:   { label: "RS en cours",         className: "bg-[#F5F5FF] text-[#4E49FC]" },
-  devis_demandes:{ label: "Devis demandés",      className: "bg-[#F5F5FF] text-[#4E49FC]" },
-  devis_recus:   { label: "Devis partagés",      className: "bg-[#F5F5FF] text-[#4E49FC]" },
-  envoye_cs:     { label: "Devis validé",        className: "bg-[#FFF7EB] text-[#955804]" },
-  contrat_signe: { label: "Contrat signé",       className: "bg-[#13762C] text-white" },
-  termine:       { label: "Duomo OK",            className: "bg-[#EFFBF2] text-[#13762C]" },
-  abandonne:     { label: "Abandonné",           className: "bg-[#FFF5F5] text-[#CA1E12]" },
-  refuse:        { label: "Refus client",        className: "bg-[#FFF5F5] text-[#CA1E12]" },
-  non_assurable: { label: "Non assurable",       className: "bg-[#FFF5F5] text-[#CA1E12]" },
-};
+function formatGestionnaire(email: string): string {
+  const prenom = email.split(".")[0];
+  const nom = email.split(".")[1]?.split("@")[0];
+  return prenom && nom
+    ? `${prenom.charAt(0).toUpperCase() + prenom.slice(1)} ${nom.charAt(0).toUpperCase() + nom.slice(1)}`
+    : email.split("@")[0];
+}
 
-function GestionnaireCombobox({
-  gestionnaires,
-  value,
-  onChange,
-}: {
+function GestionnaireCombobox({ gestionnaires, value, onChange }: {
   gestionnaires: string[];
   value: string;
   onChange: (v: string) => void;
@@ -90,66 +124,44 @@ function GestionnaireCombobox({
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
   const selected = value !== "all" ? value : null;
-  const displayName = selected ? formatGestionnaire(selected) : "";
-
   const filtered = gestionnaires.filter((g) => {
     const q = query.toLowerCase();
     return formatGestionnaire(g).toLowerCase().includes(q) || g.toLowerCase().includes(q);
   });
 
   useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-        setQuery("");
-      }
+    function onOut(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setQuery(""); }
     }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
+    document.addEventListener("mousedown", onOut);
+    return () => document.removeEventListener("mousedown", onOut);
   }, []);
 
-  function select(g: string) {
-    onChange(g);
-    setOpen(false);
-    setQuery("");
-  }
-
-  function clear() {
-    onChange("all");
-    setQuery("");
-    setOpen(false);
-  }
-
   return (
-    <div ref={ref} className="relative">
-      <div className="flex items-center border rounded-lg bg-white overflow-hidden focus-within:ring-2" style={{ borderColor: "#E8E8EC", "--tw-ring-color": "#8784FD" } as React.CSSProperties}>
+    <div ref={ref} style={{ position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "center", border: "1px solid #E8E8EC", borderRadius: 4, background: "#fff", height: 32, overflow: "hidden" }}>
         <input
           type="text"
           placeholder="Gestionnaire…"
-          value={open ? query : displayName}
+          value={open ? query : (selected ? formatGestionnaire(selected) : "")}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
-          className="text-sm px-3 py-1.5 bg-transparent outline-none w-44"
-          style={{ color: "#26262C" }}
+          style={{ fontSize: 13, padding: "0 8px", background: "transparent", outline: "none", border: "none", width: 140, color: "#26262C" }}
         />
         {selected && (
-          <button onClick={clear} className="pr-2" style={{ color: "#A2A1AF" }}>
-            <X className="h-3.5 w-3.5" />
+          <button onClick={() => { onChange("all"); setQuery(""); }} style={{ paddingRight: 8, color: "#A2A1AF", background: "none", border: "none", cursor: "pointer", display: "flex" }}>
+            <X size={12} />
           </button>
         )}
       </div>
       {open && filtered.length > 0 && (
-        <div className="absolute z-20 top-full mt-1 left-0 w-56 bg-white rounded-lg shadow-lg py-1 max-h-52 overflow-y-auto border" style={{ borderColor: "#E8E8EC" }}>
+        <div style={{ position: "absolute", zIndex: 20, top: "100%", marginTop: 2, left: 0, minWidth: 200, background: "#fff", borderRadius: 6, boxShadow: "0 8px 24px rgba(13,22,63,.12)", border: "1px solid #E8E8EC", padding: "4px 0", maxHeight: 200, overflowY: "auto" }}>
           {filtered.map((g) => (
             <button
               key={g}
-              onMouseDown={(e) => { e.preventDefault(); select(g); }}
-              className={cn("w-full text-left px-3 py-2 text-sm transition-colors")}
-              style={value === g ? { backgroundColor: "#F5F5FF", color: "#4E49FC", fontWeight: 500 } : { color: "#26262C" }}
-              onMouseEnter={e => { if (value !== g) (e.target as HTMLElement).style.backgroundColor = "#F7F7F8"; }}
-              onMouseLeave={e => { if (value !== g) (e.target as HTMLElement).style.backgroundColor = ""; }}
+              onMouseDown={(e) => { e.preventDefault(); onChange(g); setOpen(false); setQuery(""); }}
+              style={{ width: "100%", textAlign: "left", padding: "6px 12px", fontSize: 13, color: value === g ? "#4E49FC" : "#26262C", background: value === g ? "#F5F5FF" : "transparent", border: "none", cursor: "pointer" }}
             >
               {formatGestionnaire(g)}
             </button>
@@ -160,35 +172,134 @@ function GestionnaireCombobox({
   );
 }
 
+const selectStyle: React.CSSProperties = {
+  fontSize: 13, height: 32, padding: "0 8px",
+  border: "1px solid #E8E8EC", borderRadius: 4,
+  background: "#fff", color: "#26262C",
+  outline: "none", cursor: "pointer",
+};
+
+const thStyle: React.CSSProperties = {
+  background: "#FBFBFB",
+  fontFamily: "ui-monospace, Menlo, monospace",
+  fontSize: 11,
+  fontWeight: 600,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  color: "#656576",
+  textAlign: "left",
+  padding: "0 16px",
+  height: 44,
+  borderBottom: "1px solid #E8E8EC",
+  whiteSpace: "nowrap",
+  userSelect: "none",
+};
+
 type SortKey = "nom" | "echeance" | "statut" | "assureur";
 
-function formatGestionnaire(email: string): string {
-  const prenom = email.split(".")[0];
-  const nom = email.split(".")[1]?.split("@")[0];
-  return prenom && nom
-    ? `${prenom.charAt(0).toUpperCase() + prenom.slice(1)} ${nom.charAt(0).toUpperCase() + nom.slice(1)}`
-    : email.split("@")[0];
+function SortIndicator({ active, asc }: { active: boolean; asc: boolean }) {
+  if (!active) return null;
+  return asc
+    ? <ChevronUp size={11} style={{ display: "inline", marginLeft: 2, verticalAlign: "middle" }} />
+    : <ChevronDown size={11} style={{ display: "inline", marginLeft: 2, verticalAlign: "middle" }} />;
+}
+
+function PipelineRow({ pipeline, taskTemplates, cloture = false }: {
+  pipeline: PipelineWithCopro;
+  taskTemplates: TaskTemplate[];
+  cloture?: boolean;
+}) {
+  const days = getDaysUntilEcheance(pipeline.copro.dateEcheance);
+  const borderColor = getUrgencyBorderColor(days);
+  const nextAction = getNextAction(pipeline, taskTemplates);
+  const statutTag = STATUT_TAG[pipeline.statut];
+  const actionVariant: TagVariant = ACTION_VARIANT[nextAction?.actionType ?? "other"] ?? "neutral";
+  const isLost = ["abandonne", "refuse", "non_assurable"].includes(pipeline.statut);
+
+  function handleClick() { window.location.href = `/pipeline/${pipeline.id}`; }
+
+  return (
+    <tr
+      style={{ borderBottom: "1px solid #F3F3F5", cursor: "pointer", background: cloture ? "#F7FDF9" : undefined }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = cloture ? "#EFFBF2" : "#FBFBFB")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = cloture ? "#F7FDF9" : "")}
+      onClick={handleClick}
+    >
+      {/* Copropriété — left border couleur urgence */}
+      <td style={{ padding: "0 16px 0 13px", height: 48, borderLeft: `3px solid ${isLost ? "#CA1E12" : borderColor}`, verticalAlign: "middle", minWidth: 180 }}>
+        <div>
+          <span style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", display: "block", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {pipeline.copro.nom}
+          </span>
+          {pipeline.copro.adresse && (
+            <span style={{ fontSize: 12, color: "#A2A1AF", display: "block", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
+              {pipeline.copro.adresse}
+            </span>
+          )}
+        </div>
+      </td>
+
+      {/* Statut */}
+      <td style={{ padding: "0 16px", height: 48, verticalAlign: "middle" }}>
+        {statutTag && <Tag variant={statutTag.variant}>{statutTag.label}</Tag>}
+      </td>
+
+      {/* Prochaine action */}
+      <td style={{ padding: "0 16px", height: 48, verticalAlign: "middle" }}>
+        {nextAction && !isLost && (
+          <Tag variant={actionVariant}>{nextAction.shortLabel}</Tag>
+        )}
+      </td>
+
+      {/* Assureur */}
+      <td style={{ padding: "0 16px", height: 48, verticalAlign: "middle" }}>
+        {pipeline.copro.assureurActuel
+          ? <span style={{ fontSize: 13, color: "#656576" }}>{pipeline.copro.assureurActuel}</span>
+          : <span style={{ color: "#A2A1AF" }}>—</span>}
+      </td>
+
+      {/* Échéance */}
+      <td style={{ padding: "0 16px", height: 48, verticalAlign: "middle", textAlign: "right" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+          <span style={{ fontSize: 13, color: "#656576", fontVariantNumeric: "tabular-nums" }}>
+            {pipeline.copro.dateEcheance
+              ? new Date(pipeline.copro.dateEcheance).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
+              : <span style={{ color: "#A2A1AF" }}>—</span>}
+          </span>
+          {days !== null && (
+            <span style={{ fontSize: 11, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: borderColor === "#E8E8EC" ? "#A2A1AF" : borderColor }}>
+              {days < 0 ? `+${Math.abs(days)} j` : `J-${days}`}
+            </span>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
 }
 
 export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: PipelineBoardProps) {
   const [sortKey, setSortKey] = useState<SortKey>("echeance");
   const [sortAsc, setSortAsc] = useState(true);
-  const [view, setView] = useState<"actions" | "kanban">("actions");
-  const [selectedGestionnaire, setSelectedGestionnaire] = useState<string>("all");
-  const [gestionnaireQuery, setGestionnaireQuery] = useState("");
-  const [selectedStatut, setSelectedStatut] = useState<string>("all");
-  const [selectedEcheance, setSelectedEcheance] = useState<string>("all");
-  const [selectedAssureur, setSelectedAssureur] = useState<string>("all");
+  const [view, setView] = useState<"liste" | "kanban">("liste");
+  const [selectedGestionnaire, setSelectedGestionnaire] = useState("all");
+  const [selectedStatut, setSelectedStatut] = useState("all");
+  const [selectedEcheance, setSelectedEcheance] = useState("all");
+  const [selectedAssureur, setSelectedAssureur] = useState("all");
+  const [search, setSearch] = useState("");
 
   const assureurs = [...new Set(pipelines.map((p) => p.copro.assureurActuel).filter(Boolean) as string[])].sort();
+  const hasActiveFilters = selectedGestionnaire !== "all" || selectedStatut !== "all" || selectedEcheance !== "all" || selectedAssureur !== "all" || search !== "";
 
-  const hasActiveFilters = selectedGestionnaire !== "all" || selectedStatut !== "all" || selectedEcheance !== "all" || selectedAssureur !== "all";
+  function resetFilters() {
+    setSelectedGestionnaire("all"); setSelectedStatut("all");
+    setSelectedEcheance("all"); setSelectedAssureur("all"); setSearch("");
+  }
 
   const filtered = pipelines.filter((p) => {
     if (selectedGestionnaire !== "all" && p.copro.gestionnaireEmail !== selectedGestionnaire) return false;
     if (selectedStatut !== "all" && p.statut !== selectedStatut) return false;
     if (selectedAssureur !== "all" && p.copro.assureurActuel !== selectedAssureur) return false;
-
+    if (search && !p.copro.nom.toLowerCase().includes(search.toLowerCase())) return false;
     if (selectedEcheance !== "all") {
       const days = getDaysUntilEcheance(p.copro.dateEcheance);
       if (selectedEcheance === "overdue" && (days === null || days >= 0)) return false;
@@ -205,285 +316,236 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
   }
 
   const sorted = [...filtered].sort((a, b) => {
-    let va: string | number = 0;
-    let vb: string | number = 0;
+    let va: string | number = 0, vb: string | number = 0;
     if (sortKey === "echeance") {
       va = a.copro.dateEcheance ? new Date(a.copro.dateEcheance).getTime() : Infinity;
       vb = b.copro.dateEcheance ? new Date(b.copro.dateEcheance).getTime() : Infinity;
     } else if (sortKey === "nom") {
-      va = a.copro.nom.toLowerCase();
-      vb = b.copro.nom.toLowerCase();
+      va = a.copro.nom.toLowerCase(); vb = b.copro.nom.toLowerCase();
     } else if (sortKey === "statut") {
-      va = a.statut;
-      vb = b.statut;
+      va = a.statut; vb = b.statut;
     } else if (sortKey === "assureur") {
-      va = a.copro.assureurActuel?.toLowerCase() || "";
-      vb = b.copro.assureurActuel?.toLowerCase() || "";
+      va = a.copro.assureurActuel?.toLowerCase() ?? ""; vb = b.copro.assureurActuel?.toLowerCase() ?? "";
     }
     if (va < vb) return sortAsc ? -1 : 1;
     if (va > vb) return sortAsc ? 1 : -1;
     return 0;
   });
 
-  const urgent = filtered.filter((p) => {
-    const d = getDaysUntilEcheance(p.copro.dateEcheance);
-    return d !== null && d <= 60;
-  }).length;
+  const activePipelines = pipelines.filter(p => !["termine", "abandonne", "refuse", "non_assurable"].includes(p.statut));
+  const urgent = activePipelines.filter(p => { const d = getDaysUntilEcheance(p.copro.dateEcheance); return d !== null && d <= 60; }).length;
+  const dealsGagnes = pipelines.filter(p => p.statut === "contrat_signe" || p.statut === "termine").length;
 
-  const dealsGagnes = filtered.filter((p) => p.statut === "contrat_signe" || p.statut === "termine").length;
+  const active = sorted.filter(p => p.statut !== "termine");
+  const clotures = sorted.filter(p => p.statut === "termine");
 
-  function SortIcon({ k }: { k: SortKey }) {
-    if (sortKey !== k) return null;
-    return sortAsc ? <ChevronUp className="h-3 w-3 inline ml-0.5" /> : <ChevronDown className="h-3 w-3 inline ml-0.5" />;
-  }
-
-  return (
-    <div>
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-2xl p-4" style={{ border: "1px solid #E8E8EC" }}>
-          <div className="text-2xl font-bold" style={{ color: "#26262C" }}>{pipelines.length}</div>
-          <div className="text-sm mt-0.5" style={{ color: "#656576" }}>Copros en cours</div>
-        </div>
-        <div className="bg-white rounded-2xl p-4" style={{ border: "1px solid #E8E8EC" }}>
-          <div className="text-2xl font-bold" style={{ color: "#CA1E12" }}>{urgent}</div>
-          <div className="text-sm mt-0.5" style={{ color: "#656576" }}>Échéance &lt; 2 mois</div>
-        </div>
-        <div className="bg-white rounded-2xl p-4" style={{ border: "1px solid #E8E8EC" }}>
-          <div className="text-2xl font-bold" style={{ color: "#13762C" }}>{dealsGagnes}</div>
-          <div className="text-sm mt-0.5" style={{ color: "#656576" }}>Deals gagnés</div>
-        </div>
-      </div>
-
-      {/* Filtres */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <GestionnaireCombobox
-          gestionnaires={gestionnaires}
-          value={selectedGestionnaire}
-          onChange={setSelectedGestionnaire}
-        />
-        <select
-          value={selectedStatut}
-          onChange={(e) => setSelectedStatut(e.target.value)}
-          className="text-sm rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2" style={{ border: "1px solid #E8E8EC", color: "#26262C" } as React.CSSProperties}
-        >
-          <option value="all">Toutes les étapes</option>
-          {PIPELINE_STEPS.map((s) => (
-            <option key={s.statut} value={s.statut}>{s.label}</option>
-          ))}
-        </select>
-        <select
-          value={selectedEcheance}
-          onChange={(e) => setSelectedEcheance(e.target.value)}
-          className="text-sm rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2" style={{ border: "1px solid #E8E8EC", color: "#26262C" } as React.CSSProperties}
-        >
-          <option value="all">Toutes les échéances</option>
-          <option value="overdue">Dépassées</option>
-          <option value="urgent">{"< 2 mois"}</option>
-          <option value="warning">2 à 4 mois</option>
-          <option value="ok">{"> 4 mois"}</option>
-        </select>
-        <select
-          value={selectedAssureur}
-          onChange={(e) => setSelectedAssureur(e.target.value)}
-          className="text-sm rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2" style={{ border: "1px solid #E8E8EC", color: "#26262C" } as React.CSSProperties}
-        >
-          <option value="all">Tous les assureurs</option>
-          {assureurs.map((a) => (
-            <option key={a} value={a}>{a}</option>
-          ))}
-        </select>
-        {hasActiveFilters && (
+  // Toolbar shared between views
+  const toolbar = (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid #E8E8EC", flexWrap: "wrap", background: "#fff" }}>
+      {/* View toggle */}
+      <div style={{ display: "flex", gap: 2, background: "#F7F7F8", borderRadius: 6, padding: 2 }}>
+        {(["liste", "kanban"] as const).map((v) => (
           <button
-            onClick={() => { setSelectedGestionnaire("all"); setSelectedStatut("all"); setSelectedEcheance("all"); setSelectedAssureur("all"); }}
-            className="text-xs underline" style={{ color: "#A2A1AF" }}
+            key={v}
+            onClick={() => setView(v)}
+            style={{
+              padding: "4px 12px", borderRadius: 4, fontSize: 12, fontWeight: 500,
+              cursor: "pointer", border: "none", transition: "all 120ms",
+              background: view === v ? "#fff" : "transparent",
+              color: view === v ? "#26262C" : "#656576",
+              boxShadow: view === v ? "0 1px 2px rgba(13,22,63,.06)" : "none",
+            }}
           >
-            Réinitialiser les filtres
-          </button>
-        )}
-        <span className="text-xs ml-auto" style={{ color: "#A2A1AF" }}>{filtered.length} résultat{filtered.length !== 1 ? "s" : ""}</span>
-      </div>
-
-      {/* Toggle */}
-      <div className="flex gap-2 mb-4">
-        {(["actions", "kanban"] as const).map((v) => (
-          <button key={v} onClick={() => setView(v)}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-            style={view === v ? { backgroundColor: "#26262C", color: "#FFFFFF" } : { color: "#656576" }}>
-            {v === "actions" ? "Actions à faire" : "Par étape"}
+            {v === "liste" ? "Liste" : "Par étape"}
           </button>
         ))}
       </div>
 
-      {pipelines.length === 0 ? (
-        <div className="text-center py-20" style={{ color: "#A2A1AF" }}>
-          <Building2 className="h-10 w-10 mx-auto mb-3 opacity-20" />
-          <p className="text-sm">Aucune copropriété dans votre pipeline.</p>
-          <p className="text-xs mt-1">Les données sont synchronisées chaque nuit depuis Omni.</p>
-        </div>
-      ) : view === "actions" ? (
-        <div className="bg-white rounded-2xl overflow-hidden" style={{ border: "1px solid #E8E8EC" }}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ borderBottom: "1px solid #E8E8EC", backgroundColor: "#F7F7F8" }}>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide cursor-pointer select-none font-medium" style={{ color: "#656576" }} onClick={() => toggleSort("nom")}>
-                  Copropriété <SortIcon k="nom" />
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide cursor-pointer select-none font-medium" style={{ color: "#656576" }} onClick={() => toggleSort("statut")}>
-                  Étape <SortIcon k="statut" />
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide font-medium" style={{ color: "#656576" }}>
-                  Prochaine action
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wide cursor-pointer select-none font-medium" style={{ color: "#656576" }} onClick={() => toggleSort("assureur")}>
-                  Assureur <SortIcon k="assureur" />
-                </th>
-                <th className="text-right px-4 py-3 text-xs uppercase tracking-wide cursor-pointer select-none font-medium" style={{ color: "#656576" }} onClick={() => toggleSort("echeance")}>
-                  Date échéance <SortIcon k="echeance" />
-                </th>
-                <th className="text-right px-4 py-3 text-xs uppercase tracking-wide font-medium" style={{ color: "#656576" }}>
-                  J-
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {(() => {
-                const active = sorted.filter(p => p.statut !== "termine");
-                const clotures = sorted.filter(p => p.statut === "termine");
+      <div style={{ flex: 1 }} />
 
-                const renderRow = (pipeline: PipelineWithCopro, green = false) => {
-                  const days = getDaysUntilEcheance(pipeline.copro.dateEcheance);
-                  const urgence = getUrgenceBadge(days);
-                  const nextAction = getNextAction(pipeline, taskTemplates);
-                  const badge = STATUT_BADGE[pipeline.statut];
-                  return (
-                    <tr key={pipeline.id}
-                      className="transition-colors cursor-pointer group"
-                      style={{ borderTop: "1px solid #F7F7F8", backgroundColor: green ? "#F7FDF9" : undefined }}
-                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = green ? "#EFFBF2" : "#F7F7F8")}
-                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = green ? "#F7FDF9" : "")}
-                      onClick={() => window.location.href = `/pipeline/${pipeline.id}`}>
-                      <td className="px-4 py-3">
-                        <div className="font-medium group-hover:underline truncate max-w-48" style={{ color: "#4E49FC" }}>
-                          {pipeline.copro.nom}
-                        </div>
-                        {pipeline.copro.adresse && (
-                          <div className="text-xs truncate max-w-48 mt-0.5" style={{ color: "#A2A1AF" }}>
-                            {pipeline.copro.adresse}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-medium", badge?.className)}>
-                          {badge?.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {nextAction && (
-                          <span className={cn(
-                            "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
-                            ACTION_BADGE[nextAction.actionType]?.className || ACTION_BADGE.other.className
-                          )}>
-                            {nextAction.shortLabel}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {pipeline.copro.assureurActuel ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: "#F7F7F8", color: "#656576" }}>
-                            {pipeline.copro.assureurActuel}
-                          </span>
-                        ) : (
-                          <span className="text-xs" style={{ color: "#A2A1AF" }}>—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm" style={{ color: "#656576" }}>
-                        {pipeline.copro.dateEcheance
-                          ? new Date(pipeline.copro.dateEcheance).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })
-                          : <span style={{ color: "#A2A1AF" }}>—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {days !== null ? (
-                          <span className="text-sm font-medium" style={{
-                            color: urgence === "overdue" ? "#CA1E12" : urgence === "urgent" ? "#955804" : urgence === "warning" ? "#955804" : "#A2A1AF"
-                          }}>
-                            {days < 0 ? `+${Math.abs(days)}j` : `J-${days}`}
-                          </span>
-                        ) : <span style={{ color: "#A2A1AF" }}>—</span>}
-                      </td>
-                    </tr>
-                  );
-                };
+      {/* Filters */}
+      <GestionnaireCombobox gestionnaires={gestionnaires} value={selectedGestionnaire} onChange={setSelectedGestionnaire} />
+      <select value={selectedStatut} onChange={(e) => setSelectedStatut(e.target.value)} style={selectStyle}>
+        <option value="all">Toutes les étapes</option>
+        {PIPELINE_STEPS.map((s) => <option key={s.statut} value={s.statut}>{s.label}</option>)}
+      </select>
+      <select value={selectedEcheance} onChange={(e) => setSelectedEcheance(e.target.value)} style={selectStyle}>
+        <option value="all">Toutes les échéances</option>
+        <option value="overdue">Dépassées</option>
+        <option value="urgent">{"< 2 mois"}</option>
+        <option value="warning">2 à 4 mois</option>
+        <option value="ok">{"> 4 mois"}</option>
+      </select>
+      <select value={selectedAssureur} onChange={(e) => setSelectedAssureur(e.target.value)} style={selectStyle}>
+        <option value="all">Tous les assureurs</option>
+        {assureurs.map((a) => <option key={a} value={a}>{a}</option>)}
+      </select>
 
-                return (
-                  <>
-                    {active.map(p => renderRow(p))}
-                    {clotures.length > 0 && (
-                      <>
-                        <tr>
-                          <td colSpan={6} className="px-4 pt-5 pb-2">
-                            <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#13762C" }}>
-                              🎉 Dossiers clôturés — {clotures.length}
-                            </span>
-                          </td>
-                        </tr>
-                        {clotures.map(p => renderRow(p, true))}
-                      </>
-                    )}
-                  </>
-                );
-              })()}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        // Kanban
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {PIPELINE_STEPS.filter((s) => s.statut !== "termine").map((step) => {
-            const items = filtered.filter((p) => p.statut === step.statut);
-            return (
-              <div key={step.statut} className="min-w-52 flex-shrink-0">
-                <div className="flex items-center gap-2 mb-2 px-1">
-                  <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#656576" }}>{step.shortLabel}</span>
-                  {items.length > 0 && <span className="text-xs rounded-full px-1.5 py-0.5" style={{ backgroundColor: "#E8E8EC", color: "#656576" }}>{items.length}</span>}
-                </div>
-                <div className="space-y-2">
-                  {items.map((p) => {
-                    const days = getDaysUntilEcheance(p.copro.dateEcheance);
-                    const urgence = getUrgenceBadge(days);
-                    const nextAction = getNextAction(p, taskTemplates);
-                    const leftColor = urgence === "overdue" ? "#CA1E12" : urgence === "urgent" ? "#955804" : urgence === "warning" ? "#955804" : "#E8E8EC";
-                    return (
-                      <Link key={p.id} href={`/pipeline/${p.id}`}>
-                        <div className="bg-white rounded-xl p-3 hover:shadow-sm transition-shadow cursor-pointer border-l-4"
-                          style={{ border: `1px solid #E8E8EC`, borderLeft: `4px solid ${leftColor}` }}>
-                          <div className="font-medium text-sm truncate" style={{ color: "#4E49FC" }}>{p.copro.nom}</div>
-                          {nextAction && (
-                            <span className={cn(
-                              "inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium mt-1",
-                              ACTION_BADGE[nextAction.actionType]?.className || ACTION_BADGE.other.className
-                            )}>
-                              {nextAction.shortLabel}
-                            </span>
-                          )}
-                          {days !== null && (
-                            <div className="text-xs font-medium mt-1" style={{ color: leftColor === "#E8E8EC" ? "#A2A1AF" : leftColor }}>
-                              {days < 0 ? `+${Math.abs(days)}j` : `J-${days}`}
-                            </div>
-                          )}
-                        </div>
-                      </Link>
-                    );
-                  })}
-                  {items.length === 0 && (
-                    <div className="rounded-xl p-3 text-center text-xs border border-dashed" style={{ backgroundColor: "#F7F7F8", borderColor: "#E8E8EC", color: "#A2A1AF" }}>Vide</div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      {/* Search */}
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 10px", border: "1px solid #E8E8EC", borderRadius: 4, background: "#fff", minWidth: 180 }}>
+        <Search size={13} color="#A2A1AF" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Rechercher…"
+          style={{ fontSize: 13, background: "transparent", outline: "none", border: "none", flex: 1, color: "#26262C", minWidth: 0 }}
+        />
+        {search && (
+          <button onClick={() => setSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#A2A1AF", display: "flex" }}>
+            <X size={12} />
+          </button>
+        )}
+      </div>
+
+      {hasActiveFilters && (
+        <button onClick={resetFilters} style={{ fontSize: 12, color: "#A2A1AF", textDecoration: "underline", border: "none", background: "none", cursor: "pointer", whiteSpace: "nowrap" }}>
+          Réinitialiser
+        </button>
       )}
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+        {[
+          { label: "Dossiers actifs", value: activePipelines.length, color: undefined },
+          { label: "Échéance < 2 mois", value: urgent, color: urgent > 0 ? "#CA1E12" : undefined },
+          { label: "Deals gagnés", value: dealsGagnes, color: dealsGagnes > 0 ? "#13762C" : undefined },
+        ].map(({ label, value, color }) => (
+          <div key={label} style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "16px 20px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
+            <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: "-0.5px", color: color ?? "#26262C", lineHeight: 1 }}>{value}</div>
+            <div style={{ fontSize: 13, color: "#656576", marginTop: 4 }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Table / Kanban */}
+      <div style={{ border: "1px solid #E8E8EC", borderRadius: 8, background: "#fff", overflow: "hidden", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
+        {toolbar}
+
+        {view === "liste" ? (
+          filtered.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "60px 24px", color: "#A2A1AF" }}>
+              <div style={{ fontSize: 13 }}>Aucun dossier ne correspond aux filtres.</div>
+              {hasActiveFilters && (
+                <button onClick={resetFilters} style={{ marginTop: 8, fontSize: 12, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                  Réinitialiser les filtres
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Title row inside table */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px 8px", borderBottom: "1px solid #F3F3F5" }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "#26262C" }}>Mes dossiers</span>
+                <span style={{ fontSize: 12, fontWeight: 500, color: "#656576", padding: "2px 7px", background: "#F7F7F8", borderRadius: 10, fontVariantNumeric: "tabular-nums" }}>
+                  {active.length}
+                </span>
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th
+                      onClick={() => toggleSort("nom")}
+                      style={{ ...thStyle, cursor: "pointer", paddingLeft: 13 }}
+                    >
+                      Copropriété <SortIndicator active={sortKey === "nom"} asc={sortAsc} />
+                    </th>
+                    <th onClick={() => toggleSort("statut")} style={{ ...thStyle, cursor: "pointer" }}>
+                      Statut <SortIndicator active={sortKey === "statut"} asc={sortAsc} />
+                    </th>
+                    <th style={thStyle}>Prochaine action</th>
+                    <th onClick={() => toggleSort("assureur")} style={{ ...thStyle, cursor: "pointer" }}>
+                      Assureur <SortIndicator active={sortKey === "assureur"} asc={sortAsc} />
+                    </th>
+                    <th onClick={() => toggleSort("echeance")} style={{ ...thStyle, textAlign: "right", cursor: "pointer" }}>
+                      Échéance <SortIndicator active={sortKey === "echeance"} asc={sortAsc} />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {active.map((p) => (
+                    <PipelineRow key={p.id} pipeline={p} taskTemplates={taskTemplates} />
+                  ))}
+                  {clotures.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={5} style={{ padding: "10px 16px 8px", background: "#F7F7F8", borderTop: "2px solid #E8E8EC" }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "#13762C" }}>
+                            Dossiers clôturés — {clotures.length}
+                          </span>
+                        </td>
+                      </tr>
+                      {clotures.map((p) => (
+                        <PipelineRow key={p.id} pipeline={p} taskTemplates={taskTemplates} cloture />
+                      ))}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </>
+          )
+        ) : (
+          /* Kanban */
+          <div style={{ display: "flex", gap: 16, overflowX: "auto", padding: 16 }}>
+            {PIPELINE_STEPS.filter((s) => s.statut !== "termine").map((step) => {
+              const items = filtered.filter((p) => p.statut === step.statut);
+              return (
+                <div key={step.statut} style={{ minWidth: 200, flexShrink: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#656576" }}>
+                      {step.shortLabel}
+                    </span>
+                    {items.length > 0 && (
+                      <span style={{ fontSize: 11, fontWeight: 500, padding: "1px 6px", background: "#E8E8EC", borderRadius: 10, color: "#656576", fontVariantNumeric: "tabular-nums" }}>
+                        {items.length}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {items.map((p) => {
+                      const days = getDaysUntilEcheance(p.copro.dateEcheance);
+                      const borderColor = getUrgencyBorderColor(days);
+                      const nextAction = getNextAction(p, taskTemplates);
+                      return (
+                        <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
+                          <div style={{
+                            background: "#fff", borderRadius: 6, padding: "10px 12px",
+                            border: "1px solid #E8E8EC", borderLeft: `3px solid ${borderColor}`,
+                            cursor: "pointer", transition: "box-shadow 120ms",
+                          }}
+                            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
+                            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
+                          >
+                            <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.copro.nom}</div>
+                            {nextAction && (
+                              <div style={{ marginTop: 6 }}>
+                                <Tag variant={ACTION_VARIANT[nextAction.actionType] ?? "neutral"}>{nextAction.shortLabel}</Tag>
+                              </div>
+                            )}
+                            {days !== null && (
+                              <div style={{ marginTop: 6, fontSize: 11, fontWeight: 600, color: borderColor === "#E8E8EC" ? "#A2A1AF" : borderColor }}>
+                                {days < 0 ? `+${Math.abs(days)} j` : `J-${days}`}
+                              </div>
+                            )}
+                          </div>
+                        </Link>
+                      );
+                    })}
+                    {items.length === 0 && (
+                      <div style={{ borderRadius: 6, padding: 12, textAlign: "center", fontSize: 12, border: "1px dashed #E8E8EC", background: "#F7F7F8", color: "#A2A1AF" }}>
+                        Vide
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

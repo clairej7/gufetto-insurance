@@ -732,6 +732,71 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
             return isTerminal ? (
               pipeline.statut === "termine" ? (
               <div className="space-y-4">
+                {/* Récapitulatif du dossier */}
+                {(() => {
+                  const notifSent = pipeline.events.find(e => {
+                    const m = e.metadata as Record<string, unknown> | null;
+                    return m?.insureurType === "insureur_sent";
+                  });
+                  const resiliSent = pipeline.events.find(e => {
+                    const m = e.metadata as Record<string, unknown> | null;
+                    return m?.resiliationType === "resiliation_sent";
+                  });
+                  const fmtDate = (d: Date) => new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+                  return (
+                    <Card className="p-5 space-y-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#A2A1AF" }}>Récapitulatif du dossier</p>
+                      <div className="space-y-2">
+                        {/* Contrat signé */}
+                        <div className="flex items-start gap-2.5">
+                          <CheckCircle2 className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: "#13762C" }} />
+                          <div>
+                            <p className="text-sm font-medium" style={{ color: "#26262C" }}>Contrat signé</p>
+                            {pipeline.devisRecus.find(d => d.recommande) && (
+                              <p className="text-xs mt-0.5" style={{ color: "#A2A1AF" }}>
+                                {pipeline.devisRecus.find(d => d.recommande)?.assureur}
+                                {pipeline.nouveauNumeroContrat && ` · n° ${pipeline.nouveauNumeroContrat}`}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {/* Notification assureur */}
+                        <div className="flex items-start gap-2.5">
+                          {notifSent ? (
+                            <CheckCircle2 className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: "#13762C" }} />
+                          ) : (
+                            <div className="h-4 w-4 flex-shrink-0 mt-0.5 rounded-full border-2 flex-shrink-0" style={{ borderColor: "#D0CFDB" }} />
+                          )}
+                          <div>
+                            <p className="text-sm font-medium" style={{ color: notifSent ? "#26262C" : "#A2A1AF" }}>Notification nouvel assureur</p>
+                            {notifSent && (
+                              <p className="text-xs mt-0.5" style={{ color: "#A2A1AF" }}>
+                                {(notifSent.metadata as Record<string, unknown>)?.to as string} · {fmtDate(notifSent.createdAt)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {/* Résiliation */}
+                        <div className="flex items-start gap-2.5">
+                          {resiliSent ? (
+                            <CheckCircle2 className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: "#13762C" }} />
+                          ) : (
+                            <div className="h-4 w-4 flex-shrink-0 mt-0.5 rounded-full border-2" style={{ borderColor: "#D0CFDB" }} />
+                          )}
+                          <div>
+                            <p className="text-sm font-medium" style={{ color: resiliSent ? "#26262C" : "#A2A1AF" }}>Résiliation ancien assureur</p>
+                            {resiliSent && (
+                              <p className="text-xs mt-0.5" style={{ color: "#A2A1AF" }}>
+                                {(resiliSent.metadata as Record<string, unknown>)?.to as string} · {fmtDate(resiliSent.createdAt)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })()}
+
                 {/* Données du nouveau contrat */}
                 {(pipeline.nouveauNumeroContrat || pipeline.nouveauDateEffet || pipeline.nouveauPrimeTTC) && (
                   <Card className="p-5">

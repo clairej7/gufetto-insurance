@@ -9,9 +9,6 @@ export default async function PipelinePage() {
   const user = MOCK_USER;
 
   const pipelines = await prisma.insurancePipeline.findMany({
-    where: {
-      statut: { notIn: ["termine"] },
-    },
     include: {
       copro: true,
       taskCompletions: { include: { task: true } },
@@ -40,9 +37,9 @@ export default async function PipelinePage() {
       <Navbar user={user} lastSyncAt={lastSync?.syncedAt} />
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Pipeline assurance</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {pipelines.length} copropriété{pipelines.length !== 1 ? "s" : ""} en cours de traitement
+          <h1 className="text-2xl font-bold" style={{ color: "#26262C", letterSpacing: "-0.02em" }}>Mes dossiers</h1>
+          <p className="text-sm mt-1" style={{ color: "#656576" }}>
+            Suivi des dossiers MRI en cours
           </p>
         </div>
         <PipelineBoard
