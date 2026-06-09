@@ -5,6 +5,7 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "").split(",").map((e) => e.tr
 
 // Config sans Prisma — utilisée dans le middleware (edge runtime)
 export const authConfig: NextAuthConfig = {
+  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   trustHost: true,
   providers: [Google],
   session: { strategy: "jwt" },
