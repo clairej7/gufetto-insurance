@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -36,12 +37,10 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
         <div className="flex items-center justify-between h-14">
           {/* Logo + Nav */}
           <div className="flex items-center gap-8">
-            <Link href="/pipeline" className="flex items-center gap-2.5">
-              <div className="h-7 w-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#4E49FC" }}>
-                <span className="text-white text-xs font-bold">M</span>
-              </div>
+            <Link href="/pipeline" className="flex items-center gap-2">
+              <Image src="/logo.png" alt="Gufetto" width={32} height={32} className="rounded-md" />
               <span className="font-semibold text-sm" style={{ color: "#26262C" }}>
-                Assurance MRI
+                Gufetto
               </span>
             </Link>
             <nav className="flex items-center gap-1">
