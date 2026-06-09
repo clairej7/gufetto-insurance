@@ -92,6 +92,7 @@ export function ResiliationAction({
       formData.append("to", to);
       formData.append("subject", subject);
       formData.append("body", body);
+      formData.append("refTag", `${pipelineId}:resiliation`);
 
       const res = await fetch("/api/front/draft", { method: "POST", body: formData });
       const json = await res.json() as { success?: boolean; error?: string; conversationId?: string };

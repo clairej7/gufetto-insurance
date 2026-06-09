@@ -128,6 +128,16 @@ interface CoproDetailProps {
   userEmail: string;
 }
 
+function emailTypeLabel(emailType: string): string {
+  if (emailType === "rs") return "Réponse à la demande de RS";
+  if (emailType === "rs_relance") return "Réponse à la relance RS";
+  if (emailType === "resiliation") return "Réponse à l'email de résiliation";
+  if (emailType === "insureur") return "Réponse à l'envoi du contrat signé";
+  if (emailType === "reco_cs") return "Réponse à la recommandation";
+  if (emailType.startsWith("devis_")) return `Réponse à la demande de devis ${emailType.replace("devis_", "").toUpperCase()}`;
+  return "Réponse reçue";
+}
+
 function getEcheanceColor(days: number | null): string {
   if (days === null) return "text-[#A2A1AF]";
   if (days < 0) return "text-[#CA1E12]";
@@ -1330,7 +1340,12 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                     return (
                       <div key={reply.id} className="rounded-lg p-3 border" style={{ borderColor: "#E8E8EC", backgroundColor: "#FAFAFA" }}>
                         <div className="flex items-start justify-between gap-2 mb-1.5">
-                          <span className="text-xs font-semibold truncate" style={{ color: "#26262C" }}>{String(m.fromName ?? m.from ?? "")}</span>
+                          <div className="flex flex-col gap-0.5 min-w-0">
+                            <span className="text-xs font-semibold truncate" style={{ color: "#26262C" }}>{String(m.fromName ?? m.from ?? "")}</span>
+                            {m.emailType != null && (
+                              <span className="text-xs" style={{ color: "#8784FD" }}>{emailTypeLabel(String(m.emailType))}</span>
+                            )}
+                          </div>
                           <span className="text-xs flex-shrink-0" style={{ color: "#A2A1AF" }}>
                             {new Date(reply.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                           </span>

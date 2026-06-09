@@ -213,6 +213,7 @@ function FirstEmailForm({
       formData.append("to", toEmail);
       formData.append("subject", subject);
       formData.append("body", body);
+      formData.append("refTag", `${pipelineId}:rs`);
       if (contratFile) formData.append("contrat", contratFile.file, contratFile.name);
       if (pvFile) formData.append("pv", pvFile.file, pvFile.name);
 
@@ -350,6 +351,7 @@ function RelanceForm({
       formData.append("to", to);
       formData.append("subject", subject);
       formData.append("body", body);
+      formData.append("refTag", `${pipelineId}:rs_relance`);
 
       const res = await fetch("/api/front/draft", { method: "POST", body: formData });
       const data = await res.json();

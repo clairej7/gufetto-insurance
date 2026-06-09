@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
   const contratFile = formData.get("contrat") as File | null;
   const pvFile = formData.get("pv") as File | null;
   const signedPdfPath = formData.get("signedPdfPath") as string | null;
+  const refTag = formData.get("refTag") as string | null; // format: "{pipelineId}:{type}"
 
   if (!to || !subject || !body) {
     return NextResponse.json({ error: "to, subject et body sont requis" }, { status: 400 });
@@ -25,11 +26,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, fallback: true, mailtoUrl });
   }
 
+  // Ref cachée pour identifier les réponses dans le webhook Front
+  const hiddenRef = refTag
+    ? `<span style="display:none;font-size:0;line-height:0;color:transparent">gufetto-ref:${refTag}</span>`
+    : "";
+
   const htmlBody = body
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .split(/\n\n+/)
     .map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`)
-    .join("");
+    .join("") + hiddenRef;
 
   // Création du brouillon en multipart pour supporter les PJ
   const draftForm = new FormData();

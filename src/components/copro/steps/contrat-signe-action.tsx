@@ -92,6 +92,7 @@ export function ContratSigneAction({
       formData.append("to", to);
       formData.append("subject", subject);
       formData.append("body", body);
+      formData.append("refTag", `${pipelineId}:insureur`);
       if (signedPdfUrl) {
         formData.append("signedPdfPath", signedPdfUrl);
       } else if (manualPdf) {

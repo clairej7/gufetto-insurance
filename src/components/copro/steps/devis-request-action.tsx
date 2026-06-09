@@ -340,6 +340,7 @@ export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, us
     formData.append("to", email);
     formData.append("subject", "Matera - demande de devis MRI");
     formData.append("body", body);
+    formData.append("refTag", `${pipelineId}:devis_${assureur}`);
     if (contratFile) formData.append("contrat", contratFile.file, contratFile.name);
     if (rsFile) formData.append("pv", rsFile.file, rsFile.name);
     const res = await fetch("/api/front/draft", { method: "POST", body: formData });

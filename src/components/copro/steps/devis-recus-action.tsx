@@ -599,6 +599,7 @@ function RecoAndEmailSection({
       formData.append("to", to);
       formData.append("subject", subject);
       formData.append("body", recommendation);
+      formData.append("refTag", `${pipelineId}:reco_cs`);
       const res = await fetch("/api/front/draft", { method: "POST", body: formData });
       const json = await res.json() as { success?: boolean; fallback?: boolean; mailtoUrl?: string; error?: string; conversationId?: string };
       if (json.success) {
