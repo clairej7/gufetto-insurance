@@ -16,7 +16,9 @@ export default async function TasksPage({ searchParams }: PageProps) {
   if (!session?.user) return null;
 
   const user = await prisma.user.findUnique({ where: { email: session.user.email! } });
-  const { tasks } = await getTasks(assignee);
+  // "all" → tout le monde ; pas de param → mes tâches par défaut
+  const filterEmail = assignee === "all" ? undefined : (assignee ?? session.user.email ?? undefined);
+  const { tasks } = await getTasks(filterEmail);
   const assignees = await getAllAssignees();
 
   return (
@@ -27,7 +29,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
           <h1 className="text-xl font-semibold" style={{ color: "#26262C" }}>Tâches</h1>
           {assignees.length > 0 && (
             <Suspense fallback={null}>
-              <AssigneeFilter assignees={assignees} current={assignee} />
+              <AssigneeFilter assignees={assignees} current={assignee} currentUserEmail={session.user.email ?? ""} />
             </Suspense>
           )}
         </div>

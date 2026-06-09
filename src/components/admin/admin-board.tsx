@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { getDaysUntilEcheance } from "@/lib/pipeline";
+import { MultiSelectFilter, formatGestionnaire } from "@/components/ui/multi-select-filter";
 
 type Pipeline = {
   id: string;
@@ -26,14 +27,14 @@ interface AdminBoardProps {
 
 const LOST_STATUTS = ["abandonne", "refuse", "non_assurable"];
 
-const COLS: { statut: string; label: string; bg: string; fg: string }[] = [
-  { statut: "identifie",      label: "Identifié",    bg: "#F7F7F8", fg: "#656576" },
-  { statut: "rs_en_cours",    label: "RS",           bg: "#F5F5FF", fg: "#4E49FC" },
-  { statut: "devis_demandes", label: "Devis dem.",   bg: "#F5F5FF", fg: "#4E49FC" },
-  { statut: "devis_recus",    label: "Devis reçus",  bg: "#EBEBFF", fg: "#3C38C7" },
-  { statut: "envoye_cs",      label: "Validé CS",    bg: "#FFF7EB", fg: "#955804" },
-  { statut: "contrat_signe",  label: "Signé",        bg: "#EFFBF2", fg: "#13762C" },
-  { statut: "termine",        label: "Clôturé",      bg: "#CFF2D8", fg: "#0E5D22" },
+const STAGE_COLS: { statut: string; label: string; shortLabel: string; bg: string; fg: string; bar: string }[] = [
+  { statut: "identifie",          label: "Identifié",        shortLabel: "Identifié",   bg: "#F7F7F8", fg: "#656576", bar: "#D4D4DC" },
+  { statut: "rs_en_cours",        label: "RS en cours",      shortLabel: "RS",          bg: "#F5F5FF", fg: "#4E49FC", bar: "#B8B5FD" },
+  { statut: "devis_demandes",     label: "Devis demandés",   shortLabel: "Devis dem.",  bg: "#F5F5FF", fg: "#4E49FC", bar: "#9B97FC" },
+  { statut: "devis_recus",        label: "Devis reçus",      shortLabel: "Devis reçus", bg: "#EBEBFF", fg: "#3C38C7", bar: "#7C79F8" },
+  { statut: "envoye_cs",          label: "Validé CS",        shortLabel: "Validé CS",   bg: "#FFF7EB", fg: "#955804", bar: "#F5A623" },
+  { statut: "contrat_signe",      label: "Contrat signé",    shortLabel: "Signé",       bg: "#EFFBF2", fg: "#13762C", bar: "#34C759" },
+  { statut: "termine",            label: "Clôturé",          shortLabel: "Clôturé",     bg: "#CFF2D8", fg: "#0E5D22", bar: "#0E5D22" },
 ];
 
 type TagVariant = "primary" | "warning" | "success" | "success-filled" | "error" | "neutral";
@@ -58,125 +59,120 @@ const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
   non_assurable:  { label: "Non assurable",  variant: "error" },
 };
 
-function formatGestionnaire(email: string): string {
-  const prenom = email.split(".")[0];
-  const nom    = email.split(".")[1]?.split("@")[0];
-  if (!prenom || !nom) return email.split("@")[0];
-  return `${prenom.charAt(0).toUpperCase() + prenom.slice(1)} ${nom.charAt(0).toUpperCase() + nom.slice(1)}`;
-}
-
 function formatEuros(n: number): string {
-  return n.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
+  return n.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
 }
 
 function dealValue(p: Pipeline): number {
   return p.nouveauPrimeTTC ?? p.copro.primeActuelle ?? 0;
 }
 
-/* ─── Tokens Bento appliqués inline ─── */
 const FONT_SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
 const FONT_MONO = "ui-monospace, Menlo, Consolas, monospace";
 
 const TH: React.CSSProperties = {
-  background: "#FBFBFB",
-  fontFamily: FONT_MONO,
-  fontSize: 11,
-  fontWeight: 600,
-  textTransform: "uppercase",
-  letterSpacing: "0.04em",
-  color: "#A2A1AF",
-  textAlign: "center",
-  padding: "0 16px",
-  height: 44,
-  borderBottom: "1px solid #E8E8EC",
-  whiteSpace: "nowrap",
-  userSelect: "none",
-  minWidth: 80,
+  background: "#FBFBFB", fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600,
+  textTransform: "uppercase", letterSpacing: "0.04em", color: "#A2A1AF",
+  textAlign: "center", padding: "0 16px", height: 44,
+  borderBottom: "1px solid #E8E8EC", whiteSpace: "nowrap", userSelect: "none", minWidth: 80,
 };
-
-const TH_LEFT: React.CSSProperties = {
-  ...TH,
-  textAlign: "left",
-  minWidth: 200,
-};
-
-const TH_RIGHT: React.CSSProperties = {
-  ...TH,
-  textAlign: "right",
-  minWidth: 140,
-};
-
+const TH_LEFT: React.CSSProperties  = { ...TH, textAlign: "left",  minWidth: 200 };
+const TH_RIGHT: React.CSSProperties = { ...TH, textAlign: "right", minWidth: 140 };
 const TD: React.CSSProperties = {
-  padding: "12px 16px",
-  height: 48,
-  fontFamily: FONT_SANS,
-  fontSize: 13,
-  lineHeight: "18px",
-  color: "#26262C",
-  borderBottom: "1px solid #F3F3F5",
-  verticalAlign: "middle",
-  textAlign: "center",
+  padding: "12px 16px", height: 48, fontFamily: FONT_SANS, fontSize: 13,
+  lineHeight: "18px", color: "#26262C", borderBottom: "1px solid #F3F3F5",
+  verticalAlign: "middle", textAlign: "center",
 };
-
 const TD_LEFT: React.CSSProperties  = { ...TD, textAlign: "left" };
 const TD_RIGHT: React.CSSProperties = { ...TD, textAlign: "right" };
 
 type KpiFilter = "actifs" | "urgents" | "gagnes" | null;
 
 export function AdminBoard({ pipelines, gestionnaires }: AdminBoardProps) {
+  const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
 
-  function toggleKpi(k: KpiFilter) {
-    setActiveKpi(prev => prev === k ? null : k);
-  }
+  const fp = selectedGestionnaires.length > 0
+    ? pipelines.filter(p => selectedGestionnaires.includes(p.copro.gestionnaireEmail ?? ""))
+    : pipelines;
 
-  const wonPipelines = pipelines.filter(p => p.statut === "contrat_signe" || p.statut === "termine");
-  const urgentPipelines = pipelines.filter(p => {
+  function toggleKpi(k: KpiFilter) { setActiveKpi(prev => prev === k ? null : k); }
+
+  const wonPipelines     = fp.filter(p => p.statut === "contrat_signe" || p.statut === "termine");
+  const urgentPipelines  = fp.filter(p => {
     const d = getDaysUntilEcheance(p.copro.dateEcheance);
     return d !== null && d <= 60 && !LOST_STATUTS.includes(p.statut);
   });
-  const activePipelines = pipelines.filter(p => !LOST_STATUTS.includes(p.statut) && p.statut !== "termine");
-  const allUrgent   = urgentPipelines.length;
-  const totalValeur = wonPipelines.reduce((s, p) => s + dealValue(p), 0);
+  const activePipelines  = fp.filter(p => !LOST_STATUTS.includes(p.statut) && p.statut !== "termine");
+  const totalARR         = wonPipelines.reduce((s, p) => s + dealValue(p), 0);
+  const tauxSignature    = activePipelines.length > 0
+    ? Math.round((wonPipelines.length / (activePipelines.length + wonPipelines.length)) * 100)
+    : 0;
 
-  const kpiDetail: { label: string; rows: Pipeline[] } | null = activeKpi === "actifs"  ? { label: "Dossiers actifs",    rows: activePipelines }
-                  : activeKpi === "urgents" ? { label: "Urgents < 2 mois",   rows: urgentPipelines }
-                  : activeKpi === "gagnes"  ? { label: "Deals gagnés",        rows: wonPipelines }
-                  : null;
+  const kpiDetail: { label: string; rows: Pipeline[] } | null =
+    activeKpi === "actifs"  ? { label: "Dossiers actifs",  rows: activePipelines } :
+    activeKpi === "urgents" ? { label: "Urgents < 2 mois", rows: urgentPipelines } :
+    activeKpi === "gagnes"  ? { label: "Deals gagnés",     rows: wonPipelines }    : null;
 
-  const rows = gestionnaires.map(email => {
-    const gp     = pipelines.filter(p => p.copro.gestionnaireEmail === email);
-    const won    = gp.filter(p => p.statut === "contrat_signe" || p.statut === "termine");
-    const lost   = gp.filter(p => LOST_STATUTS.includes(p.statut));
-    const urgent = gp.filter(p => {
+  /* ── Bar chart data ── */
+  const barData = STAGE_COLS.map(col => ({
+    ...col,
+    count: fp.filter(p => p.statut === col.statut).length,
+  }));
+  const maxBar = Math.max(...barData.map(b => b.count), 1);
+  const CHART_H = 140;
+
+  /* ── Matrix rows ── */
+  const activeGestionnaires = selectedGestionnaires.length > 0 ? selectedGestionnaires : gestionnaires;
+  const rows = activeGestionnaires.map(email => {
+    const gp   = fp.filter(p => p.copro.gestionnaireEmail === email);
+    const won  = gp.filter(p => p.statut === "contrat_signe" || p.statut === "termine");
+    const lost = gp.filter(p => LOST_STATUTS.includes(p.statut));
+    const urg  = gp.filter(p => {
       const d = getDaysUntilEcheance(p.copro.dateEcheance);
       return d !== null && d <= 60 && !LOST_STATUTS.includes(p.statut);
     }).length;
     return {
-      email,
-      name:     formatGestionnaire(email),
-      counts:   Object.fromEntries(COLS.map(c => [c.statut, gp.filter(p => p.statut === c.statut).length])),
-      wonCount: won.length,
-      lostCount:lost.length,
-      valeur:   won.reduce((s, p) => s + dealValue(p), 0),
-      urgent,
-      total:    gp.length,
+      email, name: formatGestionnaire(email),
+      counts:    Object.fromEntries(STAGE_COLS.map(c => [c.statut, gp.filter(p => p.statut === c.statut).length])),
+      wonCount:  won.length,
+      lostCount: lost.length,
+      valeur:    won.reduce((s, p) => s + dealValue(p), 0),
+      urgent:    urg,
+      total:     gp.length,
     };
   });
 
-  const totals = Object.fromEntries(COLS.map(c => [c.statut, pipelines.filter(p => p.statut === c.statut).length]));
+  const totals = Object.fromEntries(STAGE_COLS.map(c => [c.statut, fp.filter(p => p.statut === c.statut).length]));
   const totalWon = wonPipelines.length;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, fontFamily: FONT_SANS }}>
 
-      {/* KPIs — 4 tuiles cliquables */}
+      {/* ── Filtres ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <MultiSelectFilter
+          placeholder="Tous les gestionnaires"
+          options={gestionnaires}
+          value={selectedGestionnaires}
+          onChange={setSelectedGestionnaires}
+          renderOption={formatGestionnaire}
+          width={200}
+        />
+        {selectedGestionnaires.length > 0 && (
+          <span style={{ fontSize: 12, color: "#656576" }}>
+            {fp.length} dossier{fp.length > 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
+      {/* ── KPIs ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
         {([
-          { filter: "actifs"  as KpiFilter, label: "Dossiers actifs",      value: activePipelines.length,                            color: "#26262C",                               numeric: true  },
-          { filter: "urgents" as KpiFilter, label: "Urgents < 2 mois",     value: allUrgent,                                         color: allUrgent > 0 ? "#CA1E12" : "#26262C",   numeric: true  },
-          { filter: "gagnes"  as KpiFilter, label: "Deals gagnés",         value: totalWon,                                          color: totalWon > 0 ? "#13762C" : "#26262C",    numeric: true  },
-          { filter: null,                   label: "Valeur totale gagnée", value: totalValeur > 0 ? formatEuros(totalValeur) : "—",  color: totalValeur > 0 ? "#13762C" : "#A2A1AF", numeric: false },
+          { filter: "actifs"  as KpiFilter, label: "Dossiers actifs",   value: activePipelines.length,                              color: "#26262C",                              numeric: true  },
+          { filter: "urgents" as KpiFilter, label: "Urgents < 2 mois",  value: urgentPipelines.length,                              color: urgentPipelines.length > 0 ? "#CA1E12" : "#26262C", numeric: true },
+          { filter: "gagnes"  as KpiFilter, label: "Deals gagnés",      value: totalWon,                                            color: totalWon > 0 ? "#13762C" : "#26262C",   numeric: true  },
+          { filter: null,                   label: "ARR signé",          value: totalARR > 0 ? formatEuros(totalARR) : "—",          color: totalARR > 0 ? "#13762C" : "#A2A1AF",  numeric: false },
         ]).map(({ filter, label, value, color, numeric }) => {
           const isActive = filter !== null && activeKpi === filter;
           const clickable = filter !== null;
@@ -187,18 +183,16 @@ export function AdminBoard({ pipelines, gestionnaires }: AdminBoardProps) {
               style={{
                 background: isActive ? "#FAFAFF" : "#fff",
                 border: `1.5px solid ${isActive ? "#4E49FC" : "#E8E8EC"}`,
-                borderRadius: 8,
-                padding: "16px 20px",
+                borderRadius: 8, padding: "16px 20px",
                 boxShadow: isActive ? "0 0 0 3px rgba(78,73,252,.08)" : "0 1px 2px rgba(13,22,63,.05)",
-                cursor: clickable ? "pointer" : "default",
-                transition: "all 120ms",
+                cursor: clickable ? "pointer" : "default", transition: "all 120ms",
               }}
             >
               <div style={{ fontSize: numeric ? 28 : 22, fontWeight: 700, letterSpacing: "-0.03em", color, lineHeight: 1.1, fontVariantNumeric: "tabular-nums" }}>
                 {value}
               </div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 5 }}>
-                <span style={{ fontSize: 13, color: "#656576", lineHeight: "18px" }}>{label}</span>
+                <span style={{ fontSize: 13, color: "#656576" }}>{label}</span>
                 {clickable && (
                   <span style={{ fontSize: 11, color: isActive ? "#4E49FC" : "#A2A1AF", fontWeight: 500 }}>
                     {isActive ? "Masquer" : "Voir →"}
@@ -210,11 +204,57 @@ export function AdminBoard({ pipelines, gestionnaires }: AdminBoardProps) {
         })}
       </div>
 
-      {/* Tableau de détail KPI */}
+      {/* ── Bar chart : répartition par étape ── */}
+      <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 20 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Répartition par étape</span>
+          <span style={{ fontSize: 12, color: "#A2A1AF", fontFamily: FONT_MONO }}>{fp.filter(p => !LOST_STATUTS.includes(p.statut)).length} dossiers actifs</span>
+          {tauxSignature > 0 && (
+            <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 600, color: "#13762C" }}>
+              Taux de signature : {tauxSignature}%
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: CHART_H + 40 }}>
+          {barData.map(bar => {
+            const barH = bar.count > 0 ? Math.max(Math.round((bar.count / maxBar) * CHART_H), 6) : 0;
+            return (
+              <div key={bar.statut} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 0, height: "100%", justifyContent: "flex-end" }}>
+                {/* Count */}
+                <span style={{
+                  fontSize: bar.count > 0 ? 15 : 12, fontWeight: 700, color: bar.count > 0 ? bar.fg : "#C0C0C9",
+                  fontVariantNumeric: "tabular-nums", marginBottom: 4, minHeight: 22, display: "flex", alignItems: "flex-end",
+                }}>
+                  {bar.count}
+                </span>
+                {/* Bar */}
+                <div style={{
+                  width: "100%", height: barH, background: bar.count > 0 ? bar.bar : "#F3F3F5",
+                  borderRadius: "4px 4px 0 0", transition: "height 300ms ease",
+                  opacity: bar.count > 0 ? 1 : 0.4,
+                }} />
+                {/* Baseline */}
+                <div style={{ width: "100%", height: 1, background: "#E8E8EC" }} />
+                {/* Label */}
+                <span style={{
+                  fontSize: 11, color: "#656576", textAlign: "center", marginTop: 6,
+                  lineHeight: "14px", fontWeight: 500, maxWidth: "100%", overflow: "hidden",
+                  textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>
+                  {bar.shortLabel}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Tableau de détail KPI ── */}
       {kpiDetail && (
         <div style={{ border: "1px solid #E8E8EC", borderRadius: 8, background: "#fff", overflow: "hidden", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid #E8E8EC" }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C", lineHeight: "20px" }}>{kpiDetail.label}</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>{kpiDetail.label}</span>
             <span style={{ fontFamily: FONT_MONO, fontSize: 12, fontWeight: 500, color: "#656576", padding: "2px 8px", background: "#F7F7F8", borderRadius: 10 }}>
               {kpiDetail.rows.length}
             </span>
@@ -225,8 +265,9 @@ export function AdminBoard({ pipelines, gestionnaires }: AdminBoardProps) {
                 <th style={{ ...TH_LEFT, minWidth: 200 }}>Copropriété</th>
                 <th style={TH_LEFT}>Gestionnaire</th>
                 <th style={TH}>Statut</th>
-                {activeKpi === "gagnes" && <th style={{ ...TH_RIGHT, color: "#13762C" }}>Valeur</th>}
-                {activeKpi !== "gagnes" && <th style={{ ...TH_RIGHT }}>Échéance</th>}
+                {activeKpi === "gagnes"
+                  ? <th style={{ ...TH_RIGHT, color: "#13762C" }}>ARR</th>
+                  : <th style={TH_RIGHT}>Échéance</th>}
               </tr>
             </thead>
             <tbody>
@@ -235,8 +276,7 @@ export function AdminBoard({ pipelines, gestionnaires }: AdminBoardProps) {
                 const urgColor = days !== null && days <= 60 ? "#CA1E12" : days !== null && days <= 120 ? "#955804" : "#A2A1AF";
                 const tag = STATUT_TAG[p.statut];
                 return (
-                  <tr
-                    key={p.id}
+                  <tr key={p.id}
                     style={{ borderBottom: "1px solid #F3F3F5", cursor: "pointer", transition: "background 120ms" }}
                     onMouseEnter={e => (e.currentTarget.style.background = "#FBFBFB")}
                     onMouseLeave={e => (e.currentTarget.style.background = "")}
@@ -246,11 +286,6 @@ export function AdminBoard({ pipelines, gestionnaires }: AdminBoardProps) {
                       <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {p.copro.nom}
                       </div>
-                      {p.copro.adresse && (
-                        <div style={{ fontSize: 12, color: "#A2A1AF", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
-                          {p.copro.adresse}
-                        </div>
-                      )}
                     </td>
                     <td style={TD_LEFT}>
                       <span style={{ fontSize: 13, color: "#656576" }}>
@@ -261,10 +296,8 @@ export function AdminBoard({ pipelines, gestionnaires }: AdminBoardProps) {
                       {tag && (
                         <span style={{
                           display: "inline-flex", alignItems: "center", gap: 4,
-                          height: 22, padding: "0 8px", borderRadius: 11,
-                          fontSize: 11, fontWeight: 500, letterSpacing: "-0.08px",
-                          background: TAG_BG[tag.variant], color: TAG_FG[tag.variant],
-                          whiteSpace: "nowrap",
+                          height: 22, padding: "0 8px", borderRadius: 11, fontSize: 11, fontWeight: 500,
+                          background: TAG_BG[tag.variant], color: TAG_FG[tag.variant], whiteSpace: "nowrap",
                         }}>
                           <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "currentColor", opacity: 0.9 }} />
                           {tag.label}
@@ -273,11 +306,9 @@ export function AdminBoard({ pipelines, gestionnaires }: AdminBoardProps) {
                     </td>
                     {activeKpi === "gagnes" ? (
                       <td style={TD_RIGHT}>
-                        {dealValue(p) > 0 ? (
-                          <span style={{ fontSize: 13, fontWeight: 600, color: "#13762C", fontVariantNumeric: "tabular-nums" }}>
-                            {formatEuros(dealValue(p))}
-                          </span>
-                        ) : <span style={{ color: "#C0C0C9" }}>—</span>}
+                        {dealValue(p) > 0
+                          ? <span style={{ fontSize: 13, fontWeight: 600, color: "#13762C", fontVariantNumeric: "tabular-nums" }}>{formatEuros(dealValue(p))}</span>
+                          : <span style={{ color: "#C0C0C9" }}>—</span>}
                       </td>
                     ) : (
                       <td style={TD_RIGHT}>
@@ -303,79 +334,62 @@ export function AdminBoard({ pipelines, gestionnaires }: AdminBoardProps) {
         </div>
       )}
 
-      {/* Matrice pipeline */}
+      {/* ── Matrice par gestionnaire ── */}
       <div style={{ border: "1px solid #E8E8EC", borderRadius: 8, background: "#fff", overflow: "auto", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
-
-        {/* Toolbar */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid #E8E8EC" }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C", lineHeight: "20px" }}>Suivi par gestionnaire</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Suivi par gestionnaire</span>
           <span style={{ fontFamily: FONT_MONO, fontSize: 12, fontWeight: 500, color: "#656576", padding: "2px 8px", background: "#F7F7F8", borderRadius: 10 }}>
-            {gestionnaires.length} gestionnaire{gestionnaires.length > 1 ? "s" : ""}
+            {rows.length} gestionnaire{rows.length > 1 ? "s" : ""}
           </span>
         </div>
-
         <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT_SANS, minWidth: 860 }}>
           <thead>
             <tr>
               <th style={TH_LEFT}>Gestionnaire</th>
-              {COLS.map(col => <th key={col.statut} style={TH}>{col.label}</th>)}
-              <th style={{ ...TH_RIGHT, color: "#13762C" }}>Valeur gagnée</th>
+              {STAGE_COLS.map(col => <th key={col.statut} style={TH}>{col.shortLabel}</th>)}
+              <th style={{ ...TH_RIGHT, color: "#13762C" }}>ARR signé</th>
             </tr>
           </thead>
           <tbody>
             {rows.map(row => (
-              <tr
-                key={row.email}
+              <tr key={row.email}
                 style={{ transition: "background 120ms" }}
                 onMouseEnter={e => (e.currentTarget.style.background = "#FBFBFB")}
                 onMouseLeave={e => (e.currentTarget.style.background = "")}
               >
-                {/* Gestionnaire */}
                 <td style={TD_LEFT}>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: "#26262C", lineHeight: "20px" }}>{row.name}</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: "#26262C" }}>{row.name}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-                    <span style={{ fontSize: 12, color: "#A2A1AF", lineHeight: "16px", fontVariantNumeric: "tabular-nums" }}>
+                    <span style={{ fontSize: 12, color: "#A2A1AF", fontVariantNumeric: "tabular-nums" }}>
                       {row.total} dossier{row.total !== 1 ? "s" : ""}
                     </span>
                     {row.urgent > 0 && (
-                      <span style={{ fontSize: 12, fontWeight: 600, color: "#CA1E12", lineHeight: "16px" }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#CA1E12" }}>
                         · {row.urgent} urgent{row.urgent > 1 ? "s" : ""}
                       </span>
                     )}
                     {row.lostCount > 0 && (
-                      <span style={{ fontSize: 12, color: "#C0C0C9", lineHeight: "16px" }}>
+                      <span style={{ fontSize: 12, color: "#C0C0C9" }}>
                         · {row.lostCount} perdu{row.lostCount > 1 ? "s" : ""}
                       </span>
                     )}
                   </div>
                 </td>
-
-                {/* Comptes par étape */}
-                {COLS.map(col => {
+                {STAGE_COLS.map(col => {
                   const count = row.counts[col.statut] ?? 0;
                   return (
                     <td key={col.statut} style={{ ...TD, background: count > 0 ? col.bg : undefined }}>
-                      {count > 0 ? (
-                        <span style={{ fontSize: 16, fontWeight: 700, color: col.fg, fontVariantNumeric: "tabular-nums" }}>
-                          {count}
-                        </span>
-                      ) : (
-                        <span style={{ color: "#E8E8EC", fontSize: 14 }}>—</span>
-                      )}
+                      {count > 0
+                        ? <span style={{ fontSize: 16, fontWeight: 700, color: col.fg, fontVariantNumeric: "tabular-nums" }}>{count}</span>
+                        : <span style={{ color: "#E8E8EC", fontSize: 14 }}>—</span>}
                     </td>
                   );
                 })}
-
-                {/* Valeur gagnée */}
                 <td style={TD_RIGHT}>
                   {row.valeur > 0 ? (
                     <>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#13762C", lineHeight: "20px", fontVariantNumeric: "tabular-nums" }}>
-                        {formatEuros(row.valeur)}
-                      </div>
-                      <div style={{ fontSize: 12, color: "#A2A1AF", marginTop: 2, lineHeight: "16px" }}>
-                        {row.wonCount} deal{row.wonCount > 1 ? "s" : ""}
-                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#13762C", fontVariantNumeric: "tabular-nums" }}>{formatEuros(row.valeur)}</div>
+                      <div style={{ fontSize: 12, color: "#A2A1AF", marginTop: 2 }}>{row.wonCount} deal{row.wonCount > 1 ? "s" : ""}</div>
                     </>
                   ) : (
                     <span style={{ color: "#C0C0C9", fontSize: 14 }}>—</span>
@@ -383,34 +397,23 @@ export function AdminBoard({ pipelines, gestionnaires }: AdminBoardProps) {
                 </td>
               </tr>
             ))}
-
-            {/* Ligne Totaux */}
+            {/* Totaux */}
             <tr style={{ background: "#F7F7F8", borderTop: "2px solid #E8E8EC" }}>
               <td style={{ ...TD_LEFT, borderBottom: 0 }}>
-                <span style={{ fontSize: 11, fontFamily: FONT_MONO, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#A2A1AF" }}>
-                  Total
-                </span>
+                <span style={{ fontSize: 11, fontFamily: FONT_MONO, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#A2A1AF" }}>Total</span>
               </td>
-              {COLS.map(col => {
+              {STAGE_COLS.map(col => {
                 const count = totals[col.statut] ?? 0;
                 return (
                   <td key={col.statut} style={{ ...TD, background: count > 0 ? col.bg : undefined, borderBottom: 0 }}>
-                    {count > 0 ? (
-                      <span style={{ fontSize: 16, fontWeight: 700, color: col.fg, fontVariantNumeric: "tabular-nums" }}>
-                        {count}
-                      </span>
-                    ) : (
-                      <span style={{ color: "#E8E8EC", fontSize: 14 }}>—</span>
-                    )}
+                    {count > 0
+                      ? <span style={{ fontSize: 16, fontWeight: 700, color: col.fg, fontVariantNumeric: "tabular-nums" }}>{count}</span>
+                      : <span style={{ color: "#E8E8EC", fontSize: 14 }}>—</span>}
                   </td>
                 );
               })}
               <td style={{ ...TD_RIGHT, borderBottom: 0 }}>
-                {totalValeur > 0 && (
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "#13762C", fontVariantNumeric: "tabular-nums" }}>
-                    {formatEuros(totalValeur)}
-                  </span>
-                )}
+                {totalARR > 0 && <span style={{ fontSize: 14, fontWeight: 700, color: "#13762C", fontVariantNumeric: "tabular-nums" }}>{formatEuros(totalARR)}</span>}
               </td>
             </tr>
           </tbody>

@@ -12,7 +12,7 @@ function shortName(email: string) {
     .join(" ");
 }
 
-export function AssigneeFilter({ assignees, current }: { assignees: string[]; current?: string }) {
+export function AssigneeFilter({ assignees, current, currentUserEmail }: { assignees: string[]; current?: string; currentUserEmail?: string }) {
   const [open, setOpen] = useState(false);
   const [, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
@@ -37,6 +37,8 @@ export function AssigneeFilter({ assignees, current }: { assignees: string[]; cu
     });
   }
 
+  // No param = my tasks (default) ; "all" = everyone ; email = specific person
+  const isMine = !current || current === currentUserEmail;
   const isFiltered = !!current;
 
   return (
@@ -51,8 +53,8 @@ export function AssigneeFilter({ assignees, current }: { assignees: string[]; cu
         }}
       >
         <User className="h-3.5 w-3.5" />
-        {isFiltered ? shortName(current!) : "Assigné à"}
-        {isFiltered ? (
+        {current === "all" ? "Tous les gestionnaires" : isMine ? "Mes tâches" : shortName(current!)}
+        {isFiltered && current !== "all" ? (
           <span
             onClick={(e) => { e.stopPropagation(); select(null); }}
             className="ml-0.5 hover:opacity-70"
@@ -69,16 +71,29 @@ export function AssigneeFilter({ assignees, current }: { assignees: string[]; cu
           className="absolute right-0 mt-1 w-56 bg-white rounded-xl border shadow-lg z-20 py-1 overflow-hidden"
           style={{ borderColor: "#E8E8EC" }}
         >
+          {/* Mes tâches */}
           <button
             onClick={() => select(null)}
             className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-[#F7F7F8] transition-colors"
-            style={{ color: !current ? "#4E49FC" : "#26262C", fontWeight: !current ? 500 : 400 }}
+            style={{ color: isMine ? "#4E49FC" : "#26262C", fontWeight: isMine ? 500 : 400 }}
           >
             <span className="h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: "#F5F5FF", color: "#4E49FC" }}>
+              {currentUserEmail ? shortName(currentUserEmail)[0] : "M"}
+            </span>
+            Mes tâches
+            {isMine && <span className="ml-auto text-xs" style={{ color: "#4E49FC" }}>✓</span>}
+          </button>
+          {/* Tous les gestionnaires */}
+          <button
+            onClick={() => select("all")}
+            className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-[#F7F7F8] transition-colors"
+            style={{ color: current === "all" ? "#4E49FC" : "#26262C", fontWeight: current === "all" ? 500 : 400 }}
+          >
+            <span className="h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: "#F7F7F8", color: "#656576" }}>
               T
             </span>
             Tous les gestionnaires
-            {!current && <span className="ml-auto text-xs" style={{ color: "#4E49FC" }}>✓</span>}
+            {current === "all" && <span className="ml-auto text-xs" style={{ color: "#4E49FC" }}>✓</span>}
           </button>
           <div className="my-1 border-t" style={{ borderColor: "#F0F0F2" }} />
           {assignees.map((email) => {
