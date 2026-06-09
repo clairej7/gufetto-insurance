@@ -89,6 +89,7 @@ model Copro {
   protectionJuridique         String? // "oui" | "non"
   assureursDevis              String? // JSON: ["axa"] | ["mila"] | ["axa","mila"]
   representantLegal           String?
+  duomoUrl                    String?
 
   // Sync metadata
   source    String   @default("omni") // "omni" | "duomo"

@@ -55,7 +55,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
                 )}
               >
                 <LayoutDashboard className="h-4 w-4" />
-                Mon pipeline
+                Pipeline
               </Link>
               <Link
                 href="/tasks"

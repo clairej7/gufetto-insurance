@@ -36,6 +36,7 @@ import {
   RotateCcw,
   Loader2,
   ListChecks,
+  ExternalLink,
 } from "lucide-react";
 import { PIPELINE_STEPS, getDaysUntilEcheance, getNextStatut, isTerminalStatut } from "@/lib/pipeline";
 import { RSRequestAction } from "@/components/copro/steps/rs-request-action";
@@ -78,6 +79,7 @@ type Pipeline = {
     protectionJuridique: string | null;
     assureursDevis: string | null;
     representantLegal: string | null;
+    duomoUrl: string | null;
   };
   taskCompletions: Array<{
     taskId: string;
@@ -737,6 +739,14 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                 <InfoRow label="Caractéristiques particulières" value={pipeline.copro.caracteristiquesParticulieres} />
                 <InfoRow label="Logements inoccupés" value={INOCCUPEE_LABELS[pipeline.copro.proportionInoccupee ?? ""] ?? null} />
                 <InfoRow label="Représentant légal" value={pipeline.copro.representantLegal} />
+                {pipeline.copro.duomoUrl && (
+                  <div className="flex justify-between items-center py-0.5">
+                    <span className="text-xs" style={{ color: "#A2A1AF" }}>Duomo</span>
+                    <a href={pipeline.copro.duomoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: "#4E49FC" }}>
+                      Ouvrir <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
               </dl>
             </Card>
           )}
@@ -945,6 +955,14 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                     <InfoRow label="Caractéristiques particulières" value={pipeline.copro.caracteristiquesParticulieres} />
                     <InfoRow label="Logements inoccupés" value={INOCCUPEE_LABELS[pipeline.copro.proportionInoccupee ?? ""] ?? null} />
                     <InfoRow label="Représentant légal" value={pipeline.copro.representantLegal} />
+                {pipeline.copro.duomoUrl && (
+                  <div className="flex justify-between items-center py-0.5">
+                    <span className="text-xs" style={{ color: "#A2A1AF" }}>Duomo</span>
+                    <a href={pipeline.copro.duomoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: "#4E49FC" }}>
+                      Ouvrir <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
                   </dl>
                 </Card>
               )}
