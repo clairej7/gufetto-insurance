@@ -1,3 +1,2 @@
--- AlterTable
-ALTER TABLE "Copro" ADD COLUMN "protectionJuridique" TEXT,
-                    ADD COLUMN "assureursDevis" TEXT;
+ALTER TABLE "Copro" ADD COLUMN IF NOT EXISTS "protectionJuridique" TEXT;
+ALTER TABLE "Copro" ADD COLUMN IF NOT EXISTS "assureursDevis" TEXT;

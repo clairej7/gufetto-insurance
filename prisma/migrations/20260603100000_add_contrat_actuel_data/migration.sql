@@ -1,1 +1,1 @@
-ALTER TABLE "InsurancePipeline" ADD COLUMN "contratActuelData" TEXT;
+ALTER TABLE "InsurancePipeline" ADD COLUMN IF NOT EXISTS "contratActuelData" TEXT;

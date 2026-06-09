@@ -1,1 +1,1 @@
-ALTER TABLE "InsurancePipeline" ADD COLUMN "signedPdfUrl" TEXT;
+ALTER TABLE "InsurancePipeline" ADD COLUMN IF NOT EXISTS "signedPdfUrl" TEXT;

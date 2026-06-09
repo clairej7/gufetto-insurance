@@ -1,2 +1,1 @@
--- AlterTable
-ALTER TABLE "Copro" ADD COLUMN "numeroContrat" TEXT;
+ALTER TABLE "Copro" ADD COLUMN IF NOT EXISTS "numeroContrat" TEXT;

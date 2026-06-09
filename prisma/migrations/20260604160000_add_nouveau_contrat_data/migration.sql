@@ -1,4 +1,3 @@
--- AlterTable
-ALTER TABLE "InsurancePipeline" ADD COLUMN "nouveauNumeroContrat" TEXT,
-                                ADD COLUMN "nouveauDateEffet"     TIMESTAMP(3),
-                                ADD COLUMN "nouveauPrimeTTC"      DOUBLE PRECISION;
+ALTER TABLE "InsurancePipeline" ADD COLUMN IF NOT EXISTS "nouveauNumeroContrat" TEXT;
+ALTER TABLE "InsurancePipeline" ADD COLUMN IF NOT EXISTS "nouveauDateEffet"     TIMESTAMP(3);
+ALTER TABLE "InsurancePipeline" ADD COLUMN IF NOT EXISTS "nouveauPrimeTTC"      DOUBLE PRECISION;

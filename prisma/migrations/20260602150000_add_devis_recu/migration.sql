@@ -1,4 +1,4 @@
-CREATE TABLE "DevisRecu" (
+CREATE TABLE IF NOT EXISTS "DevisRecu" (
     "id" TEXT NOT NULL,
     "pipelineId" TEXT NOT NULL,
     "assureur" TEXT NOT NULL,
@@ -12,4 +12,9 @@ CREATE TABLE "DevisRecu" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "DevisRecu_pkey" PRIMARY KEY ("id")
 );
-ALTER TABLE "DevisRecu" ADD CONSTRAINT "DevisRecu_pipelineId_fkey" FOREIGN KEY ("pipelineId") REFERENCES "InsurancePipeline"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "DevisRecu" ADD CONSTRAINT "DevisRecu_pipelineId_fkey"
+    FOREIGN KEY ("pipelineId") REFERENCES "InsurancePipeline"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
