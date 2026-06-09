@@ -40,7 +40,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
             <Link href="/pipeline" className="flex items-center gap-2">
               <Image src="/logo.png" alt="Gufetto" width={32} height={32} className="rounded-md" />
               <span className="font-semibold text-sm" style={{ color: "#26262C" }}>
-                Gufetto
+                Gufetto Matera Assurance
               </span>
             </Link>
             <nav className="flex items-center gap-1">
