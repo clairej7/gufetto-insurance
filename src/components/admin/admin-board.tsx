@@ -122,28 +122,6 @@ export function AdminBoard({ pipelines, gestionnaires }: AdminBoardProps) {
   const maxBar = Math.max(...barData.map(b => b.count), 1);
   const CHART_H = 140;
 
-  /* ── Matrix rows ── */
-  const activeGestionnaires = selectedGestionnaires.length > 0 ? selectedGestionnaires : gestionnaires;
-  const rows = activeGestionnaires.map(email => {
-    const gp   = fp.filter(p => p.copro.gestionnaireEmail === email);
-    const won  = gp.filter(p => p.statut === "contrat_signe" || p.statut === "termine");
-    const lost = gp.filter(p => LOST_STATUTS.includes(p.statut));
-    const urg  = gp.filter(p => {
-      const d = getDaysUntilEcheance(p.copro.dateEcheance);
-      return d !== null && d <= 60 && !LOST_STATUTS.includes(p.statut);
-    }).length;
-    return {
-      email, name: formatGestionnaire(email),
-      counts:    Object.fromEntries(STAGE_COLS.map(c => [c.statut, gp.filter(p => p.statut === c.statut).length])),
-      wonCount:  won.length,
-      lostCount: lost.length,
-      valeur:    won.reduce((s, p) => s + dealValue(p), 0),
-      urgent:    urg,
-      total:     gp.length,
-    };
-  });
-
-  const totals = Object.fromEntries(STAGE_COLS.map(c => [c.statut, fp.filter(p => p.statut === c.statut).length]));
   const totalWon = wonPipelines.length;
 
   return (
@@ -334,91 +312,6 @@ export function AdminBoard({ pipelines, gestionnaires }: AdminBoardProps) {
         </div>
       )}
 
-      {/* ── Matrice par gestionnaire ── */}
-      <div style={{ border: "1px solid #E8E8EC", borderRadius: 8, background: "#fff", overflow: "auto", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid #E8E8EC" }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Suivi par gestionnaire</span>
-          <span style={{ fontFamily: FONT_MONO, fontSize: 12, fontWeight: 500, color: "#656576", padding: "2px 8px", background: "#F7F7F8", borderRadius: 10 }}>
-            {rows.length} gestionnaire{rows.length > 1 ? "s" : ""}
-          </span>
-        </div>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT_SANS, minWidth: 860 }}>
-          <thead>
-            <tr>
-              <th style={TH_LEFT}>Gestionnaire</th>
-              {STAGE_COLS.map(col => <th key={col.statut} style={TH}>{col.shortLabel}</th>)}
-              <th style={{ ...TH_RIGHT, color: "#13762C" }}>ARR signé</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(row => (
-              <tr key={row.email}
-                style={{ transition: "background 120ms" }}
-                onMouseEnter={e => (e.currentTarget.style.background = "#FBFBFB")}
-                onMouseLeave={e => (e.currentTarget.style.background = "")}
-              >
-                <td style={TD_LEFT}>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: "#26262C" }}>{row.name}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-                    <span style={{ fontSize: 12, color: "#A2A1AF", fontVariantNumeric: "tabular-nums" }}>
-                      {row.total} dossier{row.total !== 1 ? "s" : ""}
-                    </span>
-                    {row.urgent > 0 && (
-                      <span style={{ fontSize: 12, fontWeight: 600, color: "#CA1E12" }}>
-                        · {row.urgent} urgent{row.urgent > 1 ? "s" : ""}
-                      </span>
-                    )}
-                    {row.lostCount > 0 && (
-                      <span style={{ fontSize: 12, color: "#C0C0C9" }}>
-                        · {row.lostCount} perdu{row.lostCount > 1 ? "s" : ""}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                {STAGE_COLS.map(col => {
-                  const count = row.counts[col.statut] ?? 0;
-                  return (
-                    <td key={col.statut} style={{ ...TD, background: count > 0 ? col.bg : undefined }}>
-                      {count > 0
-                        ? <span style={{ fontSize: 16, fontWeight: 700, color: col.fg, fontVariantNumeric: "tabular-nums" }}>{count}</span>
-                        : <span style={{ color: "#E8E8EC", fontSize: 14 }}>—</span>}
-                    </td>
-                  );
-                })}
-                <td style={TD_RIGHT}>
-                  {row.valeur > 0 ? (
-                    <>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#13762C", fontVariantNumeric: "tabular-nums" }}>{formatEuros(row.valeur)}</div>
-                      <div style={{ fontSize: 12, color: "#A2A1AF", marginTop: 2 }}>{row.wonCount} deal{row.wonCount > 1 ? "s" : ""}</div>
-                    </>
-                  ) : (
-                    <span style={{ color: "#C0C0C9", fontSize: 14 }}>—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {/* Totaux */}
-            <tr style={{ background: "#F7F7F8", borderTop: "2px solid #E8E8EC" }}>
-              <td style={{ ...TD_LEFT, borderBottom: 0 }}>
-                <span style={{ fontSize: 11, fontFamily: FONT_MONO, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#A2A1AF" }}>Total</span>
-              </td>
-              {STAGE_COLS.map(col => {
-                const count = totals[col.statut] ?? 0;
-                return (
-                  <td key={col.statut} style={{ ...TD, background: count > 0 ? col.bg : undefined, borderBottom: 0 }}>
-                    {count > 0
-                      ? <span style={{ fontSize: 16, fontWeight: 700, color: col.fg, fontVariantNumeric: "tabular-nums" }}>{count}</span>
-                      : <span style={{ color: "#E8E8EC", fontSize: 14 }}>—</span>}
-                  </td>
-                );
-              })}
-              <td style={{ ...TD_RIGHT, borderBottom: 0 }}>
-                {totalARR > 0 && <span style={{ fontSize: 14, fontWeight: 700, color: "#13762C", fontVariantNumeric: "tabular-nums" }}>{formatEuros(totalARR)}</span>}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
