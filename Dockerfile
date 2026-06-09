@@ -17,7 +17,7 @@ COPY . .
 # Generate Prisma client
 RUN npx prisma generate
 
-# Build the application
+# Build the application (webpack, not Turbopack — generates nft.json correctly)
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
@@ -31,9 +31,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+# Webpack standalone output is nested under the project name
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone/crm-assurance ./
+# Static assets must be copied separately
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Prisma files needed for migrations at startup
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/src/generated ./src/generated
 COPY --from=builder /app/node_modules/.bin/prisma* ./node_modules/.bin/
