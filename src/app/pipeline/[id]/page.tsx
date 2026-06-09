@@ -40,6 +40,11 @@ export default async function CoproDetailPage({
     orderBy: [{ statut: "asc" }, { order: "asc" }],
   });
 
+  const pipelineTasks = await prisma.task.findMany({
+    where: { pipelineId: id },
+    orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
+  });
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar user={user} />
@@ -48,6 +53,7 @@ export default async function CoproDetailPage({
           pipeline={pipeline as Parameters<typeof CoproDetail>[0]["pipeline"]}
           taskTemplates={taskTemplates}
           userEmail={user.email ?? ""}
+          pipelineTasks={pipelineTasks}
         />
       </main>
     </div>

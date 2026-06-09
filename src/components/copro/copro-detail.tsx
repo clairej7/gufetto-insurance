@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ChevronUp,
   CheckCircle2,
+  Circle,
   Clock,
   MessageSquare,
   XCircle,
@@ -34,6 +35,7 @@ import {
   Check,
   RotateCcw,
   Loader2,
+  ListChecks,
 } from "lucide-react";
 import { PIPELINE_STEPS, getDaysUntilEcheance, getNextStatut, isTerminalStatut } from "@/lib/pipeline";
 import { RSRequestAction } from "@/components/copro/steps/rs-request-action";
@@ -41,7 +43,8 @@ import { DevisRequestAction } from "@/components/copro/steps/devis-request-actio
 import { DevisRecusAction } from "@/components/copro/steps/devis-recus-action";
 import { ContratSigneAction } from "@/components/copro/steps/contrat-signe-action";
 import { ResiliationAction } from "@/components/copro/steps/resiliation-action";
-import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl, saveSignedPdfUrl, toggleTermineTask } from "@/lib/actions";
+import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl, saveSignedPdfUrl, toggleTermineTask, completeTask, reopenTask } from "@/lib/actions";
+import { DueDatePicker } from "@/components/ui/due-date-picker";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -122,10 +125,23 @@ type TaskTemplate = {
   order: number;
 };
 
+type PipelineTask = {
+  id: string;
+  name: string;
+  body: string | null;
+  status: string;
+  assigneeEmail: string;
+  dueDate: Date | null;
+  completedAt: Date | null;
+  completedBy: string | null;
+  createdAt: Date;
+};
+
 interface CoproDetailProps {
   pipeline: Pipeline;
   taskTemplates: TaskTemplate[];
   userEmail: string;
+  pipelineTasks?: PipelineTask[];
 }
 
 function emailTypeLabel(emailType: string): string {
@@ -408,7 +424,7 @@ function RecoSentBlock({
   );
 }
 
-export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailProps) {
+export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks = [] }: CoproDetailProps) {
   const [isPending, startTransition] = useTransition();
   const [showAbandonDialog, setShowAbandonDialog] = useState(false);
   const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
@@ -1367,6 +1383,11 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
           })()}
 
           {/* Notes */}
+          {/* Tâches du dossier */}
+          {pipelineTasks.length > 0 && (
+            <PipelineTasksCard tasks={pipelineTasks} />
+          )}
+
           <Card className="p-4">
             <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: "#26262C" }}>
               <MessageSquare className="h-4 w-4" />
@@ -1882,4 +1903,74 @@ function EventIcon({ type }: { type: string }) {
     case "note_ajoutee": return <MessageSquare className={cls} style={{ color: "#A2A1AF" }} />;
     default: return <Clock className={cls} style={{ color: "#A2A1AF" }} />;
   }
+}
+
+function PipelineTasksCard({ tasks }: { tasks: PipelineTask[] }) {
+  const [localTasks, setLocalTasks] = useState(tasks);
+  const [, startTransition] = useTransition();
+
+  function toggle(taskId: string) {
+    const task = localTasks.find((t) => t.id === taskId);
+    if (!task) return;
+    const isDone = task.status === "done";
+    setLocalTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? { ...t, status: isDone ? "todo" : "done", completedAt: isDone ? null : new Date(), completedBy: null }
+          : t
+      )
+    );
+    startTransition(async () => {
+      if (isDone) await reopenTask(taskId);
+      else await completeTask(taskId);
+    });
+  }
+
+  const todo = localTasks.filter((t) => t.status === "todo");
+  const done = localTasks.filter((t) => t.status === "done");
+
+  return (
+    <Card className="p-4">
+      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: "#26262C" }}>
+        <ListChecks className="h-4 w-4" />
+        Tâches
+        {todo.length > 0 && (
+          <span className="text-xs font-medium px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#FFF5F5", color: "#CA1E12" }}>
+            {todo.length}
+          </span>
+        )}
+      </h3>
+      <div className="space-y-1.5">
+        {todo.map((task) => <TaskRow key={task.id} task={task} onToggle={toggle} />)}
+        {done.map((task) => <TaskRow key={task.id} task={task} onToggle={toggle} />)}
+      </div>
+    </Card>
+  );
+}
+
+function TaskRow({ task, onToggle }: { task: PipelineTask; onToggle: (id: string) => void }) {
+  const isDone = task.status === "done";
+  const isOverdue = !isDone && task.dueDate && new Date(task.dueDate) < new Date();
+
+  return (
+    <div className="flex items-start gap-2 py-1">
+      <button onClick={() => onToggle(task.id)} className="mt-0.5 shrink-0">
+        {isDone
+          ? <CheckCircle2 className="h-4 w-4" style={{ color: "#4E49FC" }} />
+          : <Circle className="h-4 w-4" style={{ color: "#A2A1AF" }} />
+        }
+      </button>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <p
+            className="text-sm"
+            style={{ color: isDone ? "#A2A1AF" : "#26262C", textDecoration: isDone ? "line-through" : "none" }}
+          >
+            {task.name}
+          </p>
+          <DueDatePicker taskId={task.id} dueDate={task.dueDate} isDone={isDone} />
+        </div>
+      </div>
+    </div>
+  );
 }

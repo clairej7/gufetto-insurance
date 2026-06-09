@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LayoutDashboard, LogOut } from "lucide-react";
+import { LayoutDashboard, LogOut, CheckSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface NavbarProps {
@@ -56,6 +56,18 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
               >
                 <LayoutDashboard className="h-4 w-4" />
                 Mon pipeline
+              </Link>
+              <Link
+                href="/tasks"
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                  pathname.startsWith("/tasks")
+                    ? "text-[#4E49FC] bg-[#F5F5FF]"
+                    : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
+                )}
+              >
+                <CheckSquare className="h-4 w-4" />
+                Mes tâches
               </Link>
               {user.isAdmin && (
                 <>

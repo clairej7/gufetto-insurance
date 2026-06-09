@@ -82,12 +82,17 @@ export async function POST(req: NextRequest) {
   const conversationId: string = convUrl.startsWith("http") ? convUrl.split("/").pop() || "" : convUrl;
 
   // Tagger la conversation avec gufetto_insurance pour filtrer dans les Rules Front
+  console.log("[front/draft] conversationId extrait:", conversationId);
   if (conversationId) {
-    await fetch(`${FRONT_API_URL}/conversations/${conversationId}/tags`, {
+    const tagRes = await fetch(`${FRONT_API_URL}/conversations/${conversationId}/tags`, {
       method: "POST",
       headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" },
       body: JSON.stringify({ tag_ids: ["tag_23jeh2"] }),
-    }).catch(() => null); // non-bloquant
+    }).catch((e) => { console.error("[front/draft] tag fetch error:", e); return null; });
+    if (tagRes) {
+      const tagBody = await tagRes.text();
+      console.log("[front/draft] tag response:", tagRes.status, tagBody);
+    }
   }
 
   return NextResponse.json({ success: true, messageId: message.id, conversationId });

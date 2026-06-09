@@ -138,6 +138,25 @@ model InsurancePipeline {
   events          PipelineEvent[]
   taskCompletions TaskCompletion[]
   devisRecus      DevisRecu[]
+  tasks           Task[]
+}
+
+model Task {
+  id            String            @id @default(cuid())
+  pipelineId    String
+  pipeline      InsurancePipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+
+  name          String
+  body          String?   @db.Text
+  status        String    @default("todo") // "todo" | "done"
+  assigneeEmail String
+  dueDate       DateTime?
+
+  completedAt   DateTime?
+  completedBy   String?
+
+  createdAt     DateTime  @default(now())
+  createdBy     String
 }
 
 model DevisRecu {

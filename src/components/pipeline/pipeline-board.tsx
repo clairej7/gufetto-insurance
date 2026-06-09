@@ -117,19 +117,26 @@ function formatGestionnaire(email: string): string {
     : email.split("@")[0];
 }
 
-function GestionnaireCombobox({ gestionnaires, value, onChange }: {
-  gestionnaires: string[];
-  value: string;
-  onChange: (v: string) => void;
+function MultiSelectFilter({
+  placeholder,
+  options,
+  value,
+  onChange,
+  renderOption,
+  width = 160,
+}: {
+  placeholder: string;
+  options: string[];
+  value: string[];
+  onChange: (v: string[]) => void;
+  renderOption?: (v: string) => string;
+  width?: number;
 }) {
-  const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement>(null);
-  const selected = value !== "all" ? value : null;
-  const filtered = gestionnaires.filter((g) => {
-    const q = query.toLowerCase();
-    return formatGestionnaire(g).toLowerCase().includes(q) || g.toLowerCase().includes(q);
-  });
+  const render = renderOption ?? ((v: string) => v);
+  const filteredOpts = options.filter((o) => render(o).toLowerCase().includes(query.toLowerCase()));
 
   useEffect(() => {
     function onOut(e: MouseEvent) {
@@ -139,34 +146,88 @@ function GestionnaireCombobox({ gestionnaires, value, onChange }: {
     return () => document.removeEventListener("mousedown", onOut);
   }, []);
 
+  function toggle(opt: string) {
+    onChange(value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt]);
+  }
+
+  const buttonLabel = value.length === 0
+    ? placeholder
+    : value.length === 1
+    ? render(value[0])
+    : `${value.length} sélectionnés`;
+
+  const hasSelection = value.length > 0;
+
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <div style={{ display: "flex", alignItems: "center", border: "1px solid #E8E8EC", borderRadius: 4, background: "#fff", height: 32, overflow: "hidden" }}>
-        <input
-          type="text"
-          placeholder="Gestionnaire…"
-          value={open ? query : (selected ? formatGestionnaire(selected) : "")}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          style={{ fontSize: 13, padding: "0 8px", background: "transparent", outline: "none", border: "none", width: 140, color: "#26262C" }}
-        />
-        {selected && (
-          <button onClick={() => { onChange("all"); setQuery(""); }} style={{ paddingRight: 8, color: "#A2A1AF", background: "none", border: "none", cursor: "pointer", display: "flex" }}>
-            <X size={12} />
-          </button>
-        )}
-      </div>
-      {open && filtered.length > 0 && (
-        <div style={{ position: "absolute", zIndex: 20, top: "100%", marginTop: 2, left: 0, minWidth: 200, background: "#fff", borderRadius: 6, boxShadow: "0 8px 24px rgba(13,22,63,.12)", border: "1px solid #E8E8EC", padding: "4px 0", maxHeight: 200, overflowY: "auto" }}>
-          {filtered.map((g) => (
-            <button
-              key={g}
-              onMouseDown={(e) => { e.preventDefault(); onChange(g); setOpen(false); setQuery(""); }}
-              style={{ width: "100%", textAlign: "left", padding: "6px 12px", fontSize: 13, color: value === g ? "#4E49FC" : "#26262C", background: value === g ? "#F5F5FF" : "transparent", border: "none", cursor: "pointer" }}
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          display: "flex", alignItems: "center", gap: 4,
+          height: 32, padding: "0 8px",
+          border: `1px solid ${hasSelection ? "#4E49FC" : "#E8E8EC"}`,
+          borderRadius: 4,
+          background: hasSelection ? "#F5F5FF" : "#fff",
+          color: hasSelection ? "#4E49FC" : "#656576",
+          fontSize: 13, cursor: "pointer", whiteSpace: "nowrap",
+          minWidth: width, justifyContent: "space-between",
+        }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1, textAlign: "left" }}>{buttonLabel}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+          {hasSelection && (
+            <span
+              onMouseDown={(e) => { e.stopPropagation(); onChange([]); }}
+              style={{ display: "flex", alignItems: "center", color: "#4E49FC", opacity: 0.7, cursor: "pointer" }}
             >
-              {formatGestionnaire(g)}
-            </button>
+              <X size={12} />
+            </span>
+          )}
+          <ChevronDown size={12} style={{ opacity: 0.5 }} />
+        </div>
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", zIndex: 20, top: "100%", marginTop: 2, left: 0,
+          minWidth: Math.max(width, 180), background: "#fff",
+          borderRadius: 6, boxShadow: "0 8px 24px rgba(13,22,63,.12)",
+          border: "1px solid #E8E8EC", padding: "4px 0", maxHeight: 260, overflowY: "auto",
+        }}>
+          {options.length > 6 && (
+            <div style={{ padding: "6px 8px 4px", borderBottom: "1px solid #F3F3F5" }}>
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Rechercher…"
+                style={{ width: "100%", fontSize: 12, padding: "4px 8px", border: "1px solid #E8E8EC", borderRadius: 4, outline: "none", color: "#26262C", boxSizing: "border-box" }}
+              />
+            </div>
+          )}
+          {filteredOpts.map((opt) => (
+            <label
+              key={opt}
+              onMouseDown={(e) => { e.preventDefault(); toggle(opt); }}
+              style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "6px 12px", fontSize: 13,
+                color: value.includes(opt) ? "#4E49FC" : "#26262C",
+                background: value.includes(opt) ? "#F5F5FF" : "transparent",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={value.includes(opt)}
+                onChange={() => toggle(opt)}
+                style={{ accentColor: "#4E49FC", width: 13, height: 13, flexShrink: 0 }}
+              />
+              {render(opt)}
+            </label>
           ))}
+          {filteredOpts.length === 0 && (
+            <div style={{ padding: "8px 12px", fontSize: 12, color: "#A2A1AF" }}>Aucun résultat</div>
+          )}
         </div>
       )}
     </div>
@@ -279,35 +340,34 @@ function PipelineRow({ pipeline, taskTemplates, cloture = false }: {
 }
 
 export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, currentUserEmail }: PipelineBoardProps) {
-  const defaultGestionnaire = currentUserEmail && gestionnaires.includes(currentUserEmail) ? currentUserEmail : "all";
+  const defaultGestionnaire = currentUserEmail && gestionnaires.includes(currentUserEmail) ? [currentUserEmail] : [];
   const [sortKey, setSortKey] = useState<SortKey>("echeance");
   const [sortAsc, setSortAsc] = useState(true);
   const [view, setView] = useState<"liste" | "kanban">("liste");
-  const [selectedGestionnaire, setSelectedGestionnaire] = useState(defaultGestionnaire);
-  const [selectedStatut, setSelectedStatut] = useState("all");
+  const [selectedGestionnaire, setSelectedGestionnaire] = useState<string[]>(defaultGestionnaire);
+  const [selectedStatut, setSelectedStatut] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
-  const [selectedAssureur, setSelectedAssureur] = useState("all");
+  const [selectedAssureur, setSelectedAssureur] = useState<string[]>([]);
   const [search, setSearch] = useState("");
 
   const assureurs = [...new Set(pipelines.map((p) => p.copro.assureurActuel).filter(Boolean) as string[])].sort();
-  const hasActiveFilters = selectedGestionnaire !== "all" || selectedStatut !== "all" || selectedEcheance !== "all" || selectedAssureur !== "all" || search !== "";
+  const hasActiveFilters = selectedGestionnaire.length > 0 || selectedStatut.length > 0 || selectedEcheance !== "all" || selectedAssureur.length > 0 || search !== "";
 
   function resetFilters() {
-    setSelectedGestionnaire("all"); setSelectedStatut("all");
-    setSelectedEcheance("all"); setSelectedAssureur("all"); setSearch("");
+    setSelectedGestionnaire([]); setSelectedStatut([]);
+    setSelectedEcheance("all"); setSelectedAssureur([]); setSearch("");
   }
 
   const filtered = pipelines.filter((p) => {
-    if (selectedGestionnaire !== "all" && p.copro.gestionnaireEmail !== selectedGestionnaire) return false;
-    if (selectedStatut !== "all" && p.statut !== selectedStatut) return false;
-    if (selectedAssureur !== "all" && p.copro.assureurActuel !== selectedAssureur) return false;
+    if (selectedGestionnaire.length > 0 && !selectedGestionnaire.includes(p.copro.gestionnaireEmail ?? "")) return false;
+    if (selectedStatut.length > 0 && !selectedStatut.includes(p.statut)) return false;
+    if (selectedAssureur.length > 0 && !selectedAssureur.includes(p.copro.assureurActuel ?? "")) return false;
     if (search && !p.copro.nom.toLowerCase().includes(search.toLowerCase())) return false;
     if (selectedEcheance !== "all") {
       const days = getDaysUntilEcheance(p.copro.dateEcheance);
-      if (selectedEcheance === "overdue" && (days === null || days >= 0)) return false;
-      if (selectedEcheance === "urgent" && (days === null || days < 0 || days > 60)) return false;
-      if (selectedEcheance === "warning" && (days === null || days <= 60 || days > 120)) return false;
-      if (selectedEcheance === "ok" && (days === null || days <= 120)) return false;
+      if (selectedEcheance === "lt2" && (days === null || days > 60)) return false;
+      if (selectedEcheance === "bt2_6" && (days === null || days <= 60 || days > 180)) return false;
+      if (selectedEcheance === "gt6" && (days === null || days <= 180)) return false;
     }
     return true;
   });
@@ -338,8 +398,18 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
   const urgent = activePipelines.filter(p => { const d = getDaysUntilEcheance(p.copro.dateEcheance); return d !== null && d <= 60; }).length;
   const dealsGagnes = pipelines.filter(p => p.statut === "contrat_signe" || p.statut === "termine").length;
 
-  const active = sorted.filter(p => p.statut !== "termine");
-  const clotures = sorted.filter(p => p.statut === "termine");
+  const TERMINAL_STATUTS_LOCAL = ["termine", "abandonne", "refuse", "non_assurable"];
+  const urgents = sorted.filter(p => {
+    if (TERMINAL_STATUTS_LOCAL.includes(p.statut)) return false;
+    const d = getDaysUntilEcheance(p.copro.dateEcheance);
+    return d !== null && d <= 180;
+  });
+  const autres = sorted.filter(p => {
+    if (TERMINAL_STATUTS_LOCAL.includes(p.statut)) return false;
+    const d = getDaysUntilEcheance(p.copro.dateEcheance);
+    return d === null || d > 180;
+  });
+  const clotures = sorted.filter(p => TERMINAL_STATUTS_LOCAL.includes(p.statut));
 
   // Toolbar shared between views
   const toolbar = (
@@ -366,22 +436,35 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
       <div style={{ flex: 1 }} />
 
       {/* Filters */}
-      <GestionnaireCombobox gestionnaires={gestionnaires} value={selectedGestionnaire} onChange={setSelectedGestionnaire} />
-      <select value={selectedStatut} onChange={(e) => setSelectedStatut(e.target.value)} style={selectStyle}>
-        <option value="all">Toutes les étapes</option>
-        {PIPELINE_STEPS.map((s) => <option key={s.statut} value={s.statut}>{s.label}</option>)}
-      </select>
+      <MultiSelectFilter
+        placeholder="Gestionnaire"
+        options={gestionnaires}
+        value={selectedGestionnaire}
+        onChange={setSelectedGestionnaire}
+        renderOption={formatGestionnaire}
+        width={150}
+      />
+      <MultiSelectFilter
+        placeholder="Toutes les étapes"
+        options={PIPELINE_STEPS.map((s) => s.statut)}
+        value={selectedStatut}
+        onChange={setSelectedStatut}
+        renderOption={(s) => STATUT_TAG[s]?.label ?? s}
+        width={160}
+      />
       <select value={selectedEcheance} onChange={(e) => setSelectedEcheance(e.target.value)} style={selectStyle}>
         <option value="all">Toutes les échéances</option>
-        <option value="overdue">Dépassées</option>
-        <option value="urgent">{"< 2 mois"}</option>
-        <option value="warning">2 à 4 mois</option>
-        <option value="ok">{"> 4 mois"}</option>
+        <option value="lt2">{"< 2 mois"}</option>
+        <option value="bt2_6">2 à 6 mois</option>
+        <option value="gt6">{"> 6 mois"}</option>
       </select>
-      <select value={selectedAssureur} onChange={(e) => setSelectedAssureur(e.target.value)} style={selectStyle}>
-        <option value="all">Tous les assureurs</option>
-        {assureurs.map((a) => <option key={a} value={a}>{a}</option>)}
-      </select>
+      <MultiSelectFilter
+        placeholder="Assureur"
+        options={assureurs}
+        value={selectedAssureur}
+        onChange={setSelectedAssureur}
+        width={140}
+      />
 
       {/* Search */}
       <div style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 10px", border: "1px solid #E8E8EC", borderRadius: 4, background: "#fff", minWidth: 180 }}>
@@ -431,7 +514,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
           filtered.length === 0 ? (
             <div style={{ textAlign: "center", padding: "60px 24px", color: "#A2A1AF" }}>
               <div style={{ fontSize: 13 }}>
-                {selectedGestionnaire !== "all" && pipelines.filter(p => p.copro.gestionnaireEmail === selectedGestionnaire).length === 0
+                {selectedGestionnaire.length === 1 && pipelines.filter(p => p.copro.gestionnaireEmail === selectedGestionnaire[0]).length === 0
                   ? "Aucun dossier assigné à ce gestionnaire."
                   : "Aucun dossier ne correspond aux filtres."}
               </div>
@@ -447,7 +530,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px 8px", borderBottom: "1px solid #F3F3F5" }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: "#26262C" }}>Mes dossiers</span>
                 <span style={{ fontSize: 12, fontWeight: 500, color: "#656576", padding: "2px 7px", background: "#F7F7F8", borderRadius: 10, fontVariantNumeric: "tabular-nums" }}>
-                  {active.length}
+                  {urgents.length + autres.length}
                 </span>
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -472,9 +555,34 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                   </tr>
                 </thead>
                 <tbody>
-                  {active.map((p) => (
-                    <PipelineRow key={p.id} pipeline={p} taskTemplates={taskTemplates} />
-                  ))}
+                  {urgents.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={5} style={{ padding: "8px 16px 6px", background: "#FFF9F5", borderBottom: "1px solid #F3F3F5" }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "#955804" }}>
+                            Urgents — échéance &lt; 6 mois — {urgents.length}
+                          </span>
+                        </td>
+                      </tr>
+                      {urgents.map((p) => (
+                        <PipelineRow key={p.id} pipeline={p} taskTemplates={taskTemplates} />
+                      ))}
+                    </>
+                  )}
+                  {autres.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={5} style={{ padding: "8px 16px 6px", background: "#FBFBFB", borderTop: urgents.length > 0 ? "2px solid #E8E8EC" : undefined, borderBottom: "1px solid #F3F3F5" }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "#656576" }}>
+                            Autres dossiers — {autres.length}
+                          </span>
+                        </td>
+                      </tr>
+                      {autres.map((p) => (
+                        <PipelineRow key={p.id} pipeline={p} taskTemplates={taskTemplates} />
+                      ))}
+                    </>
+                  )}
                   {clotures.length > 0 && (
                     <>
                       <tr>

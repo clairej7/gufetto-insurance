@@ -15,6 +15,26 @@ async function getSession() {
   return session;
 }
 
+async function createPipelineTask({
+  pipelineId,
+  name,
+  body,
+  assigneeEmail,
+  dueDate,
+  createdBy,
+}: {
+  pipelineId: string;
+  name: string;
+  body?: string;
+  assigneeEmail: string;
+  dueDate?: Date;
+  createdBy: string;
+}) {
+  return prisma.task.create({
+    data: { pipelineId, name, body: body ?? null, assigneeEmail, dueDate: dueDate ?? null, createdBy },
+  });
+}
+
 export async function advanceStatut(
   pipelineId: string,
   force = false,
@@ -76,8 +96,50 @@ export async function advanceStatut(
     }),
   ]);
 
+  const coproNom = pipeline.copro.nom;
+  const assignee = pipeline.copro.gestionnaireEmail || session.user.email!;
+
+  const due = (days: number) => { const d = new Date(); d.setDate(d.getDate() + days); return d; };
+
+  // Avance manuelle vers rs_en_cours : créer tâche RS si pas déjà créée
+  if (nextStatut === "rs_en_cours") {
+    const existing = await prisma.task.findFirst({ where: { pipelineId, name: { contains: "RS envoyé" } } });
+    if (!existing) {
+      await createPipelineTask({ pipelineId, name: `${coproNom} — RS envoyé : reçu ou besoin de relancer ?`, assigneeEmail: assignee, dueDate: due(1), createdBy: session.user.email! });
+    }
+  }
+
+  // Avance vers rs_recu : compléter les tâches RS ouvertes
+  if (nextStatut === "rs_recu") {
+    await prisma.task.updateMany({
+      where: { pipelineId, status: "todo" },
+      data: { status: "done", completedAt: new Date(), completedBy: session.user.email! },
+    });
+  }
+
+  // Avance vers devis_demandes : créer tâche comparatif si pas déjà créée
+  if (nextStatut === "devis_demandes") {
+    const existing = await prisma.task.findFirst({ where: { pipelineId, name: { contains: "comparatif" } } });
+    if (!existing) {
+      await createPipelineTask({ pipelineId, name: `${coproNom} — Vérifier si devis reçus et envoyer comparatif au CS`, assigneeEmail: assignee, dueDate: due(3), createdBy: session.user.email! });
+    }
+  }
+
+  if (nextStatut === "devis_recus") {
+    await createPipelineTask({ pipelineId, name: `${coproNom} — J+7 : Valider le devis`, assigneeEmail: assignee, dueDate: due(7), createdBy: session.user.email! });
+  }
+
+  if (nextStatut === "contrat_signe") {
+    await Promise.all([
+      createPipelineTask({ pipelineId, name: `${coproNom} — Notifier le nouvel assureur`, assigneeEmail: assignee, dueDate: due(1), createdBy: session.user.email! }),
+      createPipelineTask({ pipelineId, name: `${coproNom} — Envoyer la résiliation (mail + LRAR)`, assigneeEmail: assignee, dueDate: due(1), createdBy: session.user.email! }),
+      createPipelineTask({ pipelineId, name: `${coproNom} — Mettre à jour le contrat dans Duomo`, assigneeEmail: assignee, dueDate: due(1), createdBy: session.user.email! }),
+    ]);
+  }
+
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${pipelineId}`);
+  revalidatePath("/tasks");
   return { success: true };
 }
 
@@ -238,29 +300,62 @@ export async function logRSDraftSent(
     },
   });
 
+  const pipeline = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, include: { copro: true } });
+  if (pipeline) {
+    const assignee = pipeline.copro.gestionnaireEmail || session.user.email!;
+    const taskName = relanceNum === 0
+      ? `${pipeline.copro.nom} — RS envoyé : reçu ou besoin de relancer ?`
+      : `${pipeline.copro.nom} — Relance ${relanceNum} RS envoyée : RS reçu ?`;
+    const daysOffset = relanceNum === 0 ? 1 : relanceNum === 1 ? 5 : 3;
+    const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + daysOffset);
+    await createPipelineTask({ pipelineId, name: taskName, assigneeEmail: assignee, dueDate, createdBy: session.user.email! });
+  }
+
   revalidatePath(`/pipeline/${pipelineId}`);
+  revalidatePath("/tasks");
   return { success: true };
 }
 
 export async function marquerRSRecu(pipelineId: string) {
+  const session = await getSession();
+  await prisma.task.updateMany({
+    where: { pipelineId, status: "todo" },
+    data: { status: "done", completedAt: new Date(), completedBy: session.user.email! },
+  });
+  revalidatePath("/tasks");
   return advanceStatut(pipelineId, true, "RS reçu — passage aux devis");
 }
 
 export async function createAppelCourtierTask(pipelineId: string) {
   const session = await getSession();
 
+  const pipeline = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, include: { copro: true } });
+
   await prisma.pipelineEvent.create({
     data: {
       pipelineId,
       type: "action_manuelle",
-      description:
-        "Tâche créée : Appeler le courtier pour récupérer le RS (J+28 sans réponse)",
+      description: "Tâche créée : Appeler le courtier pour récupérer le RS (J+28 sans réponse)",
       metadata: { rsType: "appel_courtier_task" },
       createdBy: session.user.email!,
     },
   });
 
+  if (pipeline) {
+    const assignee = pipeline.copro.gestionnaireEmail || session.user.email!;
+    const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + 2);
+    await createPipelineTask({
+      pipelineId,
+      name: `${pipeline.copro.nom} — Appeler le courtier pour récupérer le RS`,
+      body: "J+28 sans réponse aux emails de relance",
+      assigneeEmail: assignee,
+      dueDate,
+      createdBy: session.user.email!,
+    });
+  }
+
   revalidatePath(`/pipeline/${pipelineId}`);
+  revalidatePath("/tasks");
   return { success: true };
 }
 
@@ -406,7 +501,26 @@ export async function logDevisSent(
       createdBy: session.user.email!,
     },
   });
+
+  // Créer la tâche comparatif une seule fois (au premier devis envoyé)
+  const existing = await prisma.task.findFirst({ where: { pipelineId, name: { contains: "comparatif" } } });
+  if (!existing) {
+    const pipeline = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, include: { copro: true } });
+    if (pipeline) {
+      const assignee = pipeline.copro.gestionnaireEmail || session.user.email!;
+      const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + 3);
+      await createPipelineTask({
+        pipelineId,
+        name: `${pipeline.copro.nom} — Vérifier si devis reçus et envoyer comparatif au CS`,
+        assigneeEmail: assignee,
+        dueDate,
+        createdBy: session.user.email!,
+      });
+    }
+  }
+
   revalidatePath(`/pipeline/${pipelineId}`);
+  revalidatePath("/tasks");
   return { success: true };
 }
 
@@ -694,4 +808,59 @@ Indices selon l'assureur :
 
   revalidatePath(`/pipeline/${pipelineId}`);
   return { success: true };
+}
+
+export async function completeTask(taskId: string) {
+  const session = await getSession();
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { status: "done", completedAt: new Date(), completedBy: session.user.email! },
+  });
+  revalidatePath("/tasks");
+  return { success: true };
+}
+
+export async function reopenTask(taskId: string) {
+  await getSession();
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { status: "todo", completedAt: null, completedBy: null },
+  });
+  revalidatePath("/tasks");
+  return { success: true };
+}
+
+export async function getTasks(filterEmail?: string) {
+  await getSession();
+
+  const tasks = await prisma.task.findMany({
+    where: filterEmail ? { assigneeEmail: filterEmail } : {},
+    include: {
+      pipeline: {
+        include: { copro: true },
+      },
+    },
+    orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
+  });
+
+  return { tasks };
+}
+
+export async function getAllAssignees() {
+  await getSession();
+  const assignees = await prisma.task.findMany({
+    select: { assigneeEmail: true },
+    distinct: ["assigneeEmail"],
+  });
+  return assignees.map((a) => a.assigneeEmail);
+}
+
+export async function updateTaskDueDate(taskId: string, dueDate: Date | null) {
+  await getSession();
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { dueDate },
+  });
+  revalidatePath("/tasks");
+  revalidatePath("/pipeline");
 }
