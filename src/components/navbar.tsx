@@ -80,7 +80,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
                         : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
                     )}
                   >
-                    Vue globale
+                    Tracking
                   </Link>
                   <Link
                     href="/admin/activite"
@@ -91,7 +91,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
                         : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
                     )}
                   >
-                    Activité
+                    Logs
                   </Link>
                 </>
               )}

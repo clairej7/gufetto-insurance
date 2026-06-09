@@ -42,7 +42,7 @@ export default async function AdminPage() {
       <Navbar user={user} />
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold" style={{ color: "#26262C", letterSpacing: "-0.02em" }}>Vue d&apos;ensemble</h1>
+          <h1 className="text-2xl font-bold" style={{ color: "#26262C", letterSpacing: "-0.02em" }}>Tracking</h1>
           <p className="text-sm mt-1" style={{ color: "#656576" }}>
             {pipelines.length} dossiers · {gestionnaires.length} gestionnaires
           </p>

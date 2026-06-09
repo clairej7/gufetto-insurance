@@ -164,10 +164,6 @@ export function MultiSelectFilter({
           {filteredOpts.map((opt) => (
             <label
               key={opt}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                toggle(opt);
-              }}
               style={{
                 display: "flex",
                 alignItems: "center",
