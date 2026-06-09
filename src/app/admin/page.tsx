@@ -1,12 +1,15 @@
 export const dynamic = "force-dynamic";
 
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { AdminBoard } from "@/components/admin/admin-board";
-import { MOCK_USER } from "@/lib/mock-session";
 
 export default async function AdminPage() {
-  const user = MOCK_USER;
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const user = session.user;
 
   const pipelines = await prisma.insurancePipeline.findMany({
     where: { statut: { notIn: ["abandonne", "refuse", "non_assurable"] } },

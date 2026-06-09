@@ -972,6 +972,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
                       return m?.devisType === "devis_sent";
                     })}
                     copro={pipeline.copro}
+                    userName={userEmail.split("@")[0].split(".").map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ")}
                   />
                 </Card>
               )}

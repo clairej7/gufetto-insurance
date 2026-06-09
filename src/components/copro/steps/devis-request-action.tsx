@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 import { Check, CheckCircle2, ChevronRight, FileText, Paperclip, Upload, X } from "lucide-react";
 import { updateCoproCaracteristiques, logDevisSent, advanceStatut } from "@/lib/actions";
 import { toast } from "sonner";
-import { MOCK_USER } from "@/lib/mock-session";
 
 type DroppedFile = { file: File; name: string };
 
@@ -172,6 +171,7 @@ interface DevisRequestActionProps {
   pipelineId: string;
   coproId: string;
   devisEvents: DevisEvent[];
+  userName?: string;
   copro: {
     nom: string;
     adresse: string | null;
@@ -248,7 +248,7 @@ function RadioButton({ label, selected, onClick }: { label: string; selected: bo
 }
 
 
-export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro }: DevisRequestActionProps) {
+export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, userName }: DevisRequestActionProps) {
   function initAssureurs(): Set<Assureur> {
     try {
       const saved = copro.assureursDevis ? JSON.parse(copro.assureursDevis) as Assureur[] : [];
@@ -420,7 +420,7 @@ export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro }: 
       "Merci d'avance,",
       "Excellente journée,",
       "",
-      MOCK_USER.name,
+      userName ?? "L'équipe Matera",
       "Matera",
     ].join("\n");
   }

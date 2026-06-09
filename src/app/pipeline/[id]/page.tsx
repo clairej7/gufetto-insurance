@@ -1,10 +1,10 @@
 export const dynamic = "force-dynamic";
 
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { CoproDetail } from "@/components/copro/copro-detail";
-import { MOCK_USER } from "@/lib/mock-session";
 
 export default async function CoproDetailPage({
   params,
@@ -12,7 +12,9 @@ export default async function CoproDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const user = MOCK_USER;
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const user = session.user;
 
   const pipeline = await prisma.insurancePipeline.findUnique({
     where: { id },
@@ -45,7 +47,7 @@ export default async function CoproDetailPage({
         <CoproDetail
           pipeline={pipeline as Parameters<typeof CoproDetail>[0]["pipeline"]}
           taskTemplates={taskTemplates}
-          userEmail={user.email}
+          userEmail={user.email ?? ""}
         />
       </main>
     </div>

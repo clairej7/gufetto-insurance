@@ -3,14 +3,16 @@
 import { prisma } from "@/lib/prisma";
 import { getNextStatut, PIPELINE_STEPS } from "@/lib/pipeline";
 import { revalidatePath } from "next/cache";
-import { MOCK_USER } from "@/lib/mock-session";
+import { auth } from "@/lib/auth";
 import { supabaseAdmin, STORAGE_BUCKET } from "@/lib/supabase";
 import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function getSession() {
-  return { user: MOCK_USER };
+  const session = await auth();
+  if (!session?.user?.email) throw new Error("Non authentifié");
+  return session;
 }
 
 export async function advanceStatut(

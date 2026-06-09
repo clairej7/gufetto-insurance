@@ -1,12 +1,15 @@
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/prisma";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { PipelineBoard } from "@/components/pipeline/pipeline-board";
-import { MOCK_USER } from "@/lib/mock-session";
 
 export default async function PipelinePage() {
-  const user = MOCK_USER;
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const user = session.user;
 
   const pipelines = await prisma.insurancePipeline.findMany({
     include: {
