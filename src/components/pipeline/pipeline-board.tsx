@@ -549,6 +549,54 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                 </div>
               );
             })}
+
+            {/* Séparateur + colonne Clôturés */}
+            {(() => {
+              const clotures = filtered.filter(p => p.statut === "termine");
+              return (
+                <>
+                  <div style={{ width: 1, background: "#E8E8EC", flexShrink: 0, margin: "0 4px" }} />
+                  <div style={{ minWidth: 200, flexShrink: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#13762C" }}>
+                        Clôturés
+                      </span>
+                      {clotures.length > 0 && (
+                        <span style={{ fontSize: 11, fontWeight: 500, padding: "1px 6px", background: "#EFFBF2", borderRadius: 10, color: "#13762C", fontVariantNumeric: "tabular-nums" }}>
+                          {clotures.length}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {clotures.map((p) => (
+                        <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
+                          <div style={{
+                            background: "#F7FDF9", borderRadius: 6, padding: "10px 12px",
+                            border: "1px solid #BBF1C8", borderLeft: "3px solid #13762C",
+                            cursor: "pointer", transition: "box-shadow 120ms",
+                          }}
+                            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
+                            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
+                          >
+                            <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {p.copro.nom}
+                            </div>
+                            <div style={{ marginTop: 4 }}>
+                              <Tag variant="success">Clôturé</Tag>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                      {clotures.length === 0 && (
+                        <div style={{ borderRadius: 6, padding: 12, textAlign: "center", fontSize: 12, border: "1px dashed #BBF1C8", background: "#F7FDF9", color: "#A2A1AF" }}>
+                          Vide
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
       </div>
