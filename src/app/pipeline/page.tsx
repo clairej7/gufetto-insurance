@@ -49,6 +49,7 @@ export default async function PipelinePage() {
           pipelines={pipelines as Parameters<typeof PipelineBoard>[0]["pipelines"]}
           taskTemplates={taskTemplates}
           gestionnaires={gestionnaires}
+          currentUserEmail={user.email ?? ""}
         />
       </main>
     </div>

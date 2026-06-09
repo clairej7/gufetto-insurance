@@ -33,6 +33,7 @@ type TaskTemplate = {
 };
 
 interface PipelineBoardProps {
+  currentUserEmail?: string;
   pipelines: PipelineWithCopro[];
   taskTemplates: TaskTemplate[];
   gestionnaires: string[];
@@ -277,11 +278,12 @@ function PipelineRow({ pipeline, taskTemplates, cloture = false }: {
   );
 }
 
-export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: PipelineBoardProps) {
+export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, currentUserEmail }: PipelineBoardProps) {
+  const defaultGestionnaire = currentUserEmail && gestionnaires.includes(currentUserEmail) ? currentUserEmail : "all";
   const [sortKey, setSortKey] = useState<SortKey>("echeance");
   const [sortAsc, setSortAsc] = useState(true);
   const [view, setView] = useState<"liste" | "kanban">("liste");
-  const [selectedGestionnaire, setSelectedGestionnaire] = useState("all");
+  const [selectedGestionnaire, setSelectedGestionnaire] = useState(defaultGestionnaire);
   const [selectedStatut, setSelectedStatut] = useState("all");
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [selectedAssureur, setSelectedAssureur] = useState("all");
@@ -428,10 +430,14 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires }: Pipel
         {view === "liste" ? (
           filtered.length === 0 ? (
             <div style={{ textAlign: "center", padding: "60px 24px", color: "#A2A1AF" }}>
-              <div style={{ fontSize: 13 }}>Aucun dossier ne correspond aux filtres.</div>
+              <div style={{ fontSize: 13 }}>
+                {selectedGestionnaire !== "all" && pipelines.filter(p => p.copro.gestionnaireEmail === selectedGestionnaire).length === 0
+                  ? "Aucun dossier assigné à ce gestionnaire."
+                  : "Aucun dossier ne correspond aux filtres."}
+              </div>
               {hasActiveFilters && (
                 <button onClick={resetFilters} style={{ marginTop: 8, fontSize: 12, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
-                  Réinitialiser les filtres
+                  Voir tous les dossiers
                 </button>
               )}
             </div>
