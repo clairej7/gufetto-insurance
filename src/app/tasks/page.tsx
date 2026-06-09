@@ -23,7 +23,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F7F7F8" }}>
-      <Navbar user={{ ...session.user, isAdmin: user?.isAdmin }} />
+      <Navbar user={session.user} />
       <main className="max-w-4xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-semibold" style={{ color: "#26262C" }}>Tâches</h1>

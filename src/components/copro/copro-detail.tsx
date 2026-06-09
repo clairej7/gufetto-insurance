@@ -739,14 +739,15 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                 <InfoRow label="Caractéristiques particulières" value={pipeline.copro.caracteristiquesParticulieres} />
                 <InfoRow label="Logements inoccupés" value={INOCCUPEE_LABELS[pipeline.copro.proportionInoccupee ?? ""] ?? null} />
                 <InfoRow label="Représentant légal" value={pipeline.copro.representantLegal} />
-                {pipeline.copro.duomoUrl && (
-                  <div className="flex justify-between items-center py-0.5">
-                    <span className="text-xs" style={{ color: "#A2A1AF" }}>Duomo</span>
-                    <a href={pipeline.copro.duomoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: "#4E49FC" }}>
-                      Ouvrir <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                )}
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-xs" style={{ color: "#A2A1AF" }}>Duomo</span>
+                  {pipeline.copro.duomoUrl
+                    ? <a href={pipeline.copro.duomoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: "#4E49FC" }}>
+                        Ouvrir <ExternalLink className="h-3 w-3" />
+                      </a>
+                    : <span className="text-xs italic" style={{ color: "#C0C0C9" }}>Non renseigné</span>
+                  }
+                </div>
               </dl>
             </Card>
           )}
@@ -955,14 +956,15 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                     <InfoRow label="Caractéristiques particulières" value={pipeline.copro.caracteristiquesParticulieres} />
                     <InfoRow label="Logements inoccupés" value={INOCCUPEE_LABELS[pipeline.copro.proportionInoccupee ?? ""] ?? null} />
                     <InfoRow label="Représentant légal" value={pipeline.copro.representantLegal} />
-                {pipeline.copro.duomoUrl && (
-                  <div className="flex justify-between items-center py-0.5">
-                    <span className="text-xs" style={{ color: "#A2A1AF" }}>Duomo</span>
-                    <a href={pipeline.copro.duomoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: "#4E49FC" }}>
-                      Ouvrir <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                )}
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="text-xs" style={{ color: "#A2A1AF" }}>Duomo</span>
+                  {pipeline.copro.duomoUrl
+                    ? <a href={pipeline.copro.duomoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: "#4E49FC" }}>
+                        Ouvrir <ExternalLink className="h-3 w-3" />
+                      </a>
+                    : <span className="text-xs italic" style={{ color: "#C0C0C9" }}>Non renseigné</span>
+                  }
+                </div>
                   </dl>
                 </Card>
               )}
