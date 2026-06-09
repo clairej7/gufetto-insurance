@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import { authConfig } from "@/lib/auth-config";
 
+// Middleware edge-compatible : pas de Prisma, juste vérification JWT
 export const { auth: middleware } = NextAuth(authConfig);
 
 export const config = {
