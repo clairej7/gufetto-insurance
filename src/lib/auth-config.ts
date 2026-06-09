@@ -1,13 +1,12 @@
 import type { NextAuthConfig } from "next-auth";
-import Google from "next-auth/providers/google";
 
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "").split(",").map((e) => e.trim());
 
-// Config sans Prisma — utilisée dans le middleware (edge runtime)
+// Config edge-compatible — SANS providers (le middleware vérifie uniquement le JWT)
 export const authConfig: NextAuthConfig = {
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   trustHost: true,
-  providers: [Google],
+  providers: [],
   session: { strategy: "jwt" },
   callbacks: {
     async signIn({ account, profile }) {
