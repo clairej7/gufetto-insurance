@@ -1310,6 +1310,47 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail }: CoproDetailP
             )}
           </Card>
 
+          {/* Réponses Front */}
+          {(() => {
+            const replies = pipeline.events.filter(e => {
+              const m = e.metadata as Record<string, unknown> | null;
+              return m?.frontReply === true;
+            });
+            if (replies.length === 0) return null;
+            return (
+              <Card className="p-4">
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: "#26262C" }}>
+                  <Mail className="h-4 w-4" />
+                  Réponses reçues
+                  <span className="text-xs font-medium px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#F5F5FF", color: "#4E49FC" }}>{replies.length}</span>
+                </h3>
+                <div className="space-y-3">
+                  {replies.map(reply => {
+                    const m = reply.metadata as Record<string, unknown>;
+                    return (
+                      <div key={reply.id} className="rounded-lg p-3 border" style={{ borderColor: "#E8E8EC", backgroundColor: "#FAFAFA" }}>
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                          <span className="text-xs font-semibold truncate" style={{ color: "#26262C" }}>{String(m.fromName ?? m.from ?? "")}</span>
+                          <span className="text-xs flex-shrink-0" style={{ color: "#A2A1AF" }}>
+                            {new Date(reply.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                        {m.subject != null && (
+                          <p className="text-xs mb-1" style={{ color: "#656576" }}>Objet : {String(m.subject)}</p>
+                        )}
+                        {m.body != null && (
+                          <p className="text-xs leading-relaxed line-clamp-4 whitespace-pre-wrap" style={{ color: "#656576" }}>
+                            {String(m.body).slice(0, 300)}{String(m.body).length > 300 ? "…" : ""}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            );
+          })()}
+
           {/* Notes */}
           <Card className="p-4">
             <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: "#26262C" }}>

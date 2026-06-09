@@ -343,7 +343,7 @@ export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, us
     if (contratFile) formData.append("contrat", contratFile.file, contratFile.name);
     if (rsFile) formData.append("pv", rsFile.file, rsFile.name);
     const res = await fetch("/api/front/draft", { method: "POST", body: formData });
-    return res.json() as Promise<{ success: boolean; fallback?: boolean; mailtoUrl?: string; error?: string }>;
+    return res.json() as Promise<{ success: boolean; fallback?: boolean; mailtoUrl?: string; error?: string; conversationId?: string }>;
   }
 
   function handleSendDevis() {
@@ -370,7 +370,7 @@ export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, us
         const data = await sendOneEmail(assureur, email, body);
         if (data.success) {
           if (data.fallback && data.mailtoUrl) window.open(data.mailtoUrl, "_blank");
-          await logDevisSent(pipelineId, assureur, email, body);
+          await logDevisSent(pipelineId, assureur, email, body, data.conversationId);
         } else {
           allOk = false;
           toast.error(`Erreur envoi ${assureur.toUpperCase()} : ${data.error ?? "inconnu"}`);

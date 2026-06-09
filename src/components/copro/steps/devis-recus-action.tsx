@@ -600,12 +600,12 @@ function RecoAndEmailSection({
       formData.append("subject", subject);
       formData.append("body", recommendation);
       const res = await fetch("/api/front/draft", { method: "POST", body: formData });
-      const json = await res.json() as { success?: boolean; fallback?: boolean; mailtoUrl?: string; error?: string };
+      const json = await res.json() as { success?: boolean; fallback?: boolean; mailtoUrl?: string; error?: string; conversationId?: string };
       if (json.success) {
         if (json.fallback && json.mailtoUrl) window.open(json.mailtoUrl, "_blank");
         setSent(true);
         toast.success("Email envoyé au CS !");
-        await logRecoSent(pipelineId, to, subject, recommendation);
+        await logRecoSent(pipelineId, to, subject, recommendation, json.conversationId);
         await advanceStatut(pipelineId, true);
       } else {
         toast.error(`Erreur : ${json.error ?? "inconnu"}`);

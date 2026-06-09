@@ -99,9 +99,9 @@ export function ContratSigneAction({
       }
 
       const res = await fetch("/api/front/draft", { method: "POST", body: formData });
-      const json = await res.json() as { success?: boolean; error?: string };
+      const json = await res.json() as { success?: boolean; error?: string; conversationId?: string };
       if (json.success) {
-        await logInsureurEmailSent(pipelineId, to, subject, body);
+        await logInsureurEmailSent(pipelineId, to, subject, body, json.conversationId);
         setShowForm(false);
         setShowEmailBody(false);
         toast.success(`Email envoyé à ${devisRecommande?.assureur} !`);

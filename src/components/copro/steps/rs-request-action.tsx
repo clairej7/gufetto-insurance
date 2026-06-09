@@ -226,7 +226,7 @@ function FirstEmailForm({
         } else {
           toast.success("Mail envoyé !");
         }
-        await logRSDraftSent(pipelineId, toEmail, 0);
+        await logRSDraftSent(pipelineId, toEmail, 0, data.conversationId);
         onSent(toEmail);
       } else {
         toast.error(data.error || "Erreur lors de l'envoi du mail");
@@ -361,7 +361,7 @@ function RelanceForm({
         } else {
           toast.success(`Relance ${relanceNum} créée dans Front !`);
         }
-        await logRSDraftSent(pipelineId, to, relanceNum);
+        await logRSDraftSent(pipelineId, to, relanceNum, data.conversationId);
         onSent();
       } else {
         toast.error(data.error || "Erreur");

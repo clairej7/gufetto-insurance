@@ -71,5 +71,8 @@ export async function POST(req: NextRequest) {
   }
 
   const message = await draftRes.json();
-  return NextResponse.json({ success: true, messageId: message.id });
+  // Extraire le conversationId depuis les liens Front
+  const convUrl: string = message._links?.related?.conversation || message.conversation?.id || "";
+  const conversationId: string = convUrl.startsWith("http") ? convUrl.split("/").pop() || "" : convUrl;
+  return NextResponse.json({ success: true, messageId: message.id, conversationId });
 }

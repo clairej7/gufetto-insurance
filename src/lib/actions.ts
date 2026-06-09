@@ -219,7 +219,8 @@ export async function marquerNonAssurable(pipelineId: string, note?: string) {
 export async function logRSDraftSent(
   pipelineId: string,
   toEmail: string,
-  relanceNum: number
+  relanceNum: number,
+  conversationId?: string
 ) {
   const session = await getSession();
   const description =
@@ -232,7 +233,7 @@ export async function logRSDraftSent(
       pipelineId,
       type: "action_manuelle",
       description,
-      metadata: { rsType: "draft_sent", to: toEmail, relanceNum },
+      metadata: { rsType: "draft_sent", to: toEmail, relanceNum, conversationId: conversationId || null },
       createdBy: session.user.email!,
     },
   });
@@ -392,7 +393,8 @@ export async function logDevisSent(
   pipelineId: string,
   assureur: string,
   toEmail: string,
-  body?: string
+  body?: string,
+  conversationId?: string
 ) {
   const session = await getSession();
   await prisma.pipelineEvent.create({
@@ -400,7 +402,7 @@ export async function logDevisSent(
       pipelineId,
       type: "action_manuelle",
       description: `Demande de devis envoyée à ${assureur.toUpperCase()} — ${toEmail}`,
-      metadata: { devisType: "devis_sent", assureur, to: toEmail, body: body ?? null },
+      metadata: { devisType: "devis_sent", assureur, to: toEmail, body: body ?? null, conversationId: conversationId || null },
       createdBy: session.user.email!,
     },
   });
@@ -412,7 +414,8 @@ export async function logInsureurEmailSent(
   pipelineId: string,
   toEmail: string,
   subject: string,
-  body: string
+  body: string,
+  conversationId?: string
 ) {
   const session = await getSession();
   await prisma.pipelineEvent.create({
@@ -420,7 +423,7 @@ export async function logInsureurEmailSent(
       pipelineId,
       type: "action_manuelle",
       description: `Email envoyé au nouvel assureur — ${toEmail}`,
-      metadata: { insureurType: "insureur_sent", to: toEmail, subject, body },
+      metadata: { insureurType: "insureur_sent", to: toEmail, subject, body, conversationId: conversationId || null },
       createdBy: session.user.email!,
     },
   });
@@ -432,7 +435,8 @@ export async function logResiliationEmailSent(
   pipelineId: string,
   toEmail: string,
   subject: string,
-  body: string
+  body: string,
+  conversationId?: string
 ) {
   const session = await getSession();
   await prisma.pipelineEvent.create({
@@ -440,7 +444,7 @@ export async function logResiliationEmailSent(
       pipelineId,
       type: "action_manuelle",
       description: `Email de résiliation envoyé à l'ancien assureur — ${toEmail}`,
-      metadata: { resiliationType: "resiliation_sent", to: toEmail, subject, body },
+      metadata: { resiliationType: "resiliation_sent", to: toEmail, subject, body, conversationId: conversationId || null },
       createdBy: session.user.email!,
     },
   });
@@ -477,7 +481,8 @@ export async function logRecoSent(
   pipelineId: string,
   toEmail: string,
   subject: string,
-  body: string
+  body: string,
+  conversationId?: string
 ) {
   const session = await getSession();
   await prisma.pipelineEvent.create({
@@ -485,7 +490,7 @@ export async function logRecoSent(
       pipelineId,
       type: "action_manuelle",
       description: `Email de recommandation envoyé au CS — ${toEmail}`,
-      metadata: { recoType: "reco_sent", to: toEmail, subject, body },
+      metadata: { recoType: "reco_sent", to: toEmail, subject, body, conversationId: conversationId || null },
       createdBy: session.user.email!,
     },
   });

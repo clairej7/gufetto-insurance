@@ -94,9 +94,9 @@ export function ResiliationAction({
       formData.append("body", body);
 
       const res = await fetch("/api/front/draft", { method: "POST", body: formData });
-      const json = await res.json() as { success?: boolean; error?: string };
+      const json = await res.json() as { success?: boolean; error?: string; conversationId?: string };
       if (json.success) {
-        await logResiliationEmailSent(pipelineId, to, subject, body);
+        await logResiliationEmailSent(pipelineId, to, subject, body, json.conversationId);
         setShowForm(false);
         setShowEmailBody(false);
         toast.success(`Email de résiliation envoyé à ${assureurActuel ?? to} !`);
