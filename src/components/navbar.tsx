@@ -58,17 +58,30 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
                 Mon pipeline
               </Link>
               {user.isAdmin && (
-                <Link
-                  href="/admin"
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                    pathname.startsWith("/admin")
-                      ? "text-[#4E49FC] bg-[#F5F5FF]"
-                      : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
-                  )}
-                >
-                  Vue globale
-                </Link>
+                <>
+                  <Link
+                    href="/admin"
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                      pathname === "/admin"
+                        ? "text-[#4E49FC] bg-[#F5F5FF]"
+                        : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
+                    )}
+                  >
+                    Vue globale
+                  </Link>
+                  <Link
+                    href="/admin/activite"
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                      pathname.startsWith("/admin/activite")
+                        ? "text-[#4E49FC] bg-[#F5F5FF]"
+                        : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
+                    )}
+                  >
+                    Activité
+                  </Link>
+                </>
               )}
             </nav>
           </div>

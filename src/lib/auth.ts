@@ -17,6 +17,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   session: { strategy: "jwt" },
+  events: {
+    async signIn({ user }) {
+      if (user.email) {
+        await prisma.userLoginEvent.create({
+          data: { email: user.email },
+        });
+      }
+    },
+  },
   callbacks: {
     async signIn({ account, profile }) {
       if (account?.provider === "google") {

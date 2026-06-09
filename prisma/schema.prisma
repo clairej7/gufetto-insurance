@@ -206,3 +206,9 @@ model TaskCompletion {
 
   @@unique([pipelineId, taskId])
 }
+
+model UserLoginEvent {
+  id        String   @id @default(cuid())
+  email     String
+  createdAt DateTime @default(now())
+}
