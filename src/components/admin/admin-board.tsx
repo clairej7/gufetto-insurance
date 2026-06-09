@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { getDaysUntilEcheance } from "@/lib/pipeline";
 import { MultiSelectFilter, formatGestionnaire } from "@/components/ui/multi-select-filter";
+import { EvolutionChart } from "./evolution-chart";
 
 type Pipeline = {
   id: string;
@@ -19,10 +20,18 @@ type Pipeline = {
   taskCompletions: Array<{ taskId: string; task: { required: boolean; statut: string } }>;
 };
 
+type RawEvent = {
+  id: string;
+  nouveauStatut: string | null;
+  createdAt: Date;
+  pipeline: { copro: { gestionnaireEmail: string | null } };
+};
+
 interface AdminBoardProps {
   pipelines: Pipeline[];
   taskTemplates: Array<{ id: string; statut: string; required: boolean }>;
   gestionnaires: string[];
+  events: RawEvent[];
 }
 
 const LOST_STATUTS = ["abandonne", "refuse", "non_assurable"];
@@ -88,7 +97,7 @@ const TD_RIGHT: React.CSSProperties = { ...TD, textAlign: "right" };
 
 type KpiFilter = "actifs" | "urgents" | "gagnes" | null;
 
-export function AdminBoard({ pipelines, gestionnaires }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
 
@@ -226,6 +235,15 @@ export function AdminBoard({ pipelines, gestionnaires }: AdminBoardProps) {
             );
           })}
         </div>
+      </div>
+
+      {/* ── Évolution semaine par semaine ── */}
+      <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Activité par semaine</span>
+          <span style={{ fontSize: 12, color: "#A2A1AF", fontFamily: FONT_MONO }}>transitions de statut · 12 dernières semaines</span>
+        </div>
+        <EvolutionChart events={events} filteredGestionnaires={selectedGestionnaires} />
       </div>
 
       {/* ── Tableau de détail KPI ── */}

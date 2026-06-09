@@ -22,14 +22,20 @@ export default async function AdminPage() {
 
   const taskTemplates = await prisma.stageTaskTemplate.findMany();
 
-  // Get all unique gestionnaires
   const gestionnaires = [
     ...new Set(
-      pipelines
-        .map((p) => p.copro.gestionnaireEmail)
-        .filter(Boolean) as string[]
+      pipelines.map((p) => p.copro.gestionnaireEmail).filter(Boolean) as string[]
     ),
   ].sort();
+
+  // Events des 12 dernières semaines pour le graphe d'évolution
+  const twelveWeeksAgo = new Date();
+  twelveWeeksAgo.setDate(twelveWeeksAgo.getDate() - 84);
+  const events = await prisma.pipelineEvent.findMany({
+    where: { type: "statut_change", nouveauStatut: { not: null }, createdAt: { gte: twelveWeeksAgo } },
+    include: { pipeline: { select: { copro: { select: { gestionnaireEmail: true } } } } },
+    orderBy: { createdAt: "asc" },
+  });
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -45,6 +51,7 @@ export default async function AdminPage() {
           pipelines={pipelines as Parameters<typeof AdminBoard>[0]["pipelines"]}
           taskTemplates={taskTemplates}
           gestionnaires={gestionnaires}
+          events={events as Parameters<typeof AdminBoard>[0]["events"]}
         />
       </main>
     </div>
