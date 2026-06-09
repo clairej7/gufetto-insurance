@@ -80,5 +80,15 @@ export async function POST(req: NextRequest) {
   // Extraire le conversationId depuis les liens Front
   const convUrl: string = message._links?.related?.conversation || message.conversation?.id || "";
   const conversationId: string = convUrl.startsWith("http") ? convUrl.split("/").pop() || "" : convUrl;
+
+  // Tagger la conversation avec gufetto_insurance pour filtrer dans les Rules Front
+  if (conversationId) {
+    await fetch(`${FRONT_API_URL}/conversations/${conversationId}/tags`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ tag_ids: ["tag_23jeh2"] }),
+    }).catch(() => null); // non-bloquant
+  }
+
   return NextResponse.json({ success: true, messageId: message.id, conversationId });
 }
