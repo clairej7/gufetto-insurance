@@ -848,11 +848,12 @@ export async function getTasks(filterEmail?: string) {
 
 export async function getAllAssignees() {
   await getSession();
-  const assignees = await prisma.task.findMany({
-    select: { assigneeEmail: true },
-    distinct: ["assigneeEmail"],
+  const copros = await prisma.copro.findMany({
+    select: { gestionnaireEmail: true },
+    where: { gestionnaireEmail: { not: null } },
+    distinct: ["gestionnaireEmail"],
   });
-  return assignees.map((a) => a.assigneeEmail);
+  return copros.map((c) => c.gestionnaireEmail).filter(Boolean) as string[];
 }
 
 export async function updateTaskDueDate(taskId: string, dueDate: Date | null) {
