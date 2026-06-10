@@ -36,6 +36,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# exports de données Omni (dumps locaux, contiennent des données réelles — ne pas committer)
+Gufetto Local Host*.json
+*.omni-export.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
