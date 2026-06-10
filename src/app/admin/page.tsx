@@ -12,7 +12,10 @@ export default async function AdminPage() {
   const user = session.user;
 
   const pipelines = await prisma.insurancePipeline.findMany({
-    where: { statut: { notIn: ["abandonne", "refuse", "non_assurable"] } },
+    where: {
+      statut: { notIn: ["abandonne", "refuse", "non_assurable"] },
+      copro: { archivedAt: null }, // masquer les copros archivées (absentes d'Omni)
+    },
     include: {
       copro: true,
       taskCompletions: { include: { task: true } },

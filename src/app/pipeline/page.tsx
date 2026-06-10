@@ -12,6 +12,7 @@ export default async function PipelinePage() {
   const user = session.user;
 
   const pipelines = await prisma.insurancePipeline.findMany({
+    where: { copro: { archivedAt: null } }, // masquer les copros archivées (absentes d'Omni)
     include: {
       copro: true,
       taskCompletions: { include: { task: true } },

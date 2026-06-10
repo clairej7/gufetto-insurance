@@ -850,7 +850,7 @@ export async function getAllAssignees() {
   await getSession();
   const copros = await prisma.copro.findMany({
     select: { gestionnaireEmail: true },
-    where: { gestionnaireEmail: { not: null } },
+    where: { gestionnaireEmail: { not: null }, archivedAt: null },
     distinct: ["gestionnaireEmail"],
   });
   return copros.map((c) => c.gestionnaireEmail).filter(Boolean) as string[];

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { fetchCoprosFromOmni } from "@/lib/omni";
+import { syncCopros, type SyncCoproInput } from "@/lib/sync";
 
+// Sync nocturne depuis l'API Omni. Fusionne les faits immeuble sans jamais
+// écraser le workflow CRM (statut touché par un humain, tâches, événements).
+// Logique commune dans src/lib/sync.ts.
 export async function POST(req: NextRequest) {
-  // Verify cron secret
   const secret = req.headers.get("x-cron-secret");
   if (secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -12,77 +14,28 @@ export async function POST(req: NextRequest) {
   try {
     const copros = await fetchCoprosFromOmni();
 
-    let created = 0;
-    let updated = 0;
-    let pipelinesCreated = 0;
+    const records: SyncCoproInput[] = copros.map((c) => ({
+      buildingId: c.building_id,
+      nom: c.nom,
+      adresse: c.adresse ?? null,
+      gestionnaireEmail: c.gestionnaire_email ?? null,
+      assureurActuel: c.assureur_actuel ?? null,
+      courtierActuel: c.courtier_actuel ?? null,
+      primeActuelle: c.prime_actuelle ?? null,
+      dateEcheance: c.date_echeance ? new Date(c.date_echeance) : null,
+      dateDebutContrat: c.date_debut_contrat ? new Date(c.date_debut_contrat) : null,
+      contactCsEmail: c.contact_cs_email ?? null,
+      contactCsNom: c.contact_cs_nom ?? null,
+      // L'API Omni ne remonte pas (encore) de statut de vente → on ne touche pas
+      // au statut des pipelines existants. archiveAbsent reste désactivé car la
+      // requête Omni est filtrée (échéance < 8 mois) : absence ≠ immeuble perdu.
+    }));
 
-    for (const copro of copros) {
-      const data = {
-        nom: copro.nom,
-        adresse: copro.adresse ?? null,
-        gestionnaireEmail: copro.gestionnaire_email ?? null,
-        assureurActuel: copro.assureur_actuel ?? null,
-        courtierActuel: copro.courtier_actuel ?? null,
-        primeActuelle: copro.prime_actuelle ?? null,
-        dateEcheance: copro.date_echeance ? new Date(copro.date_echeance) : null,
-        dateDebutContrat: copro.date_debut_contrat ? new Date(copro.date_debut_contrat) : null,
-        contactCsEmail: copro.contact_cs_email ?? null,
-        contactCsNom: copro.contact_cs_nom ?? null,
-        source: "omni" as const,
-        syncedAt: new Date(),
-      };
-
-      const existing = await prisma.copro.findUnique({
-        where: { buildingId: copro.building_id },
-        include: { pipelines: { where: { statut: { notIn: ["termine", "abandonne"] } } } },
-      });
-
-      if (!existing) {
-        const newCopro = await prisma.copro.create({
-          data: { buildingId: copro.building_id, ...data },
-        });
-
-        // Auto-create pipeline at identifie
-        if (data.dateEcheance) {
-          const year = data.dateEcheance.getFullYear();
-          await prisma.insurancePipeline.create({
-            data: {
-              coproId: newCopro.id,
-              statut: "identifie",
-              anneeEcheance: year,
-            },
-          });
-          pipelinesCreated++;
-        }
-        created++;
-      } else {
-        await prisma.copro.update({
-          where: { buildingId: copro.building_id },
-          data,
-        });
-
-        // If no active pipeline, create one
-        if (existing.pipelines.length === 0 && data.dateEcheance) {
-          const year = data.dateEcheance.getFullYear();
-          await prisma.insurancePipeline.create({
-            data: {
-              coproId: existing.id,
-              statut: "identifie",
-              anneeEcheance: year,
-            },
-          });
-          pipelinesCreated++;
-        }
-        updated++;
-      }
-    }
+    const result = await syncCopros(records, { archiveAbsent: false });
 
     return NextResponse.json({
       success: true,
-      created,
-      updated,
-      pipelinesCreated,
-      total: copros.length,
+      ...result,
       syncedAt: new Date().toISOString(),
     });
   } catch (error) {

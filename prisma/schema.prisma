@@ -92,8 +92,9 @@ model Copro {
   duomoUrl                    String?
 
   // Sync metadata
-  source    String   @default("omni") // "omni" | "duomo"
-  syncedAt  DateTime @default(now())
+  source    String    @default("omni") // "omni" | "duomo"
+  syncedAt  DateTime  @default(now())
+  archivedAt DateTime? // copro absente du dernier inventaire Omni complet — conservée, masquée des vues actives
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
