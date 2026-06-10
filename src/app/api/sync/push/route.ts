@@ -7,15 +7,13 @@ function parseField(obj: any, ...keys: string[]) {
   return null;
 }
 
-// Push manuel d'un export JSON Omni. Parse les alias de champs (dont la clé
-// UTF-8 corrompue), puis délègue la fusion CRM/Omni à syncCopros (src/lib/sync.ts).
+// Webhook d'ingestion d'un export JSON Omni (scheduled query delivery).
+// VOLONTAIREMENT SANS AUTH : Omni ne peut envoyer ni header ni secret, et les IP
+// d'egress ne sont pas accessibles (décision Claire, 10/06/2026). Protections de
+// fond conservées dans syncCopros : cliquet (statut des dossiers touchés jamais
+// écrasé), verrou terminal, aucune suppression possible.
+// Parse les alias de champs (dont la clé UTF-8 corrompue), puis délègue à syncCopros.
 export async function POST(req: NextRequest) {
-  const auth = req.headers.get("authorization");
-  const secret = process.env.CRON_SECRET;
-  if (secret && auth !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   let body: unknown;
   try {
     body = await req.json();
@@ -23,11 +21,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "JSON invalide" }, { status: 400 });
   }
 
-  const rawCopros = Array.isArray(body) ? body : [body];
+  // Omni envoie le contenu brut du fichier JSON : tableau direct, ou objet
+  // enveloppant ({ data | rows | results: [...] }). On déballe les deux cas.
+  const wrapped = body as Record<string, unknown> | null;
+  const rawCopros: unknown[] = Array.isArray(body)
+    ? body
+    : wrapped && typeof wrapped === "object" && Array.isArray(wrapped.data ?? wrapped.rows ?? wrapped.results)
+      ? (wrapped.data ?? wrapped.rows ?? wrapped.results) as unknown[]
+      : [body];
   if (rawCopros.length === 0) return NextResponse.json({ error: "Tableau vide" }, { status: 400 });
 
   const records: SyncCoproInput[] = [];
-  for (const raw of rawCopros) {
+  for (const item of rawCopros) {
+    if (!item || typeof item !== "object") continue;
+    const raw = item as Record<string, unknown>;
     // "Buildings Building ID" est le champ principal dans le JSON Omni. Le champ
     // "â« Commonholds Building ID" est le même avec un encodage corrompu — on le
     // détecte dynamiquement en cherchant la clé qui finit par "Commonholds Building ID".
