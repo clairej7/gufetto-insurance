@@ -454,7 +454,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
   const [signatureFile, setSignatureFile] = useState<File | null | undefined>(undefined);
   const [isSigning, setIsSigning] = useState(false);
   const [signedPdfPath, setSignedPdfPath] = useState<string | null>(null);
-  const [showContratDialog, setShowContratDialog] = useState(false);
+  const [editingContrat, setEditingContrat] = useState(false);
   const [contratForm, setContratForm] = useState({
     assureurActuel: pipeline.copro.assureurActuel ?? "",
     courtierActuel: pipeline.copro.courtierActuel ?? "",
@@ -465,21 +465,37 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
     contactCourtierTel: pipeline.copro.contactCourtierTel ?? "",
   });
 
-  useEffect(() => {
-    if (showContratDialog) {
-      setContratForm({
-        assureurActuel: pipeline.copro.assureurActuel ?? "",
-        courtierActuel: pipeline.copro.courtierActuel ?? "",
-        numeroContrat: pipeline.copro.numeroContrat ?? "",
-        primeActuelle: pipeline.copro.primeActuelle?.toString() ?? "",
-        dateDebutContrat: pipeline.copro.dateDebutContrat ? new Date(pipeline.copro.dateDebutContrat).toISOString().split("T")[0] : "",
-        contactCourtierEmail: pipeline.copro.contactCourtierEmail ?? "",
-        contactCourtierTel: pipeline.copro.contactCourtierTel ?? "",
-      });
-    }
-  }, [showContratDialog]);
+  function handleEditContrat() {
+    setContratForm({
+      assureurActuel: pipeline.copro.assureurActuel ?? "",
+      courtierActuel: pipeline.copro.courtierActuel ?? "",
+      numeroContrat: pipeline.copro.numeroContrat ?? "",
+      primeActuelle: pipeline.copro.primeActuelle?.toString() ?? "",
+      dateDebutContrat: pipeline.copro.dateDebutContrat ? new Date(pipeline.copro.dateDebutContrat).toISOString().split("T")[0] : "",
+      contactCourtierEmail: pipeline.copro.contactCourtierEmail ?? "",
+      contactCourtierTel: pipeline.copro.contactCourtierTel ?? "",
+    });
+    setEditingContrat(true);
+  }
 
-  const [showCaracDialog, setShowCaracDialog] = useState(false);
+  function handleSaveContrat() {
+    startTransition(async () => {
+      const prime = parseFloat(contratForm.primeActuelle);
+      await updateCoproCaracteristiques(pipeline.coproId, pipeline.id, {
+        assureurActuel: contratForm.assureurActuel || null,
+        courtierActuel: contratForm.courtierActuel || null,
+        numeroContrat: contratForm.numeroContrat || null,
+        primeActuelle: isNaN(prime) ? null : prime,
+        dateDebutContrat: contratForm.dateDebutContrat ? new Date(contratForm.dateDebutContrat) : null,
+        contactCourtierEmail: contratForm.contactCourtierEmail || null,
+        contactCourtierTel: contratForm.contactCourtierTel || null,
+      });
+      setEditingContrat(false);
+      toast.success("Contrat mis à jour");
+    });
+  }
+
+  const [editingCarac, setEditingCarac] = useState(false);
   const [activitesChecked, setActivitesChecked] = useState<string[]>([]);
   const [activitesAutre, setActivitesAutre] = useState("");
   const [caracsChecked, setCaracsChecked] = useState<string[]>([]);
@@ -494,25 +510,40 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
     representantLegal: pipeline.copro.representantLegal ?? "",
   });
 
-  useEffect(() => {
-    if (showCaracDialog) {
-      const activitesParsed = parseMultiField(pipeline.copro.activitesAggravantes);
-      const caracsParsed = parseMultiField(pipeline.copro.caracteristiquesParticulieres);
-      setActivitesChecked(activitesParsed.checked);
-      setActivitesAutre(activitesParsed.autre);
-      setCaracsChecked(caracsParsed.checked);
-      setCaracsAutre(caracsParsed.autre);
-      setCaracForm({
-        surfaceDeveloppee: pipeline.copro.surfaceDeveloppee?.toString() ?? "",
-        periodeConstruction: pipeline.copro.periodeConstruction ?? "",
-        natureOccupation: pipeline.copro.natureOccupation ?? "",
-        activitesAggravantes: pipeline.copro.activitesAggravantes ?? "",
-        caracteristiquesParticulieres: pipeline.copro.caracteristiquesParticulieres ?? "",
-        proportionInoccupee: pipeline.copro.proportionInoccupee ?? "",
-        representantLegal: pipeline.copro.representantLegal ?? "",
+  function handleEditCarac() {
+    const activitesParsed = parseMultiField(pipeline.copro.activitesAggravantes);
+    const caracsParsed = parseMultiField(pipeline.copro.caracteristiquesParticulieres);
+    setActivitesChecked(activitesParsed.checked);
+    setActivitesAutre(activitesParsed.autre);
+    setCaracsChecked(caracsParsed.checked);
+    setCaracsAutre(caracsParsed.autre);
+    setCaracForm({
+      surfaceDeveloppee: pipeline.copro.surfaceDeveloppee?.toString() ?? "",
+      periodeConstruction: pipeline.copro.periodeConstruction ?? "",
+      natureOccupation: pipeline.copro.natureOccupation ?? "",
+      activitesAggravantes: pipeline.copro.activitesAggravantes ?? "",
+      caracteristiquesParticulieres: pipeline.copro.caracteristiquesParticulieres ?? "",
+      proportionInoccupee: pipeline.copro.proportionInoccupee ?? "",
+      representantLegal: pipeline.copro.representantLegal ?? "",
+    });
+    setEditingCarac(true);
+  }
+
+  function handleSaveCarac() {
+    startTransition(async () => {
+      await updateCoproCaracteristiques(pipeline.coproId, pipeline.id, {
+        surfaceDeveloppee: (() => { const v = parseFloat(caracForm.surfaceDeveloppee); return isNaN(v) ? null : v; })(),
+        periodeConstruction: caracForm.periodeConstruction || null,
+        natureOccupation: caracForm.natureOccupation || null,
+        activitesAggravantes: serializeMultiField(activitesChecked, activitesAutre),
+        caracteristiquesParticulieres: serializeMultiField(caracsChecked, caracsAutre),
+        proportionInoccupee: caracForm.proportionInoccupee || null,
+        representantLegal: caracForm.representantLegal || null,
       });
-    }
-  }, [showCaracDialog]);
+      setEditingCarac(false);
+      toast.success("Informations enregistrées");
+    });
+  }
 
   const currentStep = PIPELINE_STEPS.find((s) => s.statut === pipeline.statut);
   const currentStepIndex = PIPELINE_STEPS.findIndex((s) => s.statut === pipeline.statut);
@@ -705,19 +736,42 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                 <Building2 className="h-4 w-4" />
                 Contrat actuel
               </h3>
-              <button onClick={() => setShowContratDialog(true)} className="transition-colors" style={{ color: "#A2A1AF" }}>
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
+              {editingContrat ? (
+                <div className="flex gap-1">
+                  <button onClick={handleSaveContrat} disabled={isPending} className="transition-colors" style={{ color: "#4E49FC" }}>
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={() => setEditingContrat(false)} className="transition-colors" style={{ color: "#A2A1AF" }}>
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button onClick={handleEditContrat} className="transition-colors" style={{ color: "#A2A1AF" }}>
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
-            <dl className="space-y-2">
-              <InfoRow label="Assureur" value={pipeline.copro.assureurActuel} />
-              <InfoRow label="N° de contrat" value={pipeline.copro.numeroContrat} />
-              <InfoRow label="Courtier" value={pipeline.copro.courtierActuel} />
-              <InfoRow label="Prime annuelle" value={pipeline.copro.primeActuelle ? `${pipeline.copro.primeActuelle.toLocaleString("fr-FR")} €` : null} />
-              <InfoRow label="Début contrat" value={pipeline.copro.dateDebutContrat ? new Date(pipeline.copro.dateDebutContrat).toLocaleDateString("fr-FR") : null} />
-              <InfoRow label="Mail courtier/assureur" value={pipeline.copro.contactCourtierEmail} />
-              <InfoRow label="N° téléphone courtier/assureur" value={pipeline.copro.contactCourtierTel} />
-            </dl>
+            {editingContrat ? (
+              <div className="space-y-2">
+                <InlineField label="Assureur actuel" value={contratForm.assureurActuel} placeholder="Ex : Allianz" onChange={v => setContratForm(f => ({ ...f, assureurActuel: v }))} />
+                <InlineField label="N° de contrat" value={contratForm.numeroContrat} placeholder="Ex : MRI-2021-00123" onChange={v => setContratForm(f => ({ ...f, numeroContrat: v }))} />
+                <InlineField label="Courtier" value={contratForm.courtierActuel} placeholder="Nom du courtier" onChange={v => setContratForm(f => ({ ...f, courtierActuel: v }))} />
+                <InlineField label="Prime annuelle (€)" type="number" value={contratForm.primeActuelle} placeholder="Ex : 3500" onChange={v => setContratForm(f => ({ ...f, primeActuelle: v }))} />
+                <InlineField label="Début contrat" type="date" value={contratForm.dateDebutContrat} onChange={v => setContratForm(f => ({ ...f, dateDebutContrat: v }))} />
+                <InlineField label="Mail courtier/assureur" type="email" value={contratForm.contactCourtierEmail} placeholder="contact@assureur.fr" onChange={v => setContratForm(f => ({ ...f, contactCourtierEmail: v }))} />
+                <InlineField label="Tél courtier/assureur" type="tel" value={contratForm.contactCourtierTel} placeholder="06 00 00 00 00" onChange={v => setContratForm(f => ({ ...f, contactCourtierTel: v }))} />
+              </div>
+            ) : (
+              <dl className="space-y-2">
+                <InfoRow label="Assureur" value={pipeline.copro.assureurActuel} />
+                <InfoRow label="N° de contrat" value={pipeline.copro.numeroContrat} />
+                <InfoRow label="Courtier" value={pipeline.copro.courtierActuel} />
+                <InfoRow label="Prime annuelle" value={pipeline.copro.primeActuelle ? `${pipeline.copro.primeActuelle.toLocaleString("fr-FR")} €` : null} />
+                <InfoRow label="Début contrat" value={pipeline.copro.dateDebutContrat ? new Date(pipeline.copro.dateDebutContrat).toLocaleDateString("fr-FR") : null} />
+                <InfoRow label="Mail courtier/assureur" value={pipeline.copro.contactCourtierEmail} />
+                <InfoRow label="N° téléphone courtier/assureur" value={pipeline.copro.contactCourtierTel} />
+              </dl>
+            )}
           </Card>
 
           {pipeline.statut !== "devis_recus" && (
@@ -727,28 +781,49 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                   <Building2 className="h-4 w-4" />
                   Infos copropriété
                 </h3>
-                <button onClick={() => setShowCaracDialog(true)} className="transition-colors" style={{ color: "#A2A1AF" }}>
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
+                {editingCarac ? (
+                  <div className="flex gap-1">
+                    <button onClick={handleSaveCarac} disabled={isPending} className="transition-colors" style={{ color: "#4E49FC" }}>
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => setEditingCarac(false)} className="transition-colors" style={{ color: "#A2A1AF" }}>
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={handleEditCarac} className="transition-colors" style={{ color: "#A2A1AF" }}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
-              <dl className="space-y-2">
-                <InfoRow label="Surface développée" value={pipeline.copro.surfaceDeveloppee ? `${pipeline.copro.surfaceDeveloppee} m²` : null} />
-                <InfoRow label="Période de construction" value={PERIODE_LABELS[pipeline.copro.periodeConstruction ?? ""] ?? null} />
-                <InfoRow label="Nature de l'occupation" value={OCCUPATION_LABELS[pipeline.copro.natureOccupation ?? ""] ?? null} />
-                <InfoRow label="Activités aggravantes" value={pipeline.copro.activitesAggravantes} />
-                <InfoRow label="Caractéristiques particulières" value={pipeline.copro.caracteristiquesParticulieres} />
-                <InfoRow label="Logements inoccupés" value={INOCCUPEE_LABELS[pipeline.copro.proportionInoccupee ?? ""] ?? null} />
-                <InfoRow label="Représentant légal" value={pipeline.copro.representantLegal} />
-                <div className="flex justify-between items-center py-0.5">
-                  <span className="text-xs" style={{ color: "#A2A1AF" }}>Duomo</span>
-                  {pipeline.copro.duomoUrl
-                    ? <a href={pipeline.copro.duomoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: "#4E49FC" }}>
-                        Ouvrir <ExternalLink className="h-3 w-3" />
-                      </a>
-                    : <span className="text-xs italic" style={{ color: "#C0C0C9" }}>Non renseigné</span>
-                  }
-                </div>
-              </dl>
+              {editingCarac ? (
+                <CaracEditForm
+                  caracForm={caracForm} setCaracForm={setCaracForm}
+                  activitesChecked={activitesChecked} setActivitesChecked={setActivitesChecked}
+                  activitesAutre={activitesAutre} setActivitesAutre={setActivitesAutre}
+                  caracsChecked={caracsChecked} setCaracsChecked={setCaracsChecked}
+                  caracsAutre={caracsAutre} setCaracsAutre={setCaracsAutre}
+                />
+              ) : (
+                <dl className="space-y-2">
+                  <InfoRow label="Surface développée" value={pipeline.copro.surfaceDeveloppee ? `${pipeline.copro.surfaceDeveloppee} m²` : null} />
+                  <InfoRow label="Période de construction" value={PERIODE_LABELS[pipeline.copro.periodeConstruction ?? ""] ?? null} />
+                  <InfoRow label="Nature de l'occupation" value={OCCUPATION_LABELS[pipeline.copro.natureOccupation ?? ""] ?? null} />
+                  <InfoRow label="Activités aggravantes" value={pipeline.copro.activitesAggravantes} />
+                  <InfoRow label="Caractéristiques particulières" value={pipeline.copro.caracteristiquesParticulieres} />
+                  <InfoRow label="Logements inoccupés" value={INOCCUPEE_LABELS[pipeline.copro.proportionInoccupee ?? ""] ?? null} />
+                  <InfoRow label="Représentant légal" value={pipeline.copro.representantLegal} />
+                  <div className="flex justify-between items-center py-0.5">
+                    <span className="text-xs" style={{ color: "#A2A1AF" }}>Duomo</span>
+                    {pipeline.copro.duomoUrl
+                      ? <a href={pipeline.copro.duomoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: "#4E49FC" }}>
+                          Ouvrir <ExternalLink className="h-3 w-3" />
+                        </a>
+                      : <span className="text-xs italic" style={{ color: "#C0C0C9" }}>Non renseigné</span>
+                    }
+                  </div>
+                </dl>
+              )}
             </Card>
           )}
         </div>
@@ -944,28 +1019,49 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                       <Building2 className="h-4 w-4" />
                       Infos copropriété
                     </h3>
-                    <button onClick={() => setShowCaracDialog(true)} className="transition-colors" style={{ color: "#A2A1AF" }}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
+                    {editingCarac ? (
+                      <div className="flex gap-1">
+                        <button onClick={handleSaveCarac} disabled={isPending} className="transition-colors" style={{ color: "#4E49FC" }}>
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                        <button onClick={() => setEditingCarac(false)} className="transition-colors" style={{ color: "#A2A1AF" }}>
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={handleEditCarac} className="transition-colors" style={{ color: "#A2A1AF" }}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
-                  <dl className="space-y-2">
-                    <InfoRow label="Surface développée" value={pipeline.copro.surfaceDeveloppee ? `${pipeline.copro.surfaceDeveloppee} m²` : null} />
-                    <InfoRow label="Période de construction" value={PERIODE_LABELS[pipeline.copro.periodeConstruction ?? ""] ?? null} />
-                    <InfoRow label="Nature de l'occupation" value={OCCUPATION_LABELS[pipeline.copro.natureOccupation ?? ""] ?? null} />
-                    <InfoRow label="Activités aggravantes" value={pipeline.copro.activitesAggravantes} />
-                    <InfoRow label="Caractéristiques particulières" value={pipeline.copro.caracteristiquesParticulieres} />
-                    <InfoRow label="Logements inoccupés" value={INOCCUPEE_LABELS[pipeline.copro.proportionInoccupee ?? ""] ?? null} />
-                    <InfoRow label="Représentant légal" value={pipeline.copro.representantLegal} />
-                <div className="flex justify-between items-center py-0.5">
-                  <span className="text-xs" style={{ color: "#A2A1AF" }}>Duomo</span>
-                  {pipeline.copro.duomoUrl
-                    ? <a href={pipeline.copro.duomoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: "#4E49FC" }}>
-                        Ouvrir <ExternalLink className="h-3 w-3" />
-                      </a>
-                    : <span className="text-xs italic" style={{ color: "#C0C0C9" }}>Non renseigné</span>
-                  }
-                </div>
-                  </dl>
+                  {editingCarac ? (
+                    <CaracEditForm
+                      caracForm={caracForm} setCaracForm={setCaracForm}
+                      activitesChecked={activitesChecked} setActivitesChecked={setActivitesChecked}
+                      activitesAutre={activitesAutre} setActivitesAutre={setActivitesAutre}
+                      caracsChecked={caracsChecked} setCaracsChecked={setCaracsChecked}
+                      caracsAutre={caracsAutre} setCaracsAutre={setCaracsAutre}
+                    />
+                  ) : (
+                    <dl className="space-y-2">
+                      <InfoRow label="Surface développée" value={pipeline.copro.surfaceDeveloppee ? `${pipeline.copro.surfaceDeveloppee} m²` : null} />
+                      <InfoRow label="Période de construction" value={PERIODE_LABELS[pipeline.copro.periodeConstruction ?? ""] ?? null} />
+                      <InfoRow label="Nature de l'occupation" value={OCCUPATION_LABELS[pipeline.copro.natureOccupation ?? ""] ?? null} />
+                      <InfoRow label="Activités aggravantes" value={pipeline.copro.activitesAggravantes} />
+                      <InfoRow label="Caractéristiques particulières" value={pipeline.copro.caracteristiquesParticulieres} />
+                      <InfoRow label="Logements inoccupés" value={INOCCUPEE_LABELS[pipeline.copro.proportionInoccupee ?? ""] ?? null} />
+                      <InfoRow label="Représentant légal" value={pipeline.copro.representantLegal} />
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-xs" style={{ color: "#A2A1AF" }}>Duomo</span>
+                        {pipeline.copro.duomoUrl
+                          ? <a href={pipeline.copro.duomoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: "#4E49FC" }}>
+                              Ouvrir <ExternalLink className="h-3 w-3" />
+                            </a>
+                          : <span className="text-xs italic" style={{ color: "#C0C0C9" }}>Non renseigné</span>
+                        }
+                      </div>
+                    </dl>
+                  )}
                 </Card>
               )}
 
@@ -1476,175 +1572,6 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
         </div>
       </div>
 
-      {/* Modale contrat actuel */}
-      <Dialog open={showContratDialog} onOpenChange={setShowContratDialog}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Contrat actuel</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div>
-              <label className="text-xs font-medium" style={{ color: "#656576" }}>Assureur actuel</label>
-              <input className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm" value={contratForm.assureurActuel} onChange={e => setContratForm(f => ({ ...f, assureurActuel: e.target.value }))} placeholder="Ex : Allianz" />
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: "#656576" }}>N° de contrat</label>
-              <input className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm" value={contratForm.numeroContrat} onChange={e => setContratForm(f => ({ ...f, numeroContrat: e.target.value }))} placeholder="Ex : MRI-2021-00123" />
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: "#656576" }}>Courtier</label>
-              <input className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm" value={contratForm.courtierActuel} onChange={e => setContratForm(f => ({ ...f, courtierActuel: e.target.value }))} placeholder="Nom du courtier" />
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: "#656576" }}>Prime annuelle (€)</label>
-              <input type="number" className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm" value={contratForm.primeActuelle} onChange={e => setContratForm(f => ({ ...f, primeActuelle: e.target.value }))} placeholder="Ex : 3 500" />
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: "#656576" }}>Date de début du contrat</label>
-              <input type="date" className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm" value={contratForm.dateDebutContrat} onChange={e => setContratForm(f => ({ ...f, dateDebutContrat: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: "#656576" }}>Mail courtier / assureur</label>
-              <input type="email" className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm" value={contratForm.contactCourtierEmail} onChange={e => setContratForm(f => ({ ...f, contactCourtierEmail: e.target.value }))} placeholder="contact@assureur.fr" />
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: "#656576" }}>N° téléphone courtier / assureur</label>
-              <input type="tel" className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm" value={contratForm.contactCourtierTel} onChange={e => setContratForm(f => ({ ...f, contactCourtierTel: e.target.value }))} placeholder="06 00 00 00 00" />
-            </div>
-          </div>
-          <div className="flex gap-2 justify-end pt-2">
-            <Button variant="outline" onClick={() => setShowContratDialog(false)}>Annuler</Button>
-            <Button disabled={isPending} onClick={() => {
-              startTransition(async () => {
-                const prime = parseFloat(contratForm.primeActuelle);
-                await updateCoproCaracteristiques(pipeline.coproId, pipeline.id, {
-                  assureurActuel: contratForm.assureurActuel || null,
-                  courtierActuel: contratForm.courtierActuel || null,
-                  numeroContrat: contratForm.numeroContrat || null,
-                  primeActuelle: isNaN(prime) ? null : prime,
-                  dateDebutContrat: contratForm.dateDebutContrat ? new Date(contratForm.dateDebutContrat) : null,
-                  contactCourtierEmail: contratForm.contactCourtierEmail || null,
-                  contactCourtierTel: contratForm.contactCourtierTel || null,
-                });
-                setShowContratDialog(false);
-                toast.success("Contrat mis à jour");
-              });
-            }}>Enregistrer</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modale caractéristiques copro */}
-      <Dialog open={showCaracDialog} onOpenChange={setShowCaracDialog}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Infos copropriété</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div>
-              <label className="text-xs font-medium" style={{ color: "#656576" }}>Surface développée (m²)</label>
-              <input type="number" className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm" value={caracForm.surfaceDeveloppee} onChange={e => setCaracForm(f => ({ ...f, surfaceDeveloppee: e.target.value }))} placeholder="ex: 1200" />
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: "#656576" }}>Période de construction</label>
-              <select className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm bg-white" value={caracForm.periodeConstruction} onChange={e => setCaracForm(f => ({ ...f, periodeConstruction: e.target.value }))}>
-                <option value="">— Non renseigné</option>
-                {Object.entries(PERIODE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: "#656576" }}>Nature de l&apos;occupation</label>
-              <select className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm bg-white" value={caracForm.natureOccupation} onChange={e => setCaracForm(f => ({ ...f, natureOccupation: e.target.value }))}>
-                <option value="">— Non renseigné</option>
-                {Object.entries(OCCUPATION_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: "#656576" }}>Activités aggravantes</label>
-              <div className="mt-1 space-y-1">
-                {ACTIVITES_AGGRAVANTES_OPTIONS.map(opt => (
-                  <label key={opt} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={activitesChecked.includes(opt)}
-                      onChange={() => {
-                        if (opt === "Aucune") { setActivitesChecked(["Aucune"]); return; }
-                        const next = activitesChecked.filter(v => v !== "Aucune");
-                        setActivitesChecked(next.includes(opt) ? next.filter(v => v !== opt) : [...next, opt]);
-                      }}
-                      className="rounded"
-                    />
-                    <span style={{ color: "#26262C" }}>{opt}</span>
-                  </label>
-                ))}
-                <input
-                  type="text"
-                  className="mt-2 w-full border rounded-md px-3 py-1.5 text-sm"
-                  value={activitesAutre}
-                  onChange={e => setActivitesAutre(e.target.value)}
-                  placeholder="Autre (champ libre)..."
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: "#656576" }}>Caractéristiques particulières</label>
-              <div className="mt-1 space-y-1">
-                {CARACTERISTIQUES_PARTICULIERES_OPTIONS.map(opt => (
-                  <label key={opt} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={caracsChecked.includes(opt)}
-                      onChange={() => {
-                        if (opt === "Aucune") { setCaracsChecked(["Aucune"]); return; }
-                        const next = caracsChecked.filter(v => v !== "Aucune");
-                        setCaracsChecked(next.includes(opt) ? next.filter(v => v !== opt) : [...next, opt]);
-                      }}
-                      className="rounded"
-                    />
-                    <span style={{ color: "#26262C" }}>{opt}</span>
-                  </label>
-                ))}
-                <input
-                  type="text"
-                  className="mt-2 w-full border rounded-md px-3 py-1.5 text-sm"
-                  value={caracsAutre}
-                  onChange={e => setCaracsAutre(e.target.value)}
-                  placeholder="Autre (champ libre)..."
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: "#656576" }}>Proportion de logements inoccupés</label>
-              <select className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm bg-white" value={caracForm.proportionInoccupee} onChange={e => setCaracForm(f => ({ ...f, proportionInoccupee: e.target.value }))}>
-                <option value="">— Non renseigné</option>
-                {Object.entries(INOCCUPEE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: "#656576" }}>Représentant légal de la copropriété</label>
-              <input className="mt-1 w-full border rounded-md px-3 py-1.5 text-sm" value={caracForm.representantLegal} onChange={e => setCaracForm(f => ({ ...f, representantLegal: e.target.value }))} placeholder="Nom et prénom" />
-            </div>
-          </div>
-          <div className="flex gap-2 justify-end pt-2">
-            <Button variant="outline" onClick={() => setShowCaracDialog(false)}>Annuler</Button>
-            <Button disabled={isPending} onClick={() => {
-              startTransition(async () => {
-                await updateCoproCaracteristiques(pipeline.coproId, pipeline.id, {
-                  surfaceDeveloppee: (() => { const v = parseFloat(caracForm.surfaceDeveloppee); return isNaN(v) ? null : v; })(),
-                  periodeConstruction: caracForm.periodeConstruction || null,
-                  natureOccupation: caracForm.natureOccupation || null,
-                  activitesAggravantes: serializeMultiField(activitesChecked, activitesAutre),
-                  caracteristiquesParticulieres: serializeMultiField(caracsChecked, caracsAutre),
-                  proportionInoccupee: caracForm.proportionInoccupee || null,
-                  representantLegal: caracForm.representantLegal || null,
-                });
-                setShowCaracDialog(false);
-                toast.success("Informations enregistrées");
-              });
-            }}>Enregistrer</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Modale signature contrat */}
       <Dialog open={showSignerDialog} onOpenChange={(o) => { setShowSignerDialog(o); if (!o) setSignatureFile(undefined); }}>
@@ -1863,6 +1790,111 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function InlineField({ label, value, type = "text", placeholder, onChange }: {
+  label: string;
+  value: string;
+  type?: string;
+  placeholder?: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <dt className="text-xs mb-0.5" style={{ color: "#A2A1AF" }}>{label}</dt>
+      <input
+        type={type}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1"
+        style={{ borderColor: "#D0CFDB", color: "#26262C" }}
+      />
+    </div>
+  );
+}
+
+type CaracForm = {
+  surfaceDeveloppee: string;
+  periodeConstruction: string;
+  natureOccupation: string;
+  activitesAggravantes: string;
+  caracteristiquesParticulieres: string;
+  proportionInoccupee: string;
+  representantLegal: string;
+};
+
+function CaracEditForm({ caracForm, setCaracForm, activitesChecked, setActivitesChecked, activitesAutre, setActivitesAutre, caracsChecked, setCaracsChecked, caracsAutre, setCaracsAutre }: {
+  caracForm: CaracForm;
+  setCaracForm: React.Dispatch<React.SetStateAction<CaracForm>>;
+  activitesChecked: string[];
+  setActivitesChecked: React.Dispatch<React.SetStateAction<string[]>>;
+  activitesAutre: string;
+  setActivitesAutre: React.Dispatch<React.SetStateAction<string>>;
+  caracsChecked: string[];
+  setCaracsChecked: React.Dispatch<React.SetStateAction<string[]>>;
+  caracsAutre: string;
+  setCaracsAutre: React.Dispatch<React.SetStateAction<string>>;
+}) {
+  return (
+    <div className="space-y-3">
+      <InlineField label="Surface développée (m²)" type="number" value={caracForm.surfaceDeveloppee} placeholder="ex: 1200" onChange={v => setCaracForm(f => ({ ...f, surfaceDeveloppee: v }))} />
+      <div>
+        <label className="text-xs" style={{ color: "#A2A1AF" }}>Période de construction</label>
+        <select className="mt-0.5 w-full border rounded px-2 py-1 text-sm bg-white" style={{ borderColor: "#D0CFDB", color: "#26262C" }} value={caracForm.periodeConstruction} onChange={e => setCaracForm(f => ({ ...f, periodeConstruction: e.target.value }))}>
+          <option value="">— Non renseigné</option>
+          {Object.entries(PERIODE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="text-xs" style={{ color: "#A2A1AF" }}>Nature de l&apos;occupation</label>
+        <select className="mt-0.5 w-full border rounded px-2 py-1 text-sm bg-white" style={{ borderColor: "#D0CFDB", color: "#26262C" }} value={caracForm.natureOccupation} onChange={e => setCaracForm(f => ({ ...f, natureOccupation: e.target.value }))}>
+          <option value="">— Non renseigné</option>
+          {Object.entries(OCCUPATION_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>
+      <div>
+        <p className="text-xs mb-1" style={{ color: "#A2A1AF" }}>Activités aggravantes</p>
+        <div className="space-y-1">
+          {ACTIVITES_AGGRAVANTES_OPTIONS.map(opt => (
+            <label key={opt} className="flex items-center gap-2 text-xs cursor-pointer">
+              <input type="checkbox" checked={activitesChecked.includes(opt)} className="rounded" onChange={() => {
+                if (opt === "Aucune") { setActivitesChecked(["Aucune"]); return; }
+                const next = activitesChecked.filter(v => v !== "Aucune");
+                setActivitesChecked(next.includes(opt) ? next.filter(v => v !== opt) : [...next, opt]);
+              }} />
+              <span style={{ color: "#26262C" }}>{opt}</span>
+            </label>
+          ))}
+          <input type="text" className="mt-1 w-full border rounded px-2 py-1 text-xs" style={{ borderColor: "#D0CFDB" }} value={activitesAutre} onChange={e => setActivitesAutre(e.target.value)} placeholder="Autre..." />
+        </div>
+      </div>
+      <div>
+        <p className="text-xs mb-1" style={{ color: "#A2A1AF" }}>Caractéristiques particulières</p>
+        <div className="space-y-1">
+          {CARACTERISTIQUES_PARTICULIERES_OPTIONS.map(opt => (
+            <label key={opt} className="flex items-center gap-2 text-xs cursor-pointer">
+              <input type="checkbox" checked={caracsChecked.includes(opt)} className="rounded" onChange={() => {
+                if (opt === "Aucune") { setCaracsChecked(["Aucune"]); return; }
+                const next = caracsChecked.filter(v => v !== "Aucune");
+                setCaracsChecked(next.includes(opt) ? next.filter(v => v !== opt) : [...next, opt]);
+              }} />
+              <span style={{ color: "#26262C" }}>{opt}</span>
+            </label>
+          ))}
+          <input type="text" className="mt-1 w-full border rounded px-2 py-1 text-xs" style={{ borderColor: "#D0CFDB" }} value={caracsAutre} onChange={e => setCaracsAutre(e.target.value)} placeholder="Autre..." />
+        </div>
+      </div>
+      <div>
+        <label className="text-xs" style={{ color: "#A2A1AF" }}>Logements inoccupés</label>
+        <select className="mt-0.5 w-full border rounded px-2 py-1 text-sm bg-white" style={{ borderColor: "#D0CFDB", color: "#26262C" }} value={caracForm.proportionInoccupee} onChange={e => setCaracForm(f => ({ ...f, proportionInoccupee: e.target.value }))}>
+          <option value="">— Non renseigné</option>
+          {Object.entries(INOCCUPEE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>
+      <InlineField label="Représentant légal" value={caracForm.representantLegal} placeholder="Nom et prénom" onChange={v => setCaracForm(f => ({ ...f, representantLegal: v }))} />
     </div>
   );
 }
