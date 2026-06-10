@@ -21,6 +21,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "JSON invalide" }, { status: 400 });
   }
 
+  // DIAGNOSTIC TEMPORAIRE — à retirer une fois le format Omni confirmé.
+  {
+    const top = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : null;
+    const firstRow = Array.isArray(body) ? body[0] : top?.data ?? top?.rows ?? top?.results ?? body;
+    console.log(
+      "[sync/push][diag] type:", Array.isArray(body) ? `array(${(body as unknown[]).length})` : typeof body,
+      "| topKeys:", top ? JSON.stringify(Object.keys(top).slice(0, 15)) : "-",
+      "| firstRowKeys:", firstRow && typeof firstRow === "object" ? JSON.stringify(Object.keys(firstRow as object).slice(0, 30)) : `(${typeof firstRow})`
+    );
+  }
+
   // Omni envoie le contenu brut du fichier JSON : tableau direct, ou objet
   // enveloppant ({ data | rows | results: [...] }). On déballe les deux cas.
   const wrapped = body as Record<string, unknown> | null;
@@ -83,7 +94,10 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  console.log("[sync/push][diag] lignes reçues:", rawCopros.length, "| lignes parsées (buildingId ok):", records.length);
+
   const result = await syncCopros(records);
+  console.log("[sync/push][diag] résultat:", JSON.stringify(result));
 
   return NextResponse.json({
     success: true,
