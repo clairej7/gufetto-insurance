@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       (k) => k.replace(/[^\x20-\x7E]/g, "").trim() === "Commonholds Building ID"
     );
     const buildingId = String(
-      parseField(raw, "Buildings Building ID", ...(corruptedKey ? [corruptedKey] : []), "building_id", "buildingId", "id") ?? ""
+      parseField(raw, "Building ID", "Buildings Building ID", ...(corruptedKey ? [corruptedKey] : []), "building_id", "buildingId", "id") ?? ""
     );
     if (!buildingId) continue;
 
