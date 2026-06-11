@@ -429,9 +429,7 @@ function RecoSentBlock({
 export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks = [] }: CoproDetailProps) {
   const [isPending, startTransition] = useTransition();
   const [showAbandonDialog, setShowAbandonDialog] = useState(false);
-  const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
   const [abandonRaison, setAbandonRaison] = useState("");
-  const [advanceNote, setAdvanceNote] = useState("");
   const [noteText, setNoteText] = useState("");
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [showRefusDialog, setShowRefusDialog] = useState(false);
@@ -584,11 +582,9 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
 
   function handleAdvance(force = false) {
     startTransition(async () => {
-      const result = await advanceStatut(pipeline.id, force, advanceNote);
+      const result = await advanceStatut(pipeline.id, force, "");
       if (result.success) {
         toast.success("Étape avancée !");
-        setShowAdvanceDialog(false);
-        setAdvanceNote("");
       } else {
         toast.error(result.error || "Erreur");
       }
@@ -700,7 +696,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
           <Card className="p-4 space-y-3">
             {nextStep && (
               <Button
-                onClick={() => allRequiredDone ? handleAdvance(false) : setShowAdvanceDialog(true)}
+                onClick={() => handleAdvance(true)}
                 disabled={isPending}
                 className="w-full"
                 size="lg"
@@ -1361,7 +1357,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                 <Card className="p-4 space-y-3">
                   {nextStep && (
                     <Button
-                      onClick={() => allRequiredDone ? handleAdvance(false) : setShowAdvanceDialog(true)}
+                      onClick={() => handleAdvance(true)}
                       disabled={isPending}
                       className={cn("w-full", isWon && "bg-[#13762C] hover:bg-[#13762C]/90")}
                       size="lg"
@@ -1773,23 +1769,6 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showAdvanceDialog} onOpenChange={setShowAdvanceDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Passer à l&apos;étape suivante</DialogTitle>
-            <DialogDescription>
-              {requiredTasks.length - completedRequired.length > 0
-                ? `${requiredTasks.length - completedRequired.length} tâche(s) obligatoire(s) non cochées. Vous pouvez forcer le passage.`
-                : "Confirmez le passage."}
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea value={advanceNote} onChange={(e) => setAdvanceNote(e.target.value)} placeholder="Note (optionnelle)..." className="min-h-20" />
-          <div className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={() => setShowAdvanceDialog(false)}>Annuler</Button>
-            <Button onClick={() => handleAdvance(true)} disabled={isPending}>Forcer le passage</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
