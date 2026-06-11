@@ -336,8 +336,8 @@ function RelanceForm({
   const [to, setTo] = useState(toEmail);
   const [subject, setSubject] = useState(
     copro.numeroContrat
-      ? `[Relance ${relanceNum}] Contrat n° ${copro.numeroContrat}`
-      : `[Relance ${relanceNum}] Relevé de sinistralité`
+      ? `[Relance ${relanceNum}] Demande de relevé de sinistralité - Contrat n° ${copro.numeroContrat}`
+      : `[Relance ${relanceNum}] Demande de relevé de sinistralité`
   );
   const [body, setBody] = useState(() =>
     buildRelanceTemplate(copro, firstSentAt, relanceNum)
