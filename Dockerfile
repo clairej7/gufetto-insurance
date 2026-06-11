@@ -14,6 +14,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
+# Force rebuild to invalidate Docker cache
+ARG BUILD_DATE=unknown
 RUN npm run build
 
 # Production image
