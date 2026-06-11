@@ -86,6 +86,7 @@ type DevisRecu = {
   data: string | null;
   notes: string | null;
   pdfName: string | null;
+  pdfUrl: string | null;
   recommande: boolean;
   createdAt: Date;
 };
@@ -600,6 +601,21 @@ function RecoAndEmailSection({
       formData.append("subject", subject);
       formData.append("body", recommendation);
       formData.append("refTag", `${pipelineId}:reco_cs`);
+
+      // Ajouter le PDF du devis recommandé
+      if (recommande?.pdfUrl) {
+        try {
+          const fileRes = await fetch(`/api/storage/download?path=${encodeURIComponent(recommande.pdfUrl)}`);
+          if (fileRes.ok) {
+            const blob = await fileRes.blob();
+            const fileName = recommande.pdfName || `devis-${recommande.assureur}.pdf`;
+            formData.append("devis", blob, fileName);
+          }
+        } catch (err) {
+          console.error("Erreur lors du téléchargement du PDF:", err);
+        }
+      }
+
       const res = await fetch("/api/front/draft", { method: "POST", body: formData });
       const json = await res.json() as { success?: boolean; fallback?: boolean; mailtoUrl?: string; error?: string; conversationId?: string };
       if (json.success) {
