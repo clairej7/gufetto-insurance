@@ -1233,6 +1233,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                     pipelineId={pipeline.id}
                     signedPdfUrl={pipeline.signedPdfUrl}
                     devisRecommande={pipeline.devisRecus.find(d => d.recommande) ?? null}
+                    nouveauNumeroContrat={pipeline.nouveauNumeroContrat}
                     copro={{
                       nom: pipeline.copro.nom,
                       adresse: pipeline.copro.adresse,

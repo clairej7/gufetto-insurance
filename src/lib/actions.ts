@@ -718,7 +718,37 @@ export async function saveContratActuelData(pipelineId: string, data: string) {
 export async function setRecommandeDevis(id: string, pipelineId: string) {
   await getSession();
 
+  // Récupérer le devis sélectionné pour extraire les données
+  const devis = await prisma.devisRecu.findUnique({
+    where: { id },
+  });
+
+  if (!devis) {
+    return { success: false, error: "Devis non trouvé" };
+  }
+
+  // Parser les données JSON du devis pour extraire numeroContrat, dateEffet, primeTTC
+  let numeroContrat: string | null = devis.numeroContrat;
+  let dateEffet: Date | null = null;
+  let primeTTC: number | null = null;
+
+  if (devis.data) {
+    try {
+      const extractedData = JSON.parse(devis.data) as {
+        numeroContrat?: string;
+        dateEffet?: string;
+        primeTTC?: number;
+      };
+      if (extractedData.numeroContrat) numeroContrat = extractedData.numeroContrat;
+      if (extractedData.dateEffet) dateEffet = new Date(extractedData.dateEffet);
+      if (extractedData.primeTTC) primeTTC = extractedData.primeTTC;
+    } catch {
+      // Ignorer les erreurs de parsing JSON
+    }
+  }
+
   // Set all devis for this pipeline to recommande=false, then set the selected one to true
+  // + Mettre à jour le Pipeline avec les données du nouveau contrat
   await prisma.$transaction([
     prisma.devisRecu.updateMany({
       where: { pipelineId },
@@ -727,6 +757,14 @@ export async function setRecommandeDevis(id: string, pipelineId: string) {
     prisma.devisRecu.update({
       where: { id },
       data: { recommande: true },
+    }),
+    prisma.insurancePipeline.update({
+      where: { id: pipelineId },
+      data: {
+        nouveauNumeroContrat: numeroContrat,
+        nouveauDateEffet: dateEffet,
+        nouveauPrimeTTC: primeTTC || devis.primeTTC,
+      },
     }),
   ]);
 

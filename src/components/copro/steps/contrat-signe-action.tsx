@@ -24,7 +24,8 @@ interface SentEvent {
 interface ContratSigneActionProps {
   pipelineId: string;
   signedPdfUrl: string | null;
-  devisRecommande: { assureur: string; primeTTC: number; numeroContrat: string | null } | null;
+  devisRecommande: { assureur: string; primeTTC: number } | null;
+  nouveauNumeroContrat: string | null;
   copro: { nom: string; adresse: string | null; gestionnaireEmail: string | null };
   sentEvents: SentEvent[];
 }
@@ -70,14 +71,15 @@ export function ContratSigneAction({
   pipelineId,
   signedPdfUrl,
   devisRecommande,
+  nouveauNumeroContrat,
   copro,
   sentEvents,
 }: ContratSigneActionProps) {
-  const [body, setBody] = useState(buildEmailBody(copro, devisRecommande?.numeroContrat ?? null));
+  const [body, setBody] = useState(buildEmailBody(copro, nouveauNumeroContrat));
   const [to, setTo] = useState(devisRecommande ? getDefaultEmail(devisRecommande.assureur) : "");
   const [subject, setSubject] = useState(
-    devisRecommande?.numeroContrat
-      ? `Matera - Souscription contrat MRI - ${devisRecommande.numeroContrat}`
+    nouveauNumeroContrat
+      ? `Matera - Souscription contrat MRI - ${nouveauNumeroContrat}`
       : `Matera - Souscription contrat MRI - ${copro.nom}`
   );
   const [isSending, setIsSending] = useState(false);
