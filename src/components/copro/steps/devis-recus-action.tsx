@@ -849,6 +849,7 @@ export function DevisRecusAction({
         const d = devisData[i];
         await addDevisRecu(pipelineId, {
           assureur: d.assureur ?? `Devis ${i + 1}`,
+          numeroContrat: d.numeroContrat ?? null,
           primeTTC: d.primeTTC ?? 0,
           data: JSON.stringify(d),
           pdfName: devisFiles[i]?.name ?? null,

@@ -24,7 +24,7 @@ interface SentEvent {
 interface ContratSigneActionProps {
   pipelineId: string;
   signedPdfUrl: string | null;
-  devisRecommande: { assureur: string; primeTTC: number } | null;
+  devisRecommande: { assureur: string; primeTTC: number; numeroContrat: string | null } | null;
   copro: { nom: string; adresse: string | null; gestionnaireEmail: string | null };
   sentEvents: SentEvent[];
 }
@@ -45,12 +45,14 @@ function formatGestionnaireNom(email: string | null | undefined): string {
   return local.split(".").map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
 }
 
-function buildEmailBody(copro: { nom: string; adresse: string | null; gestionnaireEmail: string | null }): string {
-  const adresse = copro.adresse ?? copro.nom;
+function buildEmailBody(
+  copro: { nom: string; adresse: string | null; gestionnaireEmail: string | null },
+  numeroContrat: string | null
+): string {
   const gestionnaire = formatGestionnaireNom(copro.gestionnaireEmail);
   return `Bonjour,
 
-Veuillez trouver ci-joint le contrat signé pour la souscription au contrat de MRI pour la copropriété située au ${adresse}.
+Veuillez trouver ci-joint le contrat signé pour la souscription au contrat de MRI${numeroContrat ? ` n° ${numeroContrat}` : ""}.
 
 Merci,
 
@@ -71,9 +73,13 @@ export function ContratSigneAction({
   copro,
   sentEvents,
 }: ContratSigneActionProps) {
-  const [body, setBody] = useState(buildEmailBody(copro));
+  const [body, setBody] = useState(buildEmailBody(copro, devisRecommande?.numeroContrat ?? null));
   const [to, setTo] = useState(devisRecommande ? getDefaultEmail(devisRecommande.assureur) : "");
-  const [subject, setSubject] = useState(`Matera - Souscription contrat MRI - ${copro.nom}`);
+  const [subject, setSubject] = useState(
+    devisRecommande?.numeroContrat
+      ? `Matera - Souscription contrat MRI - ${devisRecommande.numeroContrat}`
+      : `Matera - Souscription contrat MRI - ${copro.nom}`
+  );
   const [isSending, setIsSending] = useState(false);
   const [showForm, setShowForm] = useState(sentEvents.length === 0);
   const [showEmailBody, setShowEmailBody] = useState(false);
