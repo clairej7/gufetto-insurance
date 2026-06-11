@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
   const body = formData.get("body") as string;
   const contratFile = formData.get("contrat") as File | null;
   const pvFile = formData.get("pv") as File | null;
+  const devisFile = formData.get("devis") as File | null;
   const signedPdfPath = formData.get("signedPdfPath") as string | null;
   const refTag = formData.get("refTag") as string | null; // format: "{pipelineId}:{type}"
 
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
   draftForm.append("body", htmlBody);
   draftForm.append("type", "email");
 
-  for (const file of [contratFile, pvFile]) {
+  for (const file of [contratFile, pvFile, devisFile]) {
     if (!file) continue;
     const buf = await file.arrayBuffer();
     draftForm.append("attachments[]", new Blob([buf], { type: file.type }), file.name);
