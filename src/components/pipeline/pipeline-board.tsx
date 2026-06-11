@@ -271,11 +271,14 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
     return 0;
   });
 
-  const activePipelines = pipelines.filter(p => !["termine", "abandonne", "refuse", "non_assurable"].includes(p.statut));
-  const urgent = activePipelines.filter(p => { const d = getDaysUntilEcheance(p.copro.dateEcheance); return d !== null && d <= 60; }).length;
-  const dealsGagnes = pipelines.filter(p => p.statut === "contrat_signe" || p.statut === "termine").length;
+  const activePipelines = filtered.filter(p => !["termine", "abandonne", "refuse", "non_assurable"].includes(p.statut));
+  const urgent = activePipelines.filter(p => { const d = getDaysUntilEcheance(p.copro.dateEcheance); return d !== null && d <= 180; }).length;
+  const dealsGagnes = filtered.filter(p => ["contrat_signe", "resiliation_envoyee", "sepa_complete", "termine"].includes(p.statut)).length;
 
   const TERMINAL_STATUTS_LOCAL = ["termine", "abandonne", "refuse", "non_assurable"];
+  const CLOSED_STATUTS = ["resiliation_envoyee", "sepa_complete", "termine"];
+  const LOST_STATUTS = ["abandonne", "refuse", "non_assurable"];
+
   const urgents = sorted.filter(p => {
     if (TERMINAL_STATUTS_LOCAL.includes(p.statut)) return false;
     const d = getDaysUntilEcheance(p.copro.dateEcheance);
@@ -286,7 +289,8 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
     const d = getDaysUntilEcheance(p.copro.dateEcheance);
     return d === null || d > 180;
   });
-  const clotures = sorted.filter(p => TERMINAL_STATUTS_LOCAL.includes(p.statut));
+  const clos = sorted.filter(p => CLOSED_STATUTS.includes(p.statut));
+  const perdus = sorted.filter(p => LOST_STATUTS.includes(p.statut));
 
   // Toolbar shared between views
   const toolbar = (
@@ -373,7 +377,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
         {[
           { label: "Dossiers actifs", value: activePipelines.length, color: undefined },
-          { label: "Échéance < 2 mois", value: urgent, color: urgent > 0 ? "#CA1E12" : undefined },
+          { label: "Échéance < 6 mois", value: urgent, color: urgent > 0 ? "#CA1E12" : undefined },
           { label: "Deals gagnés", value: dealsGagnes, color: dealsGagnes > 0 ? "#13762C" : undefined },
         ].map(({ label, value, color }) => (
           <div key={label} style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "16px 20px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
@@ -460,16 +464,30 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                       ))}
                     </>
                   )}
-                  {clotures.length > 0 && (
+                  {clos.length > 0 && (
                     <>
                       <tr>
-                        <td colSpan={5} style={{ padding: "10px 16px 8px", background: "#F7F7F8", borderTop: "2px solid #E8E8EC" }}>
+                        <td colSpan={5} style={{ padding: "10px 16px 8px", background: "#F7FDF9", borderTop: "2px solid #E8E8EC" }}>
                           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "#13762C" }}>
-                            Dossiers clôturés — {clotures.length}
+                            Dossiers clos — {clos.length}
                           </span>
                         </td>
                       </tr>
-                      {clotures.map((p) => (
+                      {clos.map((p) => (
+                        <PipelineRow key={p.id} pipeline={p} taskTemplates={taskTemplates} cloture />
+                      ))}
+                    </>
+                  )}
+                  {perdus.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={5} style={{ padding: "10px 16px 8px", background: "#FFF5F5", borderTop: clos.length > 0 ? "2px solid #E8E8EC" : "2px solid #E8E8EC" }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "#CA1E12" }}>
+                            Dossiers perdus — {perdus.length}
+                          </span>
+                        </td>
+                      </tr>
+                      {perdus.map((p) => (
                         <PipelineRow key={p.id} pipeline={p} taskTemplates={taskTemplates} cloture />
                       ))}
                     </>
@@ -535,25 +553,26 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
               );
             })}
 
-            {/* Séparateur + colonne Clôturés */}
+            {/* Séparateur + colonnes Clos et Perdus */}
             {(() => {
-              const clotures = filtered.filter(p => p.statut === "termine");
+              const closKanban = filtered.filter(p => CLOSED_STATUTS.includes(p.statut));
+              const perdusKanban = filtered.filter(p => LOST_STATUTS.includes(p.statut));
               return (
                 <>
                   <div style={{ width: 1, background: "#E8E8EC", flexShrink: 0, margin: "0 4px" }} />
                   <div style={{ minWidth: 200, flexShrink: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#13762C" }}>
-                        Clôturés
+                        Clos
                       </span>
-                      {clotures.length > 0 && (
+                      {closKanban.length > 0 && (
                         <span style={{ fontSize: 11, fontWeight: 500, padding: "1px 6px", background: "#EFFBF2", borderRadius: 10, color: "#13762C", fontVariantNumeric: "tabular-nums" }}>
-                          {clotures.length}
+                          {closKanban.length}
                         </span>
                       )}
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {clotures.map((p) => (
+                      {closKanban.map((p) => (
                         <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
                           <div style={{
                             background: "#F7FDF9", borderRadius: 6, padding: "10px 12px",
@@ -567,13 +586,51 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                               {p.copro.nom}
                             </div>
                             <div style={{ marginTop: 4 }}>
-                              <Tag variant="success">Clôturé</Tag>
+                              <Tag variant="success">Clos</Tag>
                             </div>
                           </div>
                         </Link>
                       ))}
-                      {clotures.length === 0 && (
+                      {closKanban.length === 0 && (
                         <div style={{ borderRadius: 6, padding: 12, textAlign: "center", fontSize: 12, border: "1px dashed #BBF1C8", background: "#F7FDF9", color: "#A2A1AF" }}>
+                          Vide
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ minWidth: 200, flexShrink: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#CA1E12" }}>
+                        Perdus
+                      </span>
+                      {perdusKanban.length > 0 && (
+                        <span style={{ fontSize: 11, fontWeight: 500, padding: "1px 6px", background: "#FFF5F5", borderRadius: 10, color: "#CA1E12", fontVariantNumeric: "tabular-nums" }}>
+                          {perdusKanban.length}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {perdusKanban.map((p) => (
+                        <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
+                          <div style={{
+                            background: "#FFF5F5", borderRadius: 6, padding: "10px 12px",
+                            border: "1px solid #F1CCCC", borderLeft: "3px solid #CA1E12",
+                            cursor: "pointer", transition: "box-shadow 120ms",
+                          }}
+                            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
+                            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
+                          >
+                            <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {p.copro.nom}
+                            </div>
+                            <div style={{ marginTop: 4 }}>
+                              <Tag variant="error">Perdu</Tag>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                      {perdusKanban.length === 0 && (
+                        <div style={{ borderRadius: 6, padding: 12, textAlign: "center", fontSize: 12, border: "1px dashed #F1CCCC", background: "#FFF5F5", color: "#A2A1AF" }}>
                           Vide
                         </div>
                       )}
