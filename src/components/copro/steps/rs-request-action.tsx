@@ -37,6 +37,7 @@ interface RSRequestActionProps {
     courtierActuel: string | null;
     dateEcheance: Date | null;
     gestionnaireEmail: string | null;
+    numeroContrat: string | null;
   };
   rsEvents: RsEvent[];
 }
@@ -77,7 +78,7 @@ function buildFirstEmailTemplate(
 ): string {
   return `Bonjour,
 
-Je vous contacte en qualité de syndic de la copropriété ${copro.adresse ?? copro.nom}.
+Je vous contacte en qualité de syndic de la copropriété ${copro.adresse ?? copro.nom}${copro.numeroContrat ? `, contrat n° ${copro.numeroContrat}` : ""}.
 
 Pourriez-vous nous faire parvenir le relevé de sinistralité des 3 dernières années dans les meilleurs délais ? Vous trouverez en pièce jointe le dernier avis d'échéance.
 
@@ -197,7 +198,9 @@ function FirstEmailForm({
   const [pvFile, setPvFile] = useState<DroppedFile | null>(null);
   const [toEmail, setToEmail] = useState("");
   const [subject, setSubject] = useState(
-    `Demande de relevé de sinistralité - Contrat n° [À compléter]`
+    copro.numeroContrat
+      ? `Demande de relevé de sinistralité - Contrat n° ${copro.numeroContrat}`
+      : `Demande de relevé de sinistralité - Contrat n° [À compléter]`
   );
   const [body, setBody] = useState(() => buildFirstEmailTemplate(copro));
 
