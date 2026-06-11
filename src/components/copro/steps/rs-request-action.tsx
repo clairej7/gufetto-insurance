@@ -96,7 +96,7 @@ function buildRelanceTemplate(
   const label = relanceNum === 1 ? "premier" : "second";
   return `Bonjour,
 
-Je me permets de revenir vers vous suite à mon ${label} mail du ${formatDate(firstSentAt)} concernant le relevé de sinistralité de la copropriété ${copro.nom}${copro.adresse ? `, située ${copro.adresse}` : ""}.
+Je me permets de revenir vers vous suite à mon ${label} mail du ${formatDate(firstSentAt)} concernant le relevé de sinistralité de la copropriété ${copro.nom}${copro.adresse ? `, située ${copro.adresse}` : ""}${copro.numeroContrat ? `, contrat n° ${copro.numeroContrat}` : ""}.
 
 Nous n'avons toujours pas reçu ce document, malgré plusieurs relances.
 
@@ -335,7 +335,9 @@ function RelanceForm({
   const [isPending, startTransition] = useTransition();
   const [to, setTo] = useState(toEmail);
   const [subject, setSubject] = useState(
-    `[Relance ${relanceNum}] Relevé de sinistralité – ${copro.nom}`
+    copro.numeroContrat
+      ? `[Relance ${relanceNum}] Contrat n° ${copro.numeroContrat}`
+      : `[Relance ${relanceNum}] Relevé de sinistralité`
   );
   const [body, setBody] = useState(() =>
     buildRelanceTemplate(copro, firstSentAt, relanceNum)
