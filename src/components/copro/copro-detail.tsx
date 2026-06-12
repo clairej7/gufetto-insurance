@@ -458,7 +458,6 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
     courtierActuel: pipeline.copro.courtierActuel ?? "",
     numeroContrat: pipeline.copro.numeroContrat ?? "",
     primeActuelle: pipeline.copro.primeActuelle?.toString() ?? "",
-    dateDebutContrat: pipeline.copro.dateDebutContrat ? new Date(pipeline.copro.dateDebutContrat).toISOString().split("T")[0] : "",
     contactCourtierEmail: pipeline.copro.contactCourtierEmail ?? "",
     contactCourtierTel: pipeline.copro.contactCourtierTel ?? "",
   });
@@ -469,8 +468,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
       courtierActuel: pipeline.copro.courtierActuel ?? "",
       numeroContrat: pipeline.copro.numeroContrat ?? "",
       primeActuelle: pipeline.copro.primeActuelle?.toString() ?? "",
-      dateDebutContrat: pipeline.copro.dateDebutContrat ? new Date(pipeline.copro.dateDebutContrat).toISOString().split("T")[0] : "",
-      contactCourtierEmail: pipeline.copro.contactCourtierEmail ?? "",
+        contactCourtierEmail: pipeline.copro.contactCourtierEmail ?? "",
       contactCourtierTel: pipeline.copro.contactCourtierTel ?? "",
     });
     setEditingContrat(true);
@@ -484,7 +482,6 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
         courtierActuel: contratForm.courtierActuel || null,
         numeroContrat: contratForm.numeroContrat || null,
         primeActuelle: isNaN(prime) ? null : prime,
-        dateDebutContrat: contratForm.dateDebutContrat ? new Date(contratForm.dateDebutContrat) : null,
         contactCourtierEmail: contratForm.contactCourtierEmail || null,
         contactCourtierTel: contratForm.contactCourtierTel || null,
       });
@@ -753,7 +750,6 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                 <InlineField label="N° de contrat" value={contratForm.numeroContrat} placeholder="Ex : MRI-2021-00123" onChange={v => setContratForm(f => ({ ...f, numeroContrat: v }))} />
                 <InlineField label="Courtier" value={contratForm.courtierActuel} placeholder="Nom du courtier" onChange={v => setContratForm(f => ({ ...f, courtierActuel: v }))} />
                 <InlineField label="Prime annuelle (€)" type="number" value={contratForm.primeActuelle} placeholder="Ex : 3500" onChange={v => setContratForm(f => ({ ...f, primeActuelle: v }))} />
-                <InlineField label="Début contrat" type="date" value={contratForm.dateDebutContrat} onChange={v => setContratForm(f => ({ ...f, dateDebutContrat: v }))} />
                 <InlineField label="Mail courtier/assureur" type="email" value={contratForm.contactCourtierEmail} placeholder="contact@assureur.fr" onChange={v => setContratForm(f => ({ ...f, contactCourtierEmail: v }))} />
                 <InlineField label="Tél courtier/assureur" type="tel" value={contratForm.contactCourtierTel} placeholder="06 00 00 00 00" onChange={v => setContratForm(f => ({ ...f, contactCourtierTel: v }))} />
               </div>
@@ -763,7 +759,6 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                 <InfoRow label="N° de contrat" value={pipeline.copro.numeroContrat} />
                 <InfoRow label="Courtier" value={pipeline.copro.courtierActuel} />
                 <InfoRow label="Prime annuelle" value={pipeline.copro.primeActuelle ? `${pipeline.copro.primeActuelle.toLocaleString("fr-FR")} €` : null} />
-                <InfoRow label="Début contrat" value={pipeline.copro.dateDebutContrat ? new Date(pipeline.copro.dateDebutContrat).toLocaleDateString("fr-FR") : null} />
                 <InfoRow label="Mail courtier/assureur" value={pipeline.copro.contactCourtierEmail} />
                 <InfoRow label="N° téléphone courtier/assureur" value={pipeline.copro.contactCourtierTel} />
               </dl>

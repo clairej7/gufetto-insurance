@@ -75,6 +75,11 @@ model Copro {
   contactCourtierEmail  String?
   contactCourtierTel    String?
 
+  // Cliquet données contrat : posé dès qu'un gestionnaire édite les blocs
+  // "Contrat actuel" / "Infos copropriété" → les syncs Omni ne touchent plus
+  // jamais aux champs contrat de cette copro (l'échéance reste rafraîchie).
+  contratVerrouilleLe DateTime?
+
   // Contact Conseil Syndical
   contactCsEmail String?
   contactCsNom   String?

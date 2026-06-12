@@ -478,6 +478,8 @@ export async function updateCoproCaracteristiques(
     ...data,
     surfaceDeveloppee: typeof data.surfaceDeveloppee === "number" && isNaN(data.surfaceDeveloppee) ? null : data.surfaceDeveloppee,
     primeActuelle: typeof data.primeActuelle === "number" && isNaN(data.primeActuelle) ? null : data.primeActuelle,
+    // Cliquet : édition humaine → les syncs Omni ne toucheront plus aux champs contrat.
+    contratVerrouilleLe: new Date(),
   };
   await prisma.copro.update({ where: { id: coproId }, data: sanitized });
   revalidatePath(`/pipeline/${pipelineId}`);

@@ -102,24 +102,30 @@ export async function syncCopros(
       seenBuildingIds.push(rec.buildingId);
 
       const echeance = rec.dateEcheance ?? null;
-      const facts = {
+      // Seuls les champs RENSEIGNÉS par Omni sont rafraîchis : un export qui
+      // n'apporte pas une info (ex. n° de contrat) ne doit pas l'effacer
+      // (elle peut venir du webhook contrats ou d'une saisie manuelle).
+      const facts: Record<string, unknown> = {
         nom: rec.nom || rec.buildingId,
-        adresse: rec.adresse ?? null,
-        gestionnaireEmail: rec.gestionnaireEmail ?? null,
-        assureurActuel: rec.assureurActuel ?? null,
-        numeroContrat: rec.numeroContrat ?? null,
-        courtierActuel: rec.courtierActuel ?? null,
-        primeActuelle: rec.primeActuelle ?? null,
-        dateEcheance: echeance,
-        dateDebutContrat: rec.dateDebutContrat ?? null,
-        contactCsEmail: rec.contactCsEmail ?? null,
-        contactCsNom: rec.contactCsNom ?? null,
-        contactCourtierEmail: rec.contactCourtierEmail ?? null,
-        contactCourtierTel: rec.contactCourtierTel ?? null,
         source: "omni" as const,
         syncedAt: new Date(),
         archivedAt: null, // réapparue dans la sync → désarchiver
       };
+      if (rec.adresse != null) facts.adresse = rec.adresse;
+      if (rec.gestionnaireEmail != null) facts.gestionnaireEmail = rec.gestionnaireEmail;
+      if (rec.contactCsEmail != null) facts.contactCsEmail = rec.contactCsEmail;
+      if (rec.contactCsNom != null) facts.contactCsNom = rec.contactCsNom;
+      if (echeance) facts.dateEcheance = echeance;
+      // Champs contrat : soumis au cliquet contratVerrouilleLe (retirés plus
+      // bas si la copro a été éditée par un gestionnaire).
+      const contractFacts: Record<string, unknown> = {};
+      if (rec.assureurActuel != null) contractFacts.assureurActuel = rec.assureurActuel;
+      if (rec.numeroContrat != null) contractFacts.numeroContrat = rec.numeroContrat;
+      if (rec.courtierActuel != null) contractFacts.courtierActuel = rec.courtierActuel;
+      if (rec.primeActuelle != null) contractFacts.primeActuelle = rec.primeActuelle;
+      if (rec.dateDebutContrat != null) contractFacts.dateDebutContrat = rec.dateDebutContrat;
+      if (rec.contactCourtierEmail != null) contractFacts.contactCourtierEmail = rec.contactCourtierEmail;
+      if (rec.contactCourtierTel != null) contractFacts.contactCourtierTel = rec.contactCourtierTel;
 
       const hasStatut = rec.salesStatus != null && rec.salesStatus !== "";
       const omniStatut = mapSalesStatus(rec.salesStatus);
@@ -132,7 +138,8 @@ export async function syncCopros(
 
       if (!existing) {
         const newCopro = await prisma.copro.create({
-          data: { buildingId: rec.buildingId, ...facts },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          data: { buildingId: rec.buildingId, ...facts, ...contractFacts } as any,
         });
         // Nouvel immeuble : jamais touché → on pose le statut Omni mappé (ou identifie).
         await prisma.insurancePipeline.create({
@@ -141,7 +148,10 @@ export async function syncCopros(
         pipelinesCreated++;
         created++;
       } else {
-        await prisma.copro.update({ where: { buildingId: rec.buildingId }, data: facts });
+        // Cliquet contrat : copro éditée par un gestionnaire → Omni ne touche
+        // plus aux champs contrat (l'échéance et les faits immeuble restent rafraîchis).
+        const data = existing.contratVerrouilleLe ? facts : { ...facts, ...contractFacts };
+        await prisma.copro.update({ where: { buildingId: rec.buildingId }, data });
 
         if (existing.pipelines.length === 0) {
           await prisma.insurancePipeline.create({
