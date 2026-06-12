@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!lines.length) {
-    return NextResponse.json({ buildings: 0, updated: 0, lockedManual: 0, notFound: 0, notFoundIds: [], totalRows: 0 });
+    return NextResponse.json({ buildings: 0, updated: 0, lockedManual: 0, conflictsResolved: 0, conflicts: 0, conflictIds: [], notFound: 0, notFoundIds: [], totalRows: 0 });
   }
 
   const rows: ContratRow[] = lines

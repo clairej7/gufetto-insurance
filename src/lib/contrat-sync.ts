@@ -21,6 +21,13 @@ export type ContratSyncResult = {
   // Copros dont les données contrat ont été éditées par un gestionnaire
   // (cliquet contratVerrouilleLe) → jamais réécrites par la sync.
   lockedManual: number;
+  // Conflits (plusieurs contrats distincts) résolus automatiquement : une des
+  // lignes correspond à l'assureur déjà connu du CRM → c'est elle le contrat.
+  conflictsResolved: number;
+  // Conflits NON résolus → seuls les contacts ont été fusionnés, les champs
+  // contrat sont à arbitrer à la main.
+  conflicts: number;
+  conflictIds: string[];
   notFound: number;
   notFoundIds: string[];
   totalRows: number;
@@ -52,7 +59,48 @@ function scoreRow(r: ContratRow): number {
   return score;
 }
 
-export function mergeContratRows(rows: ContratRow[]): MergedContrat {
+// Deux lignes peuvent décrire DEUX CONTRATS DISTINCTS (et pas courtier +
+// assureur du même contrat) : on le détecte par des n° de contrat ou des noms
+// de contrat différents. Dans ce cas on ne devine pas → seuls les contacts
+// sont fusionnés, les champs contrat sont laissés à l'arbitrage manuel.
+export function hasConflictingContracts(rows: ContratRow[]): boolean {
+  const refs = new Set(rows.map((r) => r.refNumber).filter(Boolean));
+  if (refs.size >= 2) return true;
+  const names = new Set(rows.map((r) => r.contractName).filter(Boolean));
+  return names.size >= 2;
+}
+
+// Résolution d'un conflit par l'assureur déjà connu du CRM (alimenté par le
+// "Last Known MRI Supplier Name" de la requête Omni principale) : si exactement
+// une ligne porte ce nom, c'est elle le contrat courant.
+export function resolveConflictByAssureur(
+  rows: ContratRow[],
+  assureurConnu: string | null
+): ContratRow | null {
+  if (!assureurConnu) return null;
+  const norm = (s: string) => s.trim().toLowerCase();
+  const matches = rows.filter((r) => r.supplierName && norm(r.supplierName) === norm(assureurConnu));
+  return matches.length === 1 ? matches[0] : null;
+}
+
+// `forcedContract` (résolution de conflit) : les champs contrat viennent
+// EXCLUSIVEMENT de cette ligne — les autres lignes sont d'autres contrats,
+// elles n'apportent que leurs contacts.
+export function mergeContratRows(rows: ContratRow[], forcedContract?: ContratRow): MergedContrat {
+  if (forcedContract) {
+    const emails = [...new Set(rows.flatMap((r) => r.emails))];
+    const phones = [...new Set(rows.flatMap((r) => r.phones))];
+    return {
+      assureurActuel: forcedContract.supplierName,
+      courtierActuel: forcedContract.brokerName,
+      numeroContrat: forcedContract.refNumber,
+      primeActuelle: forcedContract.yearlyValue,
+      dateEcheance: forcedContract.terminationDate,
+      contactCourtierEmail: emails.length ? emails.join(", ") : null,
+      contactCourtierTel: phones.length ? phones.join(", ") : null,
+    };
+  }
+
   const sorted = [...rows].sort((a, b) => scoreRow(b) - scoreRow(a));
   const contract = sorted[0];
   const others = sorted.slice(1);
@@ -109,6 +157,8 @@ export async function syncContrats(rows: ContratRow[]): Promise<ContratSyncResul
 
   let updated = 0;
   let lockedManual = 0;
+  let conflictsResolved = 0;
+  const conflictIds: string[] = [];
   const notFoundIds: string[] = [];
   const errors: string[] = [];
 
@@ -124,10 +174,27 @@ export async function syncContrats(rows: ContratRow[]): Promise<ContratSyncResul
         continue;
       }
 
-      const merged = mergeContratRows(group);
+      // Conflit (plusieurs contrats distincts) : on tente d'abord la résolution
+      // par l'assureur connu du CRM ; sinon arbitrage manuel (contacts seuls).
+      let conflict = hasConflictingContracts(group);
+      let resolved: ContratRow | null = null;
+      if (conflict) {
+        resolved = resolveConflictByAssureur(group, existing.assureurActuel);
+        if (resolved) {
+          conflict = false;
+          conflictsResolved++;
+        } else {
+          conflictIds.push(buildingId);
+        }
+      }
+
+      const merged = mergeContratRows(group, resolved ?? undefined);
       const data: Record<string, unknown> = { syncedAt: new Date() };
+      const contactsOnly: (keyof MergedContrat)[] = ["contactCourtierEmail", "contactCourtierTel"];
       for (const [key, value] of Object.entries(merged)) {
-        if (value !== null) data[key] = value;
+        if (value === null) continue;
+        if (conflict && !contactsOnly.includes(key as keyof MergedContrat)) continue;
+        data[key] = value;
       }
 
       await prisma.copro.update({ where: { buildingId }, data });
@@ -141,6 +208,9 @@ export async function syncContrats(rows: ContratRow[]): Promise<ContratSyncResul
     buildings: byBuilding.size,
     updated,
     lockedManual,
+    conflictsResolved,
+    conflicts: conflictIds.length,
+    conflictIds,
     notFound: notFoundIds.length,
     notFoundIds,
     totalRows: rows.length,

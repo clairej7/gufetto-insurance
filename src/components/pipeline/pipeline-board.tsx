@@ -216,6 +216,21 @@ function PipelineRow({ pipeline, taskTemplates, cloture = false }: {
   );
 }
 
+// Filtres persistés en sessionStorage : quand on ouvre un dossier puis qu'on
+// revient à la liste, la recherche et les filtres sont conservés.
+const FILTERS_STORAGE_KEY = "pipeline-board-filters";
+
+type SavedFilters = {
+  sortKey: SortKey;
+  sortAsc: boolean;
+  view: "liste" | "kanban";
+  selectedGestionnaire: string[];
+  selectedStatut: string[];
+  selectedEcheance: string;
+  selectedAssureur: string[];
+  search: string;
+};
+
 export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, currentUserEmail }: PipelineBoardProps) {
   const defaultGestionnaire = currentUserEmail && gestionnaires.includes(currentUserEmail) ? [currentUserEmail] : [];
   const [sortKey, setSortKey] = useState<SortKey>("echeance");
@@ -226,6 +241,35 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [selectedAssureur, setSelectedAssureur] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+  const filtersLoaded = useRef(false);
+
+  // Restauration au montage (après hydratation, sessionStorage est côté client)
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(FILTERS_STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<SavedFilters>;
+        if (saved.sortKey) setSortKey(saved.sortKey);
+        if (typeof saved.sortAsc === "boolean") setSortAsc(saved.sortAsc);
+        if (saved.view) setView(saved.view);
+        if (Array.isArray(saved.selectedGestionnaire)) setSelectedGestionnaire(saved.selectedGestionnaire);
+        if (Array.isArray(saved.selectedStatut)) setSelectedStatut(saved.selectedStatut);
+        if (typeof saved.selectedEcheance === "string") setSelectedEcheance(saved.selectedEcheance);
+        if (Array.isArray(saved.selectedAssureur)) setSelectedAssureur(saved.selectedAssureur);
+        if (typeof saved.search === "string") setSearch(saved.search);
+      }
+    } catch { /* sessionStorage indisponible ou JSON corrompu : on garde les défauts */ }
+    filtersLoaded.current = true;
+  }, []);
+
+  // Sauvegarde à chaque changement (pas avant la restauration initiale)
+  useEffect(() => {
+    if (!filtersLoaded.current) return;
+    try {
+      const toSave: SavedFilters = { sortKey, sortAsc, view, selectedGestionnaire, selectedStatut, selectedEcheance, selectedAssureur, search };
+      sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(toSave));
+    } catch { /* quota ou indisponible : tant pis, pas bloquant */ }
+  }, [sortKey, sortAsc, view, selectedGestionnaire, selectedStatut, selectedEcheance, selectedAssureur, search]);
 
   const assureurs = [...new Set(pipelines.map((p) => p.copro.assureurActuel).filter(Boolean) as string[])].sort();
   const hasActiveFilters = selectedGestionnaire.length > 0 || selectedStatut.length > 0 || selectedEcheance !== "all" || selectedAssureur.length > 0 || search !== "";
