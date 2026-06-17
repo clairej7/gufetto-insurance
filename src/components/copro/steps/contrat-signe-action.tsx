@@ -26,7 +26,7 @@ interface ContratSigneActionProps {
   signedPdfUrl: string | null;
   devisRecommande: { assureur: string; primeTTC: number } | null;
   nouveauNumeroContrat: string | null;
-  copro: { nom: string; adresse: string | null; gestionnaireEmail: string | null };
+  copro: { nom: string; adresse: string | null; gestionnaireEmail: string | null; gestionnaireNom: string | null };
   sentEvents: SentEvent[];
 }
 
@@ -47,10 +47,10 @@ function formatGestionnaireNom(email: string | null | undefined): string {
 }
 
 function buildEmailBody(
-  copro: { nom: string; adresse: string | null; gestionnaireEmail: string | null },
+  copro: { nom: string; adresse: string | null; gestionnaireEmail: string | null; gestionnaireNom: string | null },
   numeroContrat: string | null
 ): string {
-  const gestionnaire = formatGestionnaireNom(copro.gestionnaireEmail);
+  const gestionnaire = copro.gestionnaireNom?.trim() || formatGestionnaireNom(copro.gestionnaireEmail);
   return `Bonjour,
 
 Veuillez trouver ci-joint le contrat signé pour la souscription au contrat de MRI${numeroContrat ? ` n° ${numeroContrat}` : ""}.

@@ -17,10 +17,11 @@ export async function POST(req: NextRequest) {
       assureur: string;
       primeTTC: number;
       gestionnaireEmail?: string | null;
+      gestionnaireNom?: string | null;
     };
 
     const { coproNom, coproAdresse, assureur, primeTTC, gestionnaireEmail } = body;
-    const gestionnaireNom = formatGestionnaireNom(gestionnaireEmail);
+    const gestionnaireNom = body.gestionnaireNom?.trim() || formatGestionnaireNom(gestionnaireEmail);
 
     const prompt = `Tu es conseiller expert en assurance multirisque immeuble (MRI) pour Matera, un syndic professionnel français.
 

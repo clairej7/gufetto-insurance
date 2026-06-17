@@ -68,6 +68,7 @@ type Pipeline = {
     contactCsEmail: string | null;
     contactCsNom: string | null;
     gestionnaireEmail: string | null;
+    gestionnaireNom: string | null;
     contactCourtierEmail: string | null;
     contactCourtierTel: string | null;
     surfaceDeveloppee: number | null;
@@ -687,6 +688,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                 contactCsEmail: pipeline.copro.contactCsEmail,
                 contactCsNom: pipeline.copro.contactCsNom,
                 gestionnaireEmail: pipeline.copro.gestionnaireEmail,
+                gestionnaireNom: pipeline.copro.gestionnaireNom,
               }}
             />
           </Card>
@@ -1233,6 +1235,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                       nom: pipeline.copro.nom,
                       adresse: pipeline.copro.adresse,
                       gestionnaireEmail: pipeline.copro.gestionnaireEmail,
+                gestionnaireNom: pipeline.copro.gestionnaireNom,
                     }}
                     sentEvents={pipeline.events.filter(e => {
                       const m = e.metadata as Record<string, unknown> | null;
@@ -1254,6 +1257,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                       nom: pipeline.copro.nom,
                       adresse: pipeline.copro.adresse,
                       gestionnaireEmail: pipeline.copro.gestionnaireEmail,
+                gestionnaireNom: pipeline.copro.gestionnaireNom,
                       dateEcheance: pipeline.copro.dateEcheance,
                       numeroContrat: pipeline.copro.numeroContrat,
                     }}

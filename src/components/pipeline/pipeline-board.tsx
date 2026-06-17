@@ -5,7 +5,8 @@ import Link from "next/link";
 import { PIPELINE_STEPS, getDaysUntilEcheance, getUrgenceBadge } from "@/lib/pipeline";
 import { X, Search, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MultiSelectFilter, formatGestionnaire } from "@/components/ui/multi-select-filter";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
+import { gestionnaireLabel } from "@/lib/gestionnaire";
 
 type PipelineWithCopro = {
   id: string;
@@ -19,6 +20,7 @@ type PipelineWithCopro = {
     primeActuelle: number | null;
     dateEcheance: Date | null;
     gestionnaireEmail: string | null;
+    gestionnaireNom: string | null;
   };
   taskCompletions: Array<{ taskId: string; task: { required: boolean; statut: string } }>;
 };
@@ -233,6 +235,11 @@ type SavedFilters = {
 
 export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, currentUserEmail }: PipelineBoardProps) {
   const defaultGestionnaire = currentUserEmail && gestionnaires.includes(currentUserEmail) ? [currentUserEmail] : [];
+  // Libellé d'affichage par email (nom Omni si présent, sinon dérivation).
+  const gestioNomByEmail = new Map<string, string | null>();
+  for (const p of pipelines) {
+    if (p.copro.gestionnaireEmail) gestioNomByEmail.set(p.copro.gestionnaireEmail, p.copro.gestionnaireNom);
+  }
   const [sortKey, setSortKey] = useState<SortKey>("echeance");
   const [sortAsc, setSortAsc] = useState(true);
   const [view, setView] = useState<"liste" | "kanban">("liste");
@@ -366,7 +373,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
         options={gestionnaires}
         value={selectedGestionnaire}
         onChange={setSelectedGestionnaire}
-        renderOption={formatGestionnaire}
+        renderOption={(e) => gestionnaireLabel(e, gestioNomByEmail.get(e))}
         width={150}
       />
       <MultiSelectFilter

@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { logRSDraftSent, marquerRSRecu, createAppelCourtierTask } from "@/lib/actions";
+import { gestionnaireLabel } from "@/lib/gestionnaire";
 
 interface RsEvent {
   id: string;
@@ -37,6 +38,7 @@ interface RSRequestActionProps {
     courtierActuel: string | null;
     dateEcheance: Date | null;
     gestionnaireEmail: string | null;
+    gestionnaireNom: string | null;
     numeroContrat: string | null;
   };
   rsEvents: RsEvent[];
@@ -58,15 +60,6 @@ function formatDate(date: Date | null | string): string {
   });
 }
 
-function nameFromEmail(email: string | null): string {
-  if (!email) return "";
-  const local = email.split("@")[0];
-  return local
-    .split(".")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function addDays(date: Date | string, days: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
@@ -84,7 +77,7 @@ Pourriez-vous nous faire parvenir le relevé de sinistralité des 3 dernières a
 
 Merci et bonne journée,
 
-${nameFromEmail(copro.gestionnaireEmail)}
+${gestionnaireLabel(copro.gestionnaireEmail, copro.gestionnaireNom)}
 Matera`;
 }
 
@@ -103,7 +96,7 @@ Nous n'avons toujours pas reçu ce document, malgré plusieurs relances.
 Pourriez-vous nous le faire parvenir dans les meilleurs délais ?
 
 Cordialement,
-${nameFromEmail(copro.gestionnaireEmail)}
+${gestionnaireLabel(copro.gestionnaireEmail, copro.gestionnaireNom)}
 Matera Syndic`;
 }
 

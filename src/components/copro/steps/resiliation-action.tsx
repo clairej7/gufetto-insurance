@@ -24,7 +24,7 @@ interface SentEvent {
 interface ResiliationActionProps {
   pipelineId: string;
   assureurActuel: string | null;
-  copro: { nom: string; adresse: string | null; gestionnaireEmail: string | null; dateEcheance: Date | null; numeroContrat: string | null };
+  copro: { nom: string; adresse: string | null; gestionnaireEmail: string | null; gestionnaireNom: string | null; dateEcheance: Date | null; numeroContrat: string | null };
   sentEvents: SentEvent[];
 }
 
@@ -35,11 +35,11 @@ function formatGestionnaireNom(email: string | null | undefined): string {
 }
 
 function buildEmailBody(
-  copro: { nom: string; adresse: string | null; gestionnaireEmail: string | null; dateEcheance: Date | null; numeroContrat: string | null },
+  copro: { nom: string; adresse: string | null; gestionnaireEmail: string | null; gestionnaireNom: string | null; dateEcheance: Date | null; numeroContrat: string | null },
   assureurActuel: string | null
 ): string {
   const adresse = copro.adresse ?? copro.nom;
-  const gestionnaire = formatGestionnaireNom(copro.gestionnaireEmail);
+  const gestionnaire = copro.gestionnaireNom?.trim() || formatGestionnaireNom(copro.gestionnaireEmail);
   const echeance = copro.dateEcheance
     ? new Date(copro.dateEcheance).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })
     : "[date d'échéance]";

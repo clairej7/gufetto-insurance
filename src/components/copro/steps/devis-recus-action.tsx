@@ -104,6 +104,7 @@ interface DevisRecusActionProps {
     contactCsEmail: string | null;
     contactCsNom: string | null;
     gestionnaireEmail: string | null;
+    gestionnaireNom: string | null;
   };
 }
 
@@ -553,6 +554,7 @@ function RecoAndEmailSection({
             contactCsNom: copro.contactCsNom,
             primeActuelle: copro.primeActuelle,
             gestionnaireEmail: copro.gestionnaireEmail,
+            gestionnaireNom: copro.gestionnaireNom,
           },
           contratActuel: contratActuelData,
           devis: allDevis.map((dv) => ({

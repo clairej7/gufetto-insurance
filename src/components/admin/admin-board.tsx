@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { getDaysUntilEcheance } from "@/lib/pipeline";
-import { MultiSelectFilter, formatGestionnaire } from "@/components/ui/multi-select-filter";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
+import { gestionnaireLabel } from "@/lib/gestionnaire";
 import { EvolutionChart } from "./evolution-chart";
 
 type Pipeline = {
@@ -16,6 +17,7 @@ type Pipeline = {
     primeActuelle: number | null;
     dateEcheance: Date | null;
     gestionnaireEmail: string | null;
+    gestionnaireNom: string | null;
   };
   taskCompletions: Array<{ taskId: string; task: { required: boolean; statut: string } }>;
 };
@@ -101,6 +103,12 @@ export function AdminBoard({ pipelines, gestionnaires, events }: AdminBoardProps
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
 
+  // Libellé d'affichage par email (nom Omni si présent, sinon dérivation).
+  const gestioNomByEmail = new Map<string, string | null>();
+  for (const p of pipelines) {
+    if (p.copro.gestionnaireEmail) gestioNomByEmail.set(p.copro.gestionnaireEmail, p.copro.gestionnaireNom);
+  }
+
   const fp = selectedGestionnaires.length > 0
     ? pipelines.filter(p => selectedGestionnaires.includes(p.copro.gestionnaireEmail ?? ""))
     : pipelines;
@@ -143,7 +151,7 @@ export function AdminBoard({ pipelines, gestionnaires, events }: AdminBoardProps
           options={gestionnaires}
           value={selectedGestionnaires}
           onChange={setSelectedGestionnaires}
-          renderOption={formatGestionnaire}
+          renderOption={(e) => gestionnaireLabel(e, gestioNomByEmail.get(e))}
           width={200}
         />
         {selectedGestionnaires.length > 0 && (
@@ -285,7 +293,7 @@ export function AdminBoard({ pipelines, gestionnaires, events }: AdminBoardProps
                     </td>
                     <td style={TD_LEFT}>
                       <span style={{ fontSize: 13, color: "#656576" }}>
-                        {p.copro.gestionnaireEmail ? formatGestionnaire(p.copro.gestionnaireEmail) : "—"}
+                        {p.copro.gestionnaireEmail ? gestionnaireLabel(p.copro.gestionnaireEmail, p.copro.gestionnaireNom) : "—"}
                       </span>
                     </td>
                     <td style={TD}>

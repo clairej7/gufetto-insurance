@@ -62,6 +62,9 @@ model Copro {
   adresse     String?
 
   gestionnaireEmail String?
+  // Nom du gestionnaire (Omni "AM/PM Name"). L'email reste la clé technique
+  // (filtres, assignation, signatures) ; ce nom sert uniquement à l'affichage.
+  gestionnaireNom   String?
 
   // Contrat d'assurance actuel
   assureurActuel    String?

@@ -47,6 +47,7 @@ type CoproInput = {
   contactCsNom?: string | null;
   primeActuelle?: number | null;
   gestionnaireEmail?: string | null;
+  gestionnaireNom?: string | null;
 };
 
 function formatGestionnaireNom(email: string | null | undefined): string {
@@ -97,7 +98,7 @@ function buildPrompt(
   recommandeAssureur?: string
 ): string {
   const basePrime = contratActuel.primeTTC ?? copro.primeActuelle;
-  const gestionnaireNom = formatGestionnaireNom(copro.gestionnaireEmail);
+  const gestionnaireNom = copro.gestionnaireNom?.trim() || formatGestionnaireNom(copro.gestionnaireEmail);
 
   const lines: string[] = [
     "Tu es conseiller expert en assurance multirisque immeuble (MRI) pour Matera, un syndic professionnel français qui propose son propre service de courtage.",

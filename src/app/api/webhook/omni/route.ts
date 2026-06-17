@@ -44,7 +44,8 @@ export async function POST(req: NextRequest) {
 
       const nom = parseField(r, "nom", "Building Name") || "Immeuble sans nom";
       const adresse = parseField(r, "adresse", "Address") || null;
-      const gestionnaireEmail = parseField(r, "gestionnaireEmail", "Email") || null;
+      const gestionnaireEmail = parseField(r, "gestionnaireEmail", "Email", "Matera Email") || null;
+      const gestionnaireNom = parseField(r, "gestionnaireNom", "AM/PM Name") || null;
       const assureurActuel = parseField(r, "assureurActuel", "Last Known MRI Supplier Name") || null;
       const courtierActuel = parseField(r, "courtierActuel") || null;
       const dateEcheance = parseField(r, "dateEcheance", "Last known MRI Contract Termination Date");
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest) {
         nom: String(nom),
         adresse: adresse ? String(adresse) : null,
         gestionnaireEmail: gestionnaireEmail ? String(gestionnaireEmail) : null,
+        gestionnaireNom: gestionnaireNom ? String(gestionnaireNom) : null,
         assureurActuel: assureurActuel ? String(assureurActuel) : null,
         courtierActuel: courtierActuel ? String(courtierActuel) : null,
         dateEcheance: dateEcheance ? new Date(String(dateEcheance)) : null,
