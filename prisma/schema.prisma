@@ -65,6 +65,11 @@ model Copro {
   // Nom du gestionnaire (Omni "AM/PM Name"). L'email reste la clé technique
   // (filtres, assignation, signatures) ; ce nom sert uniquement à l'affichage.
   gestionnaireNom   String?
+  // Etat du deal MRI côté HubSpot (Omni "Insurance Business State Groups") :
+  // "Insurance client" = déjà cliente MRI Matera (dossier clos, sauf assureur
+  // Wakam qu'il faut migrer) ; "Not MRI client yet" = dossier à traiter.
+  // Source de vérité prioritaire sur le sales status (Duomo). Toujours rafraîchi.
+  clientMriStatut   String?
 
   // Contrat d'assurance actuel
   assureurActuel    String?

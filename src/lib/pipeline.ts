@@ -83,6 +83,51 @@ export function getDaysUntilEcheance(dateEcheance: Date | null): number | null {
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
+// ─── Classement d'un dossier en sections (mutuellement exclusives) ───────────
+// Un dossier tombe dans EXACTEMENT un bucket, déterminé par priorité.
+
+export type DossierBucket = "perdu" | "clos" | "urgent" | "autre";
+
+const LOST_STATUTS: PipelineStatut[] = ["abandonne", "refuse", "non_assurable"];
+// "Clos par le statut de vente" : Contract Uploaded (resiliation_envoyee) et +.
+const CLOSED_BY_STATUT: PipelineStatut[] = ["resiliation_envoyee", "sepa_complete", "termine"];
+
+// Wakam : on ne travaille plus avec eux. Même si HubSpot dit "client", il faut
+// migrer → on ne clôt PAS via la règle client, on suit le sales status.
+export function isWakam(supplierName: string | null | undefined): boolean {
+  return !!supplierName && supplierName.toLowerCase().includes("wakam");
+}
+
+// Réellement cliente MRI Matera d'après HubSpot (source de vérité prioritaire).
+export function isClientMri(clientMriStatut: string | null | undefined): boolean {
+  return clientMriStatut === "Insurance client";
+}
+
+// Clôture "définitive" parce que cliente MRI HubSpot (hors Wakam à migrer).
+export function isCloturePourClient(
+  clientMriStatut: string | null | undefined,
+  assureurActuel: string | null | undefined
+): boolean {
+  return isClientMri(clientMriStatut) && !isWakam(assureurActuel);
+}
+
+export function categoriseDossier(input: {
+  statut: string;
+  dateEcheance: Date | null;
+  clientMriStatut: string | null;
+  assureurActuel: string | null;
+}): DossierBucket {
+  // 1. Statut perdu prime sur tout (même si HubSpot dit client).
+  if (LOST_STATUTS.includes(input.statut as PipelineStatut)) return "perdu";
+  // 2. Cliente MRI HubSpot (hors Wakam) → clos, aucune action.
+  if (isCloturePourClient(input.clientMriStatut, input.assureurActuel)) return "clos";
+  // 3. Sinon on suit le sales status (comportement historique).
+  if (CLOSED_BY_STATUT.includes(input.statut as PipelineStatut)) return "clos";
+  const d = getDaysUntilEcheance(input.dateEcheance);
+  if (d !== null && d <= 180) return "urgent";
+  return "autre";
+}
+
 export function getUrgenceBadge(days: number | null): "urgent" | "warning" | "ok" | "overdue" {
   if (days === null) return "ok";
   if (days < 0) return "overdue";

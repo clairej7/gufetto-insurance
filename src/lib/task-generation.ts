@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { PipelineStatut } from "@/generated/prisma/client";
-import { TERMINAL_STATUTS } from "@/lib/pipeline";
+import { TERMINAL_STATUTS, isCloturePourClient } from "@/lib/pipeline";
 
 // Seuil (en mois) avant l'échéance du contrat qui déclenche la tâche
 // "Lancer process assurance" pour un deal encore non démarré (identifie).
@@ -44,6 +44,8 @@ export type TaskGenerationResult = {
   skippedExisting: number;
   skippedNoGestionnaire: number;
   skippedNotDue: number;
+  skippedClientMri: number;
+  closedTasksClientMri: number;
 };
 
 /**
@@ -79,8 +81,22 @@ export async function generateTasksForActivePipelines(
   let skippedExisting = 0;
   let skippedNoGestionnaire = 0;
   let skippedNotDue = 0;
+  let skippedClientMri = 0;
+  let closedTasksClientMri = 0;
 
   for (const pipeline of pipelines) {
+    // Cliente MRI HubSpot (hors Wakam) : dossier clos, aucune tâche. On ne crée
+    // rien et on ferme les tâches encore ouvertes (rien à faire).
+    if (isCloturePourClient(pipeline.copro.clientMriStatut, pipeline.copro.assureurActuel)) {
+      const closed = await prisma.task.updateMany({
+        where: { pipelineId: pipeline.id, status: "todo" },
+        data: { status: "done", completedAt: now, completedBy: "system:client-mri" },
+      });
+      closedTasksClientMri += closed.count;
+      skippedClientMri++;
+      continue;
+    }
+
     // Idempotent : ne pas créer si une tâche est déjà ouverte
     if (pipeline.tasks.length > 0) {
       skippedExisting++;
@@ -124,5 +140,5 @@ export async function generateTasksForActivePipelines(
     created++;
   }
 
-  return { created, checked: pipelines.length, skippedExisting, skippedNoGestionnaire, skippedNotDue };
+  return { created, checked: pipelines.length, skippedExisting, skippedNoGestionnaire, skippedNotDue, skippedClientMri, closedTasksClientMri };
 }

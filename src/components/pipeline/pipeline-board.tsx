@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { PIPELINE_STEPS, getDaysUntilEcheance, getUrgenceBadge } from "@/lib/pipeline";
+import { PIPELINE_STEPS, getDaysUntilEcheance, getUrgenceBadge, categoriseDossier } from "@/lib/pipeline";
 import { X, Search, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
@@ -21,6 +21,7 @@ type PipelineWithCopro = {
     dateEcheance: Date | null;
     gestionnaireEmail: string | null;
     gestionnaireNom: string | null;
+    clientMriStatut: string | null;
   };
   taskCompletions: Array<{ taskId: string; task: { required: boolean; statut: string } }>;
 };
@@ -322,26 +323,24 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
     return 0;
   });
 
-  const activePipelines = filtered.filter(p => !["termine", "abandonne", "refuse", "non_assurable"].includes(p.statut));
-  const urgent = activePipelines.filter(p => { const d = getDaysUntilEcheance(p.copro.dateEcheance); return d !== null && d <= 180; }).length;
-  const dealsGagnes = filtered.filter(p => ["contrat_signe", "resiliation_envoyee", "sepa_complete", "termine"].includes(p.statut)).length;
-
-  const TERMINAL_STATUTS_LOCAL = ["termine", "abandonne", "refuse", "non_assurable"];
-  const CLOSED_STATUTS = ["resiliation_envoyee", "sepa_complete", "termine"];
-  const LOST_STATUTS = ["abandonne", "refuse", "non_assurable"];
-
-  const urgents = sorted.filter(p => {
-    if (TERMINAL_STATUTS_LOCAL.includes(p.statut)) return false;
-    const d = getDaysUntilEcheance(p.copro.dateEcheance);
-    return d !== null && d <= 180;
+  // Classement en sections via le classifieur central (un bucket par dossier).
+  const bucketOf = (p: PipelineWithCopro) => categoriseDossier({
+    statut: p.statut,
+    dateEcheance: p.copro.dateEcheance,
+    clientMriStatut: p.copro.clientMriStatut,
+    assureurActuel: p.copro.assureurActuel,
   });
-  const autres = sorted.filter(p => {
-    if (TERMINAL_STATUTS_LOCAL.includes(p.statut)) return false;
-    const d = getDaysUntilEcheance(p.copro.dateEcheance);
-    return d === null || d > 180;
-  });
-  const clos = sorted.filter(p => CLOSED_STATUTS.includes(p.statut));
-  const perdus = sorted.filter(p => LOST_STATUTS.includes(p.statut));
+
+  // KPIs : actifs = urgent + autres (exclut clos, dont clients MRI, et perdus).
+  const actifsCount = filtered.filter(p => { const b = bucketOf(p); return b === "urgent" || b === "autre"; }).length;
+  const urgent = filtered.filter(p => bucketOf(p) === "urgent").length;
+  // "Deals gagnés" : dossiers clos (clients MRI hors Wakam inclus) + contrat signé en cours.
+  const dealsGagnes = filtered.filter(p => bucketOf(p) === "clos" || p.statut === "contrat_signe").length;
+
+  const urgents = sorted.filter(p => bucketOf(p) === "urgent");
+  const autres  = sorted.filter(p => bucketOf(p) === "autre");
+  const clos    = sorted.filter(p => bucketOf(p) === "clos");
+  const perdus  = sorted.filter(p => bucketOf(p) === "perdu");
 
   // Toolbar shared between views
   const toolbar = (
@@ -427,7 +426,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
         {[
-          { label: "Dossiers actifs", value: activePipelines.length, color: undefined },
+          { label: "Dossiers actifs", value: actifsCount, color: undefined },
           { label: "Échéance < 6 mois", value: urgent, color: urgent > 0 ? "#CA1E12" : undefined },
           { label: "Deals gagnés", value: dealsGagnes, color: dealsGagnes > 0 ? "#13762C" : undefined },
         ].map(({ label, value, color }) => (
@@ -551,7 +550,13 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
           /* Kanban */
           <div style={{ display: "flex", gap: 16, overflowX: "auto", padding: 16 }}>
             {PIPELINE_STEPS.filter((s) => s.statut !== "termine").map((step) => {
-              const items = filtered.filter((p) => p.statut === step.statut);
+              // Colonnes d'étape = dossiers actifs uniquement (les clos/perdus,
+              // dont les clients MRI, vont dans leurs colonnes dédiées).
+              const items = filtered.filter((p) => {
+                if (p.statut !== step.statut) return false;
+                const b = bucketOf(p);
+                return b === "urgent" || b === "autre";
+              });
               return (
                 <div key={step.statut} style={{ minWidth: 200, flexShrink: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
@@ -606,8 +611,8 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
 
             {/* Séparateur + colonnes Clos et Perdus */}
             {(() => {
-              const closKanban = filtered.filter(p => CLOSED_STATUTS.includes(p.statut));
-              const perdusKanban = filtered.filter(p => LOST_STATUTS.includes(p.statut));
+              const closKanban = filtered.filter(p => bucketOf(p) === "clos");
+              const perdusKanban = filtered.filter(p => bucketOf(p) === "perdu");
               return (
                 <>
                   <div style={{ width: 1, background: "#E8E8EC", flexShrink: 0, margin: "0 4px" }} />

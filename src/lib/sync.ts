@@ -10,6 +10,7 @@ export type SyncCoproInput = {
   adresse?: string | null;
   gestionnaireEmail?: string | null;
   gestionnaireNom?: string | null;
+  clientMriStatut?: string | null;
   assureurActuel?: string | null;
   numeroContrat?: string | null;
   courtierActuel?: string | null;
@@ -115,6 +116,7 @@ export async function syncCopros(
       if (rec.adresse != null) facts.adresse = rec.adresse;
       if (rec.gestionnaireEmail != null) facts.gestionnaireEmail = rec.gestionnaireEmail;
       if (rec.gestionnaireNom != null) facts.gestionnaireNom = rec.gestionnaireNom;
+      if (rec.clientMriStatut != null) facts.clientMriStatut = rec.clientMriStatut;
       if (rec.contactCsEmail != null) facts.contactCsEmail = rec.contactCsEmail;
       if (rec.contactCsNom != null) facts.contactCsNom = rec.contactCsNom;
       if (echeance) facts.dateEcheance = echeance;

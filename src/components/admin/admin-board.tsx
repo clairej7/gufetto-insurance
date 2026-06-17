@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getDaysUntilEcheance } from "@/lib/pipeline";
+import { getDaysUntilEcheance, categoriseDossier } from "@/lib/pipeline";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { gestionnaireLabel } from "@/lib/gestionnaire";
 import { EvolutionChart } from "./evolution-chart";
@@ -18,6 +18,7 @@ type Pipeline = {
     dateEcheance: Date | null;
     gestionnaireEmail: string | null;
     gestionnaireNom: string | null;
+    clientMriStatut: string | null;
   };
   taskCompletions: Array<{ taskId: string; task: { required: boolean; statut: string } }>;
 };
@@ -36,7 +37,6 @@ interface AdminBoardProps {
   events: RawEvent[];
 }
 
-const LOST_STATUTS = ["abandonne", "refuse", "non_assurable"];
 
 const STAGE_COLS: { statut: string; label: string; shortLabel: string; bg: string; fg: string; bar: string }[] = [
   { statut: "identifie",          label: "Identifié",        shortLabel: "Identifié",   bg: "#F7F7F8", fg: "#656576", bar: "#D4D4DC" },
@@ -115,12 +115,23 @@ export function AdminBoard({ pipelines, gestionnaires, events }: AdminBoardProps
 
   function toggleKpi(k: KpiFilter) { setActiveKpi(prev => prev === k ? null : k); }
 
-  const wonPipelines     = fp.filter(p => p.statut === "contrat_signe" || p.statut === "termine");
-  const urgentPipelines  = fp.filter(p => {
-    const d = getDaysUntilEcheance(p.copro.dateEcheance);
-    return d !== null && d <= 60 && !LOST_STATUTS.includes(p.statut);
+  // Classement central : un dossier clos (dont clients MRI hors Wakam) n'est ni actif ni urgent.
+  const bucketOf = (p: Pipeline) => categoriseDossier({
+    statut: p.statut,
+    dateEcheance: p.copro.dateEcheance,
+    clientMriStatut: p.copro.clientMriStatut,
+    assureurActuel: p.copro.assureurActuel,
   });
-  const activePipelines  = fp.filter(p => !LOST_STATUTS.includes(p.statut) && p.statut !== "termine");
+  const isActif = (p: Pipeline) => { const b = bucketOf(p); return b === "urgent" || b === "autre"; };
+
+  // "Deals gagnés" = clos (clients MRI hors Wakam inclus) + contrat signé en cours.
+  const wonPipelines     = fp.filter(p => bucketOf(p) === "clos" || p.statut === "contrat_signe");
+  const urgentPipelines  = fp.filter(p => {
+    if (!isActif(p)) return false;
+    const d = getDaysUntilEcheance(p.copro.dateEcheance);
+    return d !== null && d <= 60;
+  });
+  const activePipelines  = fp.filter(isActif);
   const totalARR         = wonPipelines.reduce((s, p) => s + dealValue(p), 0);
   const tauxSignature    = activePipelines.length > 0
     ? Math.round((wonPipelines.length / (activePipelines.length + wonPipelines.length)) * 100)
@@ -203,7 +214,7 @@ export function AdminBoard({ pipelines, gestionnaires, events }: AdminBoardProps
       <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 20 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Répartition par étape</span>
-          <span style={{ fontSize: 12, color: "#A2A1AF", fontFamily: FONT_MONO }}>{fp.filter(p => !LOST_STATUTS.includes(p.statut)).length} dossiers actifs</span>
+          <span style={{ fontSize: 12, color: "#A2A1AF", fontFamily: FONT_MONO }}>{activePipelines.length} dossiers actifs</span>
           {tauxSignature > 0 && (
             <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 600, color: "#13762C" }}>
               Taux de signature : {tauxSignature}%
