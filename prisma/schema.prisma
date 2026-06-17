@@ -238,3 +238,21 @@ model UserLoginEvent {
   email     String
   createdAt DateTime @default(now())
 }
+
+// Trace de chaque exécution des webhooks Omni (sync nocturne).
+// Permet à l'onglet admin "Synchro" de montrer ce qui tourne la nuit.
+// source : "omni" | "omni-contrats" | "omni-infos-copro"
+// status : "processing" | "success" | "error"
+model SyncRun {
+  id           String    @id @default(cuid())
+  source       String
+  status       String    @default("processing")
+  rowsReceived Int       @default(0)
+  result       Json?
+  error        String?
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  @@index([source, startedAt])
+  @@index([startedAt])
+}

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { syncCopros, type SyncCoproInput } from "@/lib/sync";
+import { startRun, finishRun } from "@/lib/sync-run";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseField(obj: any, ...keys: string[]) {
@@ -70,9 +72,24 @@ export async function POST(req: NextRequest) {
     })
     .filter(Boolean) as SyncCoproInput[];
 
-  console.log(`[webhook/omni] Processing ${inputs.length} buildings`);
+  // Réponse immédiate (202) pour ne pas faire timeouter Omni : la sync de
+  // ~2000 buildings prend plusieurs secondes et Omni coupe avant la fin
+  // (faux 500 / échec de livraison). On traite en arrière-plan via after()
+  // et on trace le run pour l'onglet admin "Synchro".
+  const runId = await startRun("omni", inputs.length);
 
-  const result = await syncCopros(inputs);
+  after(async () => {
+    console.log(`[webhook/omni] Processing ${inputs.length} buildings`);
+    try {
+      const result = await syncCopros(inputs);
+      await finishRun(runId, { ok: true, result });
+      console.log(`[webhook/omni] Done`, result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await finishRun(runId, { ok: false, error: msg });
+      console.error(`[webhook/omni] Failed:`, e);
+    }
+  });
 
-  return NextResponse.json(result);
+  return NextResponse.json({ received: inputs.length, runId }, { status: 202 });
 }

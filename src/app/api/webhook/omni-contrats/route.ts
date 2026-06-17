@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { syncContrats, type ContratRow } from "@/lib/contrat-sync";
+import { startRun, finishRun } from "@/lib/sync-run";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseField(obj: any, ...keys: string[]) {
@@ -70,9 +72,21 @@ export async function POST(req: NextRequest) {
     })
     .filter(Boolean) as ContratRow[];
 
-  console.log(`[webhook/omni-contrats] Processing ${rows.length} rows`);
+  // Réponse immédiate (202) + traitement en arrière-plan : voir /api/webhook/omni.
+  const runId = await startRun("omni-contrats", rows.length);
 
-  const result = await syncContrats(rows);
+  after(async () => {
+    console.log(`[webhook/omni-contrats] Processing ${rows.length} rows`);
+    try {
+      const result = await syncContrats(rows);
+      await finishRun(runId, { ok: true, result });
+      console.log(`[webhook/omni-contrats] Done`, result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await finishRun(runId, { ok: false, error: msg });
+      console.error(`[webhook/omni-contrats] Failed:`, e);
+    }
+  });
 
-  return NextResponse.json(result);
+  return NextResponse.json({ received: rows.length, runId }, { status: 202 });
 }

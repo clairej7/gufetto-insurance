@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { syncInfosCopro, type InfosCoproRow } from "@/lib/infos-copro-sync";
+import { startRun, finishRun } from "@/lib/sync-run";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseField(obj: any, ...keys: string[]) {
@@ -58,9 +60,21 @@ export async function POST(req: NextRequest) {
     })
     .filter(Boolean) as InfosCoproRow[];
 
-  console.log(`[webhook/omni-infos-copro] Processing ${rows.length} rows`);
+  // Réponse immédiate (202) + traitement en arrière-plan : voir /api/webhook/omni.
+  const runId = await startRun("omni-infos-copro", rows.length);
 
-  const result = await syncInfosCopro(rows);
+  after(async () => {
+    console.log(`[webhook/omni-infos-copro] Processing ${rows.length} rows`);
+    try {
+      const result = await syncInfosCopro(rows);
+      await finishRun(runId, { ok: true, result });
+      console.log(`[webhook/omni-infos-copro] Done`, result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await finishRun(runId, { ok: false, error: msg });
+      console.error(`[webhook/omni-infos-copro] Failed:`, e);
+    }
+  });
 
-  return NextResponse.json(result);
+  return NextResponse.json({ received: rows.length, runId }, { status: 202 });
 }
