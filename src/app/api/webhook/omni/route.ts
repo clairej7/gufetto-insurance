@@ -51,11 +51,10 @@ export async function POST(req: NextRequest) {
       const dateDebutContrat = parseField(r, "dateDebutContrat") || null;
       const contactCsEmail = parseField(r, "contactCsEmail") || null;
       const contactCsNom = parseField(r, "contactCsNom") || null;
-      const pmAssignee = parseField(r, "PM Assignee Name - Pro") || null;
 
       const statut = parseField(r, "statut", "Insurance Sales Status");
 
-      return {
+      const input: SyncCoproInput = {
         buildingId: String(buildingId),
         nom: String(nom),
         adresse: adresse ? String(adresse) : null,
@@ -66,9 +65,11 @@ export async function POST(req: NextRequest) {
         dateDebutContrat: dateDebutContrat ? new Date(String(dateDebutContrat)) : null,
         contactCsEmail: contactCsEmail ? String(contactCsEmail) : null,
         contactCsNom: contactCsNom ? String(contactCsNom) : null,
-        pmAssignee: pmAssignee ? String(pmAssignee) : null,
-        statut: statut ? String(statut) : null,
+        // Champ lu par syncCopros : DOIT s'appeler salesStatus (le cast masquait
+        // un ancien "statut" jamais lu → tous les statuts restaient "identifie").
+        salesStatus: statut ? String(statut) : null,
       };
+      return input;
     })
     .filter(Boolean) as SyncCoproInput[];
 
