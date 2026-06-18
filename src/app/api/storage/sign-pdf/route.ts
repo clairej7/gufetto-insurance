@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument } from "pdf-lib";
 import { supabaseAdmin, STORAGE_BUCKET } from "@/lib/supabase";
+import { auth } from "@/lib/auth";
 import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
 import path from "path";
@@ -43,6 +44,11 @@ Nombre total de pages : ${totalPages}. La signature est généralement sur la de
 }
 
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  }
+
   const { pdfPath, pipelineId } = await req.json() as { pdfPath: string; pipelineId: string };
 
   if (!pdfPath || !pipelineId) {
