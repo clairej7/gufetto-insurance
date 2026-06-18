@@ -70,14 +70,6 @@ const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
   non_assurable:  { label: "Non assurable",  variant: "error" },
 };
 
-function formatEuros(n: number): string {
-  return n.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
-}
-
-function dealValue(p: Pipeline): number {
-  return p.nouveauPrimeTTC ?? p.copro.primeActuelle ?? 0;
-}
-
 const FONT_SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
 const FONT_MONO = "ui-monospace, Menlo, Consolas, monospace";
 
@@ -132,7 +124,6 @@ export function AdminBoard({ pipelines, gestionnaires, events }: AdminBoardProps
     return d !== null && d <= 60;
   });
   const activePipelines  = fp.filter(isActif);
-  const totalARR         = wonPipelines.reduce((s, p) => s + dealValue(p), 0);
   const tauxSignature    = activePipelines.length > 0
     ? Math.round((wonPipelines.length / (activePipelines.length + wonPipelines.length)) * 100)
     : 0;
@@ -173,12 +164,11 @@ export function AdminBoard({ pipelines, gestionnaires, events }: AdminBoardProps
       </div>
 
       {/* ── KPIs ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
         {([
           { filter: "actifs"  as KpiFilter, label: "Dossiers actifs",   value: activePipelines.length,                              color: "#26262C",                              numeric: true  },
           { filter: "urgents" as KpiFilter, label: "Urgents < 2 mois",  value: urgentPipelines.length,                              color: urgentPipelines.length > 0 ? "#CA1E12" : "#26262C", numeric: true },
           { filter: "gagnes"  as KpiFilter, label: "Deals gagnés",      value: totalWon,                                            color: totalWon > 0 ? "#13762C" : "#26262C",   numeric: true  },
-          { filter: null,                   label: "ARR signé",          value: totalARR > 0 ? formatEuros(totalARR) : "—",          color: totalARR > 0 ? "#13762C" : "#A2A1AF",  numeric: false },
         ]).map(({ filter, label, value, color, numeric }) => {
           const isActive = filter !== null && activeKpi === filter;
           const clickable = filter !== null;
@@ -280,9 +270,7 @@ export function AdminBoard({ pipelines, gestionnaires, events }: AdminBoardProps
                 <th style={{ ...TH_LEFT, minWidth: 200 }}>Copropriété</th>
                 <th style={TH_LEFT}>Gestionnaire</th>
                 <th style={TH}>Statut</th>
-                {activeKpi === "gagnes"
-                  ? <th style={{ ...TH_RIGHT, color: "#13762C" }}>ARR</th>
-                  : <th style={TH_RIGHT}>Échéance</th>}
+                <th style={TH_RIGHT}>Échéance</th>
               </tr>
             </thead>
             <tbody>
@@ -319,28 +307,20 @@ export function AdminBoard({ pipelines, gestionnaires, events }: AdminBoardProps
                         </span>
                       )}
                     </td>
-                    {activeKpi === "gagnes" ? (
-                      <td style={TD_RIGHT}>
-                        {dealValue(p) > 0
-                          ? <span style={{ fontSize: 13, fontWeight: 600, color: "#13762C", fontVariantNumeric: "tabular-nums" }}>{formatEuros(dealValue(p))}</span>
-                          : <span style={{ color: "#C0C0C9" }}>—</span>}
-                      </td>
-                    ) : (
-                      <td style={TD_RIGHT}>
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
-                          <span style={{ fontSize: 13, color: "#656576", fontVariantNumeric: "tabular-nums" }}>
-                            {p.copro.dateEcheance
-                              ? new Date(p.copro.dateEcheance).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
-                              : <span style={{ color: "#C0C0C9" }}>—</span>}
+                    <td style={TD_RIGHT}>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+                        <span style={{ fontSize: 13, color: "#656576", fontVariantNumeric: "tabular-nums" }}>
+                          {p.copro.dateEcheance
+                            ? new Date(p.copro.dateEcheance).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
+                            : <span style={{ color: "#C0C0C9" }}>—</span>}
+                        </span>
+                        {days !== null && (
+                          <span style={{ fontSize: 11, fontWeight: 600, color: urgColor, fontVariantNumeric: "tabular-nums" }}>
+                            {days < 0 ? `+${Math.abs(days)} j` : `J-${days}`}
                           </span>
-                          {days !== null && (
-                            <span style={{ fontSize: 11, fontWeight: 600, color: urgColor, fontVariantNumeric: "tabular-nums" }}>
-                              {days < 0 ? `+${Math.abs(days)} j` : `J-${days}`}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                    )}
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
