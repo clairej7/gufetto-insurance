@@ -37,7 +37,7 @@ export const authConfig: NextAuthConfig = {
       const path = request.nextUrl.pathname;
       const isPublic =
         path.startsWith("/api/auth") ||
-        path.startsWith("/api/webhooks") ||
+        path.startsWith("/api/webhook") ||
         path.startsWith("/_next") ||
         path === "/favicon.ico";
       if (isPublic) return true;
