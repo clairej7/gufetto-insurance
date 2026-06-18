@@ -23,6 +23,17 @@ export default async function AdminPage() {
     orderBy: { copro: { dateEcheance: "asc" } },
   });
 
+  // Dossiers perdus (exclus du dataset actif ci-dessus) : juste de quoi compter
+  // la barre "Perdus" du graphe, filtrable par gestionnaire.
+  const lostPipelines = await prisma.insurancePipeline.findMany({
+    where: {
+      statut: { in: ["abandonne", "refuse", "non_assurable"] },
+      copro: { archivedAt: null },
+    },
+    select: { copro: { select: { gestionnaireEmail: true } } },
+  });
+  const lostGestionnaires = lostPipelines.map((p) => p.copro.gestionnaireEmail);
+
   const taskTemplates = await prisma.stageTaskTemplate.findMany();
 
   const gestionnaires = [
@@ -55,6 +66,7 @@ export default async function AdminPage() {
           taskTemplates={taskTemplates}
           gestionnaires={gestionnaires}
           events={events as Parameters<typeof AdminBoard>[0]["events"]}
+          lostGestionnaires={lostGestionnaires}
         />
       </main>
     </div>

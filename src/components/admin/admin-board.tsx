@@ -35,6 +35,9 @@ interface AdminBoardProps {
   taskTemplates: Array<{ id: string; statut: string; required: boolean }>;
   gestionnaires: string[];
   events: RawEvent[];
+  // Email gestionnaire de chaque dossier perdu (abandonné/refusé/non assurable),
+  // exclus du dataset `pipelines` actif-only mais comptés dans la barre "Perdus".
+  lostGestionnaires: (string | null)[];
 }
 
 
@@ -46,6 +49,7 @@ const STAGE_COLS: { statut: string; label: string; shortLabel: string; bg: strin
   { statut: "envoye_cs",          label: "Validé CS",        shortLabel: "Validé CS",   bg: "#FFF7EB", fg: "#955804", bar: "#F5A623" },
   { statut: "contrat_signe",      label: "Contrat signé",    shortLabel: "Signé",       bg: "#EFFBF2", fg: "#13762C", bar: "#34C759" },
   { statut: "termine",            label: "Clôturé",          shortLabel: "Clôturé",     bg: "#CFF2D8", fg: "#0E5D22", bar: "#0E5D22" },
+  { statut: "_perdu",             label: "Perdus",           shortLabel: "Perdus",      bg: "#FFF5F5", fg: "#CA1E12", bar: "#F26D6D" },
 ];
 
 type TagVariant = "primary" | "warning" | "success" | "success-filled" | "error" | "neutral";
@@ -91,7 +95,7 @@ const TD_RIGHT: React.CSSProperties = { ...TD, textAlign: "right" };
 
 type KpiFilter = "actifs" | "urgents" | "gagnes" | null;
 
-export function AdminBoard({ pipelines, gestionnaires, events }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostGestionnaires }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
 
@@ -104,6 +108,12 @@ export function AdminBoard({ pipelines, gestionnaires, events }: AdminBoardProps
   const fp = selectedGestionnaires.length > 0
     ? pipelines.filter(p => selectedGestionnaires.includes(p.copro.gestionnaireEmail ?? ""))
     : pipelines;
+
+  // Dossiers perdus : hors dataset `pipelines` (actif-only), comptés à part pour
+  // la barre "Perdus". On respecte le filtre gestionnaire courant.
+  const lostCount = selectedGestionnaires.length > 0
+    ? lostGestionnaires.filter(e => selectedGestionnaires.includes(e ?? "")).length
+    : lostGestionnaires.length;
 
   function toggleKpi(k: KpiFilter) { setActiveKpi(prev => prev === k ? null : k); }
 
@@ -136,7 +146,9 @@ export function AdminBoard({ pipelines, gestionnaires, events }: AdminBoardProps
   /* ── Bar chart data ── */
   const barData = STAGE_COLS.map(col => ({
     ...col,
-    count: fp.filter(p => p.statut === col.statut).length,
+    count: col.statut === "_perdu"
+      ? lostCount
+      : fp.filter(p => p.statut === col.statut).length,
   }));
   const maxBar = Math.max(...barData.map(b => b.count), 1);
   const CHART_H = 140;
