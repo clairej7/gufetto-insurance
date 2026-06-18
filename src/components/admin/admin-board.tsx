@@ -52,6 +52,25 @@ const STAGE_COLS: { statut: string; label: string; shortLabel: string; bg: strin
   { statut: "_perdu",             label: "Perdus",           shortLabel: "Perdus",      bg: "#FFF5F5", fg: "#CA1E12", bar: "#F26D6D" },
 ];
 
+// Le funnel n'a que 7 étapes visibles, mais l'enum a des sous-états. On replie
+// chaque statut sur sa barre pour que TOUT dossier soit représenté (la somme des
+// barres + Perdus = total). resiliation_envoyee / sepa_complete = "clos par statut"
+// (cf. CLOSED_BY_STATUT) → barre Clôturé. rs_recu / validation_cs = sous-états rares
+// repliés sur l'étape précédente la plus proche.
+const STATUT_TO_BAR: Record<string, string> = {
+  identifie: "identifie",
+  rs_en_cours: "rs_en_cours",
+  rs_recu: "rs_en_cours",
+  devis_demandes: "devis_demandes",
+  devis_recus: "devis_recus",
+  envoye_cs: "envoye_cs",
+  validation_cs: "envoye_cs",
+  contrat_signe: "contrat_signe",
+  resiliation_envoyee: "termine",
+  sepa_complete: "termine",
+  termine: "termine",
+};
+
 type TagVariant = "primary" | "warning" | "success" | "success-filled" | "error" | "neutral";
 const TAG_BG: Record<TagVariant, string> = {
   primary: "#F5F5FF", warning: "#FFF7EB", success: "#EFFBF2",
@@ -148,7 +167,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostGestionnaires
     ...col,
     count: col.statut === "_perdu"
       ? lostCount
-      : fp.filter(p => p.statut === col.statut).length,
+      : fp.filter(p => STATUT_TO_BAR[p.statut] === col.statut).length,
   }));
   const maxBar = Math.max(...barData.map(b => b.count), 1);
   const CHART_H = 140;
@@ -168,11 +187,14 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostGestionnaires
           renderOption={(e) => gestionnaireLabel(e, gestioNomByEmail.get(e))}
           width={200}
         />
-        {selectedGestionnaires.length > 0 && (
-          <span style={{ fontSize: 12, color: "#656576" }}>
-            {fp.length} dossier{fp.length > 1 ? "s" : ""}
-          </span>
-        )}
+        {selectedGestionnaires.length > 0 && (() => {
+          const totalDossiers = fp.length + lostCount; // actifs + perdus, comme dans Pipeline
+          return (
+            <span style={{ fontSize: 12, color: "#656576" }}>
+              {totalDossiers} dossier{totalDossiers > 1 ? "s" : ""}
+            </span>
+          );
+        })()}
       </div>
 
       {/* ── KPIs ── */}
