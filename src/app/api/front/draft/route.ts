@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, STORAGE_BUCKET } from "@/lib/supabase";
+import { prisma } from "@/lib/prisma";
+import { resolveTeammateId, assignConversation, tagConversation } from "@/lib/front";
 
 const FRONT_API_URL = "https://api2.frontapp.com";
 const FRONT_TOKEN = process.env.FRONT_API_TOKEN;
@@ -16,6 +18,8 @@ export async function POST(req: NextRequest) {
   const devisFile = formData.get("devis") as File | null;
   const signedPdfPath = formData.get("signedPdfPath") as string | null;
   const refTag = formData.get("refTag") as string | null; // format: "{pipelineId}:{type}"
+  // pipelineId fourni en clair par les callers, ou dérivé du refTag (1re partie avant ":")
+  const pipelineId = (formData.get("pipelineId") as string | null) || (refTag ? refTag.split(":")[0] : null);
 
   if (!to || !subject || !body) {
     return NextResponse.json({ error: "to, subject et body sont requis" }, { status: 400 });
@@ -85,14 +89,31 @@ export async function POST(req: NextRequest) {
   // Tagger la conversation avec gufetto_insurance pour filtrer dans les Rules Front
   console.log("[front/draft] conversationId extrait:", conversationId);
   if (conversationId) {
-    const tagRes = await fetch(`${FRONT_API_URL}/conversations/${conversationId}/tags`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ tag_ids: ["tag_23jeh2"] }),
-    }).catch((e) => { console.error("[front/draft] tag fetch error:", e); return null; });
-    if (tagRes) {
-      const tagBody = await tagRes.text();
-      console.log("[front/draft] tag response:", tagRes.status, tagBody);
+    // 409 récurrent : la conv vient de naître et n'est pas encore rattachée à son
+    // inbox. tagConversation réessaie avec un backoff jusqu'à ce qu'elle le soit.
+    const tag = await tagConversation(conversationId, ["tag_23n286"]);
+    console.log("[front/draft] tag response:", tag);
+
+    // Assigner le ticket au gestionnaire de la copro (best-effort, ne bloque jamais l'envoi)
+    if (pipelineId) {
+      try {
+        const pipeline = await prisma.insurancePipeline.findUnique({
+          where: { id: pipelineId },
+          select: { copro: { select: { gestionnaireEmail: true } } },
+        });
+        const gestionnaireEmail = pipeline?.copro?.gestionnaireEmail;
+        if (gestionnaireEmail) {
+          const teammateId = await resolveTeammateId(gestionnaireEmail);
+          if (teammateId) {
+            const ok = await assignConversation(conversationId, teammateId);
+            console.log("[front/draft] assign:", { gestionnaireEmail, teammateId, ok });
+          } else {
+            console.warn("[front/draft] gestionnaire introuvable sur Front:", gestionnaireEmail);
+          }
+        }
+      } catch (e) {
+        console.error("[front/draft] assign error:", e);
+      }
     }
   }
 
