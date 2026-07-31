@@ -14,6 +14,12 @@ export const PIPELINE_STEPS: {
     description: "Copropriété identifiée, aucune démarche engagée",
   },
   {
+    statut: "odr_en_cours",
+    label: "Ordre de remplacement en cours",
+    shortLabel: "ODR en cours",
+    description: "Copro déjà assurée chez un partenaire (AXA, Sada...) : ordre de remplacement pour que Matera devienne courtier et touche la commission",
+  },
+  {
     statut: "rs_en_cours",
     label: "En attente du relevé de sinistralité",
     shortLabel: "RS en cours",
@@ -69,7 +75,11 @@ export function getStepIndex(statut: PipelineStatut): number {
 export function getNextStatut(current: PipelineStatut): PipelineStatut | null {
   const idx = getStepIndex(current);
   if (idx === -1 || idx >= PIPELINE_STEPS.length - 1) return null;
-  return PIPELINE_STEPS[idx + 1].statut;
+  const next = PIPELINE_STEPS[idx + 1].statut;
+  // ODR (ordre de remplacement) sort du cycle de vente classique : on n'y accède
+  // que via le toggle ODR, jamais via le bouton "Avancer". On la saute donc ici.
+  if (next === "odr_en_cours") return PIPELINE_STEPS[idx + 2]?.statut ?? null;
+  return next;
 }
 
 export function getStepInfo(statut: PipelineStatut) {
@@ -86,7 +96,7 @@ export function getDaysUntilEcheance(dateEcheance: Date | null): number | null {
 // ─── Classement d'un dossier en sections (mutuellement exclusives) ───────────
 // Un dossier tombe dans EXACTEMENT un bucket, déterminé par priorité.
 
-export type DossierBucket = "perdu" | "clos" | "urgent" | "autre";
+export type DossierBucket = "perdu" | "odr" | "clos" | "urgent" | "autre";
 
 const LOST_STATUTS: PipelineStatut[] = ["abandonne", "refuse", "non_assurable"];
 // "Clos par le statut de vente" : Contract Uploaded (resiliation_envoyee) et +.
@@ -119,6 +129,8 @@ export function categoriseDossier(input: {
 }): DossierBucket {
   // 1. Statut perdu prime sur tout (même si HubSpot dit client).
   if (LOST_STATUTS.includes(input.statut as PipelineStatut)) return "perdu";
+  // 1 bis. ODR (ordre de remplacement) : sortie de cycle, catégorie dédiée (fond jaune).
+  if (input.statut === "odr_en_cours") return "odr";
   // 2. Cliente MRI HubSpot (hors Wakam) → clos, aucune action.
   if (isCloturePourClient(input.clientMriStatut, input.assureurActuel)) return "clos";
   // 3. Sinon on suit le sales status (comportement historique).

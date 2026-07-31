@@ -75,6 +75,7 @@ function Tag({ children, variant = "neutral" }: { children: React.ReactNode; var
 
 const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
   identifie:      { label: "Non démarré",    variant: "neutral" },
+  odr_en_cours:   { label: "ODR en cours",   variant: "warning" },
   rs_en_cours:    { label: "RS en cours",    variant: "primary" },
   devis_demandes: { label: "Devis demandés", variant: "primary" },
   devis_recus:    { label: "Devis partagés", variant: "primary" },
@@ -146,10 +147,11 @@ function SortIndicator({ active, asc }: { active: boolean; asc: boolean }) {
     : <ChevronDown size={11} style={{ display: "inline", marginLeft: 2, verticalAlign: "middle" }} />;
 }
 
-function PipelineRow({ pipeline, taskTemplates, cloture = false }: {
+function PipelineRow({ pipeline, taskTemplates, cloture = false, odr = false }: {
   pipeline: PipelineWithCopro;
   taskTemplates: TaskTemplate[];
   cloture?: boolean;
+  odr?: boolean;
 }) {
   const days = getDaysUntilEcheance(pipeline.copro.dateEcheance);
   const borderColor = getUrgencyBorderColor(days);
@@ -158,13 +160,18 @@ function PipelineRow({ pipeline, taskTemplates, cloture = false }: {
   const actionVariant: TagVariant = ACTION_VARIANT[nextAction?.actionType ?? "other"] ?? "neutral";
   const isLost = ["abandonne", "refuse", "non_assurable"].includes(pipeline.statut);
 
+  // Couleurs de fond de ligne selon la section : ODR = jaune, clos/perdu = vert clair.
+  const rowBg = odr ? "#FFFBEB" : cloture ? "#F7FDF9" : undefined;
+  const rowBgHover = odr ? "#FDF3D0" : cloture ? "#EFFBF2" : "#FBFBFB";
+  const rowBgLeave = odr ? "#FFFBEB" : cloture ? "#F7FDF9" : "";
+
   function handleClick() { window.location.href = `/pipeline/${pipeline.id}`; }
 
   return (
     <tr
-      style={{ borderBottom: "1px solid #F3F3F5", cursor: "pointer", background: cloture ? "#F7FDF9" : undefined }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = cloture ? "#EFFBF2" : "#FBFBFB")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = cloture ? "#F7FDF9" : "")}
+      style={{ borderBottom: "1px solid #F3F3F5", cursor: "pointer", background: rowBg }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = rowBgHover)}
+      onMouseLeave={(e) => (e.currentTarget.style.background = rowBgLeave)}
       onClick={handleClick}
     >
       {/* Copropriété — left border couleur urgence */}
@@ -339,6 +346,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
 
   const urgents = sorted.filter(p => bucketOf(p) === "urgent");
   const autres  = sorted.filter(p => bucketOf(p) === "autre");
+  const odrs    = sorted.filter(p => bucketOf(p) === "odr");
   const clos    = sorted.filter(p => bucketOf(p) === "clos");
   const perdus  = sorted.filter(p => bucketOf(p) === "perdu");
 
@@ -514,6 +522,20 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                       ))}
                     </>
                   )}
+                  {odrs.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={5} style={{ padding: "10px 16px 8px", background: "#FFFBEB", borderTop: "2px solid #E8E8EC" }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "#955804" }}>
+                            Dossiers en cours d&apos;ODR — {odrs.length}
+                          </span>
+                        </td>
+                      </tr>
+                      {odrs.map((p) => (
+                        <PipelineRow key={p.id} pipeline={p} taskTemplates={taskTemplates} odr />
+                      ))}
+                    </>
+                  )}
                   {clos.length > 0 && (
                     <>
                       <tr>
@@ -611,11 +633,50 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
 
             {/* Séparateur + colonnes Clos et Perdus */}
             {(() => {
+              const odrKanban = filtered.filter(p => bucketOf(p) === "odr");
               const closKanban = filtered.filter(p => bucketOf(p) === "clos");
               const perdusKanban = filtered.filter(p => bucketOf(p) === "perdu");
               return (
                 <>
                   <div style={{ width: 1, background: "#E8E8EC", flexShrink: 0, margin: "0 4px" }} />
+                  <div style={{ minWidth: 200, flexShrink: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#955804" }}>
+                        ODR
+                      </span>
+                      {odrKanban.length > 0 && (
+                        <span style={{ fontSize: 11, fontWeight: 500, padding: "1px 6px", background: "#FFF7EB", borderRadius: 10, color: "#955804", fontVariantNumeric: "tabular-nums" }}>
+                          {odrKanban.length}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {odrKanban.map((p) => (
+                        <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
+                          <div style={{
+                            background: "#FFFBEB", borderRadius: 6, padding: "10px 12px",
+                            border: "1px solid #F5D98A", borderLeft: "3px solid #F5A623",
+                            cursor: "pointer", transition: "box-shadow 120ms",
+                          }}
+                            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
+                            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
+                          >
+                            <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {p.copro.nom}
+                            </div>
+                            <div style={{ marginTop: 4 }}>
+                              <Tag variant="warning">ODR en cours</Tag>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                      {odrKanban.length === 0 && (
+                        <div style={{ borderRadius: 6, padding: 12, textAlign: "center", fontSize: 12, border: "1px dashed #F5D98A", background: "#FFFBEB", color: "#A2A1AF" }}>
+                          Vide
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   <div style={{ minWidth: 200, flexShrink: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#13762C" }}>

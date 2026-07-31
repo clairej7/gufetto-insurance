@@ -191,7 +191,11 @@ export async function goBackStatut(pipelineId: string, note?: string) {
   } else {
     const currentIdx = PIPELINE_STEPS.findIndex((s) => s.statut === pipeline.statut);
     if (currentIdx <= 0) return { success: false, error: "Déjà à la première étape" };
-    prevStatut = PIPELINE_STEPS[currentIdx - 1].statut;
+    let prevIdx = currentIdx - 1;
+    // ODR sort du cycle classique : on ne revient jamais dessus via "Étape précédente".
+    if (PIPELINE_STEPS[prevIdx].statut === "odr_en_cours") prevIdx -= 1;
+    if (prevIdx < 0) return { success: false, error: "Déjà à la première étape" };
+    prevStatut = PIPELINE_STEPS[prevIdx].statut;
   }
 
   await prisma.$transaction([

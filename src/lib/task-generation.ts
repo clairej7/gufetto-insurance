@@ -6,7 +6,8 @@ import { TERMINAL_STATUTS, isCloturePourClient } from "@/lib/pipeline";
 // "Lancer process assurance" pour un deal encore non démarré (identifie).
 export const ECHEANCE_THRESHOLD_MONTHS = 6;
 
-type ActiveStatut = Exclude<PipelineStatut, "termine" | "abandonne" | "refuse" | "non_assurable">;
+// odr_en_cours est hors cycle (dossier clos, rien à faire) → aucune tâche générée.
+type ActiveStatut = Exclude<PipelineStatut, "termine" | "abandonne" | "refuse" | "non_assurable" | "odr_en_cours">;
 
 type StageTaskSpec = { suffix: string; dueDays: number };
 

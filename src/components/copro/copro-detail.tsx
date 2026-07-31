@@ -819,6 +819,57 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
               )}
             </Card>
           )}
+
+          {/* ODR (dispo sur toutes les étapes) */}
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C" }}>
+                <Building2 className="h-4 w-4" />
+                ODR
+              </h3>
+              <div className="flex gap-2">
+                <button
+                  disabled={isPending}
+                  onClick={() => {
+                    if (pipeline.statut === "odr_en_cours") return;
+                    startTransition(async () => {
+                      try {
+                        await goToStatut(pipeline.id, "odr_en_cours");
+                        toast.success("Passée en ODR en cours");
+                      } catch {
+                        toast.error("Erreur");
+                      }
+                    });
+                  }}
+                  className="text-xs font-medium px-3 py-1 rounded-full border transition-colors disabled:opacity-50"
+                  style={pipeline.statut === "odr_en_cours"
+                    ? { backgroundColor: "#34C759", borderColor: "#34C759", color: "#FFFFFF" }
+                    : { backgroundColor: "#FFFFFF", borderColor: "#E4E4EB", color: "#26262C" }}
+                >
+                  Oui
+                </button>
+                <button
+                  disabled={isPending}
+                  onClick={() => {
+                    if (pipeline.statut !== "odr_en_cours") return;
+                    startTransition(async () => {
+                      try {
+                        await goToStatut(pipeline.id, "identifie");
+                      } catch {
+                        toast.error("Erreur");
+                      }
+                    });
+                  }}
+                  className="text-xs font-medium px-3 py-1 rounded-full border transition-colors disabled:opacity-50"
+                  style={pipeline.statut !== "odr_en_cours"
+                    ? { backgroundColor: "#FFFFFF", borderColor: "#E4E4EB", color: "#26262C" }
+                    : { backgroundColor: "#FFFFFF", borderColor: "#E4E4EB", color: "#26262C" }}
+                >
+                  Non
+                </button>
+              </div>
+            </div>
+          </Card>
         </div>
 
         {/* Col 2: action centrale */}

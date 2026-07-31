@@ -18,6 +18,8 @@ const TASK_TEMPLATES: {
   { statut: "identifie", label: "Identifier l'adresse mail du courtier / assureur actuel", shortLabel: "Trouver contact courtier", actionType: "other", required: true, order: 2 },
   { statut: "identifie", label: "Vérifier que la copro est bien en offre pro (syndic professionnel)", shortLabel: "Vérifier offre pro", actionType: "other", required: true, order: 3 },
 
+  // (ODR = ordre de remplacement : hors cycle, dossier clos, aucune tâche)
+
   // 2. RS en cours
   { statut: "rs_en_cours", label: "Récupérer le PV d'AG qui nomme Matera syndic de la copropriété", shortLabel: "Récupérer PV syndic", actionType: "document", required: true, order: 1 },
   { statut: "rs_en_cours", label: "Récupérer le contrat d'assurance actuel", shortLabel: "Récupérer contrat actuel", actionType: "document", required: true, order: 2 },

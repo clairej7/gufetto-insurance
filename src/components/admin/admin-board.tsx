@@ -43,6 +43,7 @@ interface AdminBoardProps {
 
 const STAGE_COLS: { statut: string; label: string; shortLabel: string; bg: string; fg: string; bar: string }[] = [
   { statut: "identifie",          label: "Identifié",        shortLabel: "Identifié",   bg: "#F7F7F8", fg: "#656576", bar: "#D4D4DC" },
+  { statut: "odr_en_cours",       label: "ODR en cours",     shortLabel: "ODR",         bg: "#FFF7EB", fg: "#955804", bar: "#F5C55A" },
   { statut: "rs_en_cours",        label: "RS en cours",      shortLabel: "RS",          bg: "#F5F5FF", fg: "#4E49FC", bar: "#B8B5FD" },
   { statut: "devis_demandes",     label: "Devis demandés",   shortLabel: "Devis dem.",  bg: "#F5F5FF", fg: "#4E49FC", bar: "#9B97FC" },
   { statut: "devis_recus",        label: "Devis reçus",      shortLabel: "Devis reçus", bg: "#EBEBFF", fg: "#3C38C7", bar: "#7C79F8" },
@@ -59,6 +60,7 @@ const STAGE_COLS: { statut: string; label: string; shortLabel: string; bg: strin
 // repliés sur l'étape précédente la plus proche.
 const STATUT_TO_BAR: Record<string, string> = {
   identifie: "identifie",
+  odr_en_cours: "odr_en_cours",
   rs_en_cours: "rs_en_cours",
   rs_recu: "rs_en_cours",
   devis_demandes: "devis_demandes",
@@ -82,6 +84,7 @@ const TAG_FG: Record<TagVariant, string> = {
 };
 const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
   identifie:      { label: "Non démarré",    variant: "neutral" },
+  odr_en_cours:   { label: "ODR en cours",   variant: "warning" },
   rs_en_cours:    { label: "RS en cours",    variant: "primary" },
   devis_demandes: { label: "Devis demandés", variant: "primary" },
   devis_recus:    { label: "Devis partagés", variant: "primary" },

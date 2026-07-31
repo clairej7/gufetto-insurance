@@ -56,6 +56,7 @@ function formatAbsolute(date: Date): string {
 
 const STATUT_LABEL: Record<string, string> = {
   identifie: "Identifié",
+  odr_en_cours: "ODR en cours",
   rs_en_cours: "RS en cours",
   devis_demandes: "Devis demandés",
   devis_recus: "Devis reçus",

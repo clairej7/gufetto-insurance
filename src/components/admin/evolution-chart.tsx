@@ -20,6 +20,7 @@ type RawEvent = {
 
 // Stages à suivre dans le graphe (les terminaux regroupés en "Perdu")
 const TRACKED: { statut: string; label: string; color: string }[] = [
+  { statut: "odr_en_cours",   label: "ODR",           color: "#F5C55A" },
   { statut: "rs_en_cours",    label: "RS",            color: "#B8B5FD" },
   { statut: "devis_demandes", label: "Devis dem.",    color: "#9B97FC" },
   { statut: "devis_recus",    label: "Devis reçus",   color: "#7C79F8" },
