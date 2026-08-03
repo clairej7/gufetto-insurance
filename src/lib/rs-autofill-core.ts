@@ -54,6 +54,24 @@ export async function applyAutofill(
     await prisma.copro.update({ where: { id: copro.id }, data });
   }
 
+  // 1 bis) Cas particulier "on était l'assureur avant" (probable Wakam à migrer) :
+  //   assureur EXISTANT = variante "Matera Assurance" (contient matera ET
+  //   assurance ; le "Matera" seul = syndic, à ne pas confondre). On pose une
+  //   note de vérification manuelle, une seule fois. NB : ce n'est PAS encore un
+  //   garde-fou d'aiguillage — le bon signal "déjà assuré chez Matera" reste à
+  //   fiabiliser ; ici on se contente de flaguer pour l'humain.
+  const aa = (copro.assureurActuel ?? "").toLowerCase();
+  if (aa.includes("matera") && aa.includes("assurance")) {
+    const dejaNote = await prisma.pipelineEvent.count({
+      where: { pipelineId, type: "note_ajoutee", description: { contains: "Probable Wakam" } },
+    });
+    if (!dejaNote) {
+      await prisma.pipelineEvent.create({
+        data: { pipelineId, type: "note_ajoutee", description: "Probable Wakam, vérifier", createdBy: actorEmail },
+      });
+    }
+  }
+
   // 2) Aiguillage — depuis "identifie" seulement. On COMBINE l'extraction Front
   //    avec les champs DÉJÀ présents sur la copro (synchronisés depuis Omni) :
   //    si Front ne trouve rien mais qu'Omni a déjà assureur/mail/n°, on peut
