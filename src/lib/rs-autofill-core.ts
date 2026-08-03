@@ -39,12 +39,15 @@ export async function applyAutofill(
   const copro = pipeline.copro;
   const info = await extractInsuranceInfoFromFront(copro.buildingId);
 
-  // 1) Écrire les champs trouvés (on ne touche qu'à ce qu'on a). Cliquet posé
-  //    pour protéger ces valeurs des syncs Omni ultérieures.
+  // 1) Écrire les champs trouvés — UNIQUEMENT SI VIDES (on ne remplace jamais une
+  //    donnée existante ; bug vu en réel : Sada écrasé par Assurimo, AXA par GSA).
+  //    L'assureur ne reçoit qu'un PORTEUR (info.assureur, carrier) ; le courtier va
+  //    dans son propre champ. Cliquet posé pour protéger des syncs Omni ultérieures.
   const data: Record<string, unknown> = {};
-  if (info.assureur) data.assureurActuel = info.assureur;
-  if (info.numeroContrat) data.numeroContrat = info.numeroContrat;
-  if (info.mailCourtier) data.contactCourtierEmail = info.mailCourtier;
+  if (info.assureur && !copro.assureurActuel) data.assureurActuel = info.assureur;
+  if (info.courtier && !copro.courtierActuel) data.courtierActuel = info.courtier;
+  if (info.numeroContrat && !copro.numeroContrat) data.numeroContrat = info.numeroContrat;
+  if (info.mailCourtier && !copro.contactCourtierEmail) data.contactCourtierEmail = info.mailCourtier;
   const wroteFields = Object.keys(data).length > 0;
   if (wroteFields) {
     data.contratVerrouilleLe = new Date();
