@@ -24,6 +24,7 @@ async function main() {
   })).filter((p) => /^\d+$/.test(p.copro.buildingId)).slice(0, N);
 
   const t = { total: 0, front: 0, merged: 0, gainOmni: 0, odr: 0, rs: 0, none: 0, err: 0 };
+  const odrList: string[] = [];
   for (const p of cands) {
     try {
       const c = p.copro;
@@ -36,7 +37,11 @@ async function main() {
       const effNumero = info.numeroContrat ?? c.numeroContrat ?? null;
       const reliable = !!effAssureur && (!!effMail || !!effNumero);
       const partner = info.isPartner || !!matchPartner(effAssureur);
-      if (reliable) { t.merged++; if (!info.reliable) t.gainOmni++; partner ? t.odr++ : t.rs++; } else t.none++;
+      if (reliable) {
+        t.merged++; if (!info.reliable) t.gainOmni++;
+        if (partner) { t.odr++; odrList.push(`ODR ${c.buildingId} | ${effAssureur} | ${info.isPartner ? "front" : "omni"}`); }
+        else t.rs++;
+      } else t.none++;
     } catch { t.err++; }
   }
   const pct = (n: number) => t.total ? Math.round((100 * n) / t.total) : 0;
@@ -44,5 +49,7 @@ async function main() {
   console.log(`  Front seul       : ${t.front}/${t.total} = ${pct(t.front)}%`);
   console.log(`  Front + Omni     : ${t.merged}/${t.total} = ${pct(t.merged)}%   (+${t.gainOmni} grâce à Omni)`);
   console.log(`  Aiguillage (Front+Omni) : ODR ${t.odr} · RS ${t.rs} · Aucune action ${t.none}`);
+  console.log(`\n  Dossiers ODR (à vérifier) :`);
+  for (const l of odrList) console.log(`    ${l}`);
 }
 main().finally(() => prisma.$disconnect());
