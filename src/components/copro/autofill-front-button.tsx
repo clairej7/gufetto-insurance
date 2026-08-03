@@ -17,18 +17,18 @@ export function AutofillFrontButton({ pipelineId }: { pipelineId: string }) {
     startTransition(async () => {
       try {
         const r = await autofillDossierFromFront(pipelineId);
-        const info = r.info;
-        if (info?.reliable) {
+        if (r.reliable) {
           const dest = r.moved
             ? ` → ${r.targetStatut === "odr_en_cours" ? "ODR" : "RS en cours"}`
             : "";
-          const num = info.numeroContrat ? ` · n° ${info.numeroContrat}` : "";
-          toast.success(`Front : ${info.assureur ?? "assureur ?"}${num}${dest}`, {
-            description: info.mailCourtier ?? undefined,
+          const num = r.numeroContrat ? ` · n° ${r.numeroContrat}` : "";
+          const src = r.usedOmni ? " (données existantes)" : "";
+          toast.success(`${r.assureur ?? "assureur ?"}${num}${dest}${src}`, {
+            description: r.mailCourtier ?? undefined,
           });
         } else {
-          toast.message("Front : infos insuffisantes — reste en « Aucune action »", {
-            description: info?.reasons.join(" · "),
+          toast.message("Infos insuffisantes — reste en « Aucune action »", {
+            description: r.info?.reasons.join(" · "),
           });
         }
       } catch (e) {

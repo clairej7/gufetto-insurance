@@ -6,7 +6,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import type { PipelineStatut } from "@/generated/prisma/client";
-import { extractInsuranceInfoFromFront, type InsuranceInfo } from "@/lib/front-insurance";
+import { extractInsuranceInfoFromFront, matchPartner, type InsuranceInfo } from "@/lib/front-insurance";
 
 export type AutofillResult = {
   pipelineId: string;
@@ -14,6 +14,12 @@ export type AutofillResult = {
   info: InsuranceInfo | null;
   targetStatut: "identifie" | "odr_en_cours" | "rs_en_cours";
   moved: boolean;
+  // Décision EFFECTIVE (extraction Front + fallback champs Omni existants).
+  reliable: boolean;
+  assureur: string | null;
+  numeroContrat: string | null;
+  mailCourtier: string | null;
+  usedOmni: boolean;
   skippedReason?: string;
 };
 
@@ -27,7 +33,7 @@ export async function applyAutofill(
     include: { copro: true },
   });
   if (!pipeline) {
-    return { pipelineId, buildingId: null, info: null, targetStatut: "identifie", moved: false, skippedReason: "pipeline introuvable" };
+    return { pipelineId, buildingId: null, info: null, targetStatut: "identifie", moved: false, reliable: false, assureur: null, numeroContrat: null, mailCourtier: null, usedOmni: false, skippedReason: "pipeline introuvable" };
   }
 
   const copro = pipeline.copro;
@@ -45,27 +51,42 @@ export async function applyAutofill(
     await prisma.copro.update({ where: { id: copro.id }, data });
   }
 
-  // 2) Aiguillage — uniquement depuis "identifie" (on ne perturbe pas un dossier
-  //    déjà engagé). Partenaire -> ODR ; fiable -> RS ; sinon on reste.
+  // 2) Aiguillage — depuis "identifie" seulement. On COMBINE l'extraction Front
+  //    avec les champs DÉJÀ présents sur la copro (synchronisés depuis Omni) :
+  //    si Front ne trouve rien mais qu'Omni a déjà assureur/mail/n°, on peut
+  //    quand même aiguiller → couverture accrue au-delà du Front seul.
+  const usableMail = (m: string | null | undefined): string | null =>
+    m && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m) &&
+    !/^(?:no-?reply|noreply|donotreply)@|(?:^|[._-])(?:infocnil|cnil|reclamations?)@/i.test(m)
+      ? m : null;
+
+  const effAssureur = info.assureur ?? copro.assureurActuel ?? null;
+  const effMail = usableMail(info.mailCourtier) ?? usableMail(copro.contactCourtierEmail);
+  const effNumero = info.numeroContrat ?? copro.numeroContrat ?? null;
+  const effReliable = !!effAssureur && (!!effMail || !!effNumero);
+  const effPartner = info.isPartner || !!matchPartner(effAssureur);
+  const usedOmni = effReliable && !info.reliable; // aiguillé grâce aux champs Omni existants
+
   let targetStatut: AutofillResult["targetStatut"] = "identifie";
-  if (info.reliable) targetStatut = info.isPartner ? "odr_en_cours" : "rs_en_cours";
+  if (effReliable) targetStatut = effPartner ? "odr_en_cours" : "rs_en_cours";
 
   const eventMeta = {
-    source: "front_autofill",
-    assureur: info.assureur,
-    numeroContrat: info.numeroContrat,
-    mailCourtier: info.mailCourtier,
-    partnerKey: info.partnerKey,
-    reliable: info.reliable,
+    source: usedOmni ? "front+omni_autofill" : "front_autofill",
+    assureur: effAssureur,
+    numeroContrat: effNumero,
+    mailCourtier: effMail,
+    partnerKey: info.partnerKey ?? matchPartner(effAssureur),
+    reliable: effReliable,
     confidence: info.confidence,
   };
 
   let moved = false;
   if (pipeline.statut === "identifie" && targetStatut !== "identifie") {
+    const src = usedOmni ? " [via données existantes]" : "";
     const desc =
       targetStatut === "odr_en_cours"
-        ? `Aiguillé automatiquement → ODR (assureur partenaire : ${info.assureur})`
-        : `Aiguillé automatiquement → RS en cours (${info.reasons.join(" · ")})`;
+        ? `Aiguillé automatiquement → ODR (assureur partenaire : ${effAssureur})${src}`
+        : `Aiguillé automatiquement → RS en cours (assureur : ${effAssureur}${effNumero ? `, n° ${effNumero}` : effMail ? ", mail ok" : ""})${src}`;
     await prisma.$transaction([
       prisma.insurancePipeline.update({
         where: { id: pipelineId },
@@ -99,5 +120,8 @@ export async function applyAutofill(
 
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${pipelineId}`);
-  return { pipelineId, buildingId: copro.buildingId, info, targetStatut, moved };
+  return {
+    pipelineId, buildingId: copro.buildingId, info, targetStatut, moved,
+    reliable: effReliable, assureur: effAssureur, numeroContrat: effNumero, mailCourtier: effMail, usedOmni,
+  };
 }
