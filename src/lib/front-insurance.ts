@@ -130,16 +130,29 @@ const JUNK_EMAIL = [
 // Appels Front bas niveau
 // ---------------------------------------------------------------------------
 
-async function frontGet<T>(path: string): Promise<T | null> {
+async function frontGet<T>(path: string, attempts = 3): Promise<T | null> {
   if (!FRONT_TOKEN) throw new Error("FRONT_API_TOKEN manquant");
-  const res = await fetch(`${FRONT_API_URL}${path}`, {
-    headers: { Authorization: `Bearer ${FRONT_TOKEN}` },
-  });
-  if (!res.ok) {
-    console.error(`[front-insurance] GET ${path} -> ${res.status}: ${await res.text()}`);
-    return null;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const res = await fetch(`${FRONT_API_URL}${path}`, {
+        headers: { Authorization: `Bearer ${FRONT_TOKEN}` },
+      });
+      if (res.ok) return (await res.json()) as T;
+      // 429 / 5xx = transitoire -> on retente ; autres codes -> on abandonne.
+      if (res.status !== 429 && res.status < 500) {
+        console.error(`[front-insurance] GET ${path} -> ${res.status}: ${await res.text()}`);
+        return null;
+      }
+    } catch (e) {
+      // "fetch failed" réseau -> on retente jusqu'à épuisement.
+      if (i === attempts) {
+        console.error(`[front-insurance] GET ${path} fetch failed:`, e instanceof Error ? e.message : e);
+        return null;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 400 * i));
   }
-  return (await res.json()) as T;
+  return null;
 }
 
 // Toutes les conversations d'une copro via le champ personnalisé building_id.
@@ -205,15 +218,16 @@ export function matchPartner(assureur: string | null): InsuranceInfo["partnerKey
 // N° de contrat depuis un objet de mail. On privilégie les préfixes explicites
 // (police / contrat) ; on ignore "quittance" seul (≠ n° de contrat).
 function extractNumeroFromSubject(subject: string): string | null {
-  const patterns = [
-    /(?:police|contrat|contract)\s*(?:n[°o]?|num[ée]ro|:)?\s*([A-Za-z0-9][A-Za-z0-9\/\-]{4,})/i,
-    /\bn[°o]\s*([A-Za-z0-9][A-Za-z0-9\/\-]{4,})/i,
-  ];
-  for (const re of patterns) {
-    const m = subject.match(re);
-    if (m && m[1]) return m[1].trim();
-  }
-  return null;
+  // On EXIGE un préfixe explicite police/contrat (le motif "n°" seul captait des
+  // références de sinistre — bug vu en réel sur SDC 4 Albert Mercier).
+  const m = subject.match(
+    /(?:police|contrat|contract|mri)\s*(?:n[°o]?|num[ée]ro|:)?\s*([A-Za-z0-9][A-Za-z0-9\/\-]{4,})/i,
+  );
+  if (!m || !m[1]) return null;
+  const cand = m[1].trim();
+  // Doit ressembler à un identifiant : au moins un chiffre. Évite de capter un
+  // mot ("contrat annuel" -> "annuel") vu en réel sur SDC 13 Naples.
+  return /\d/.test(cand) ? cand : null;
 }
 
 // Secours PDF : lit une pièce jointe (contrat/avis) via Claude pour en tirer le
@@ -286,13 +300,11 @@ export async function extractInsuranceInfoFromFront(buildingId: string): Promise
   let pdfFallback: FrontAttachment | null = null;
 
   for (const { c, subj } of ranked) {
-    // N° depuis l'objet (source la plus sûre).
-    if (!numero) {
-      const n = extractNumeroFromSubject(subj);
-      if (n) { numero = n; numeroSource = "objet"; }
-    }
-    // Assureur depuis l'objet.
+    // Assureur : indice depuis l'objet du fil (confirmé ensuite par l'expéditeur).
     if (!assureur) assureur = looksLikeInsurer(subj);
+    // NB : le n° n'est PLUS extrait de l'objet de la conversation en aveugle
+    // (ça captait des "proposition de contrat PC-..." internes Matera). On ne le
+    // prend que sur l'objet d'un mail ENTRANT d'assureur (boucle ci-dessous).
 
     const messages = await getMessages(c.id);
     for (const m of messages) {
