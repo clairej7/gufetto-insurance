@@ -4,6 +4,7 @@ import { useState, useTransition, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AutofillFrontButton } from "@/components/copro/autofill-front-button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -643,6 +644,9 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
             )}
           </div>
           <div className="flex items-center gap-2">
+            {pipeline.statut === "identifie" && (
+              <AutofillFrontButton pipelineId={pipeline.id} />
+            )}
             {pipeline.statut === "refuse" ? (
               <Badge variant="destructive">Deal perdu — Refus client</Badge>
             ) : pipeline.statut === "non_assurable" ? (

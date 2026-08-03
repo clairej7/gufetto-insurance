@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { SyncBoard } from "@/components/admin/sync-board";
+import { AutofillBatchButton } from "@/components/admin/autofill-batch-button";
 
 export default async function SynchroPage() {
   const session = await auth();
@@ -21,6 +22,11 @@ export default async function SynchroPage() {
     take: 300,
   });
 
+  // Automatisation 1 : nb de dossiers "Aucune action" (candidats au pré-remplissage).
+  const nbIdentifie = await prisma.insurancePipeline.count({
+    where: { statut: "identifie", copro: { archivedAt: null } },
+  });
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar user={session.user} />
@@ -32,6 +38,17 @@ export default async function SynchroPage() {
           <p className="text-sm mt-1" style={{ color: "#656576" }}>
             État des synchronisations nocturnes (30 derniers jours)
           </p>
+        </div>
+        <div className="mb-8 rounded-xl border p-5" style={{ borderColor: "#E8E8EC", backgroundColor: "#ffffff" }}>
+          <h2 className="text-base font-semibold" style={{ color: "#26262C" }}>
+            Automatisation 1 — pré-remplissage depuis Front
+          </h2>
+          <p className="text-sm mt-1 mb-4" style={{ color: "#656576" }}>
+            {nbIdentifie} dossier{nbIdentifie > 1 ? "s" : ""} en « Aucune action ». Récupère les 3 infos
+            (assureur, n° de contrat, mail courtier) depuis Front et aiguille : partenaire → ODR, fiable → RS
+            en cours, sinon reste en « Aucune action ».
+          </p>
+          <AutofillBatchButton limit={25} />
         </div>
         <SyncBoard runs={runs} />
       </main>
