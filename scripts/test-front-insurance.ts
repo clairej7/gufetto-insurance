@@ -29,7 +29,8 @@ async function main() {
       if (info.numeroContrat) t.numero++;
       if (info.reliable) { t.reliable++; info.isPartner ? t.odr++ : t.rs++; } else t.none++;
       console.log(`\n=== building ${id} ===`);
-      console.log(`  assureur   : ${info.assureur ?? "—"}`);
+      console.log(`  assureur   : ${info.assureur ?? "—"}  (porteur)`);
+      console.log(`  courtier   : ${info.courtier ?? "—"}`);
       console.log(`  n° contrat : ${info.numeroContrat ?? "—"} (${info.numeroSource ?? "—"})`);
       console.log(`  mail       : ${info.mailCourtier ?? "—"}`);
       console.log(`  fiable     : ${info.reliable} (${info.confidence})  ${dest}`);

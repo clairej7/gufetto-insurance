@@ -48,7 +48,8 @@ type FrontMessage = {
 };
 
 export type InsuranceInfo = {
-  assureur: string | null;
+  assureur: string | null; // PORTEUR (compagnie) uniquement — jamais un courtier
+  courtier: string | null; // COURTIER (intermédiaire)
   numeroContrat: string | null;
   mailCourtier: string | null;
   // Aiguillage
@@ -77,31 +78,36 @@ const PARTNERS: { key: InsuranceInfo["partnerKey"]; patterns: RegExp }[] = [
 
 // Indices "assureur/courtier" : domaines d'expéditeur connus + mots-clés d'objet.
 // Sert (a) à repérer un fil d'assurance, (b) à déduire l'assureur.
-const INSURER_HINTS: { label: string; test: RegExp }[] = [
-  { label: "AXA", test: /axa\.fr|\baxa\b/i },
-  { label: "Generali", test: /generali/i },
-  { label: "SADA", test: /\bsada\b|d[ée]fense\s+et\s+d.?assurances?/i },
-  { label: "Mila", test: /\bmila\b/i },
-  { label: "GAN", test: /\bgan\b|gan\.fr/i },
-  { label: "Groupama", test: /groupama/i },
-  { label: "MMA", test: /\bmma\b/i },
-  { label: "Allianz", test: /allianz/i },
-  { label: "Swiss Life", test: /swiss\s?life|swisslife/i },
-  { label: "Matmut", test: /matmut/i },
-  { label: "Verspieren", test: /verspieren/i },
-  { label: "Odealim", test: /odealim|assurgerance/i },
-  { label: "Assurimo", test: /assurimo/i },
-  { label: "GSA", test: /groupegsa|\bgsa\b/i },
-  { label: "Cenac", test: /cenac/i },
-  { label: "Bessé", test: /besse\.fr|\bbessé\b/i },
-  { label: "P. Plasse", test: /pplasse/i },
-  { label: "Lamy Assurances", test: /lamy-assurances/i },
-  { label: "Bélier Assurances", test: /belier-assurances/i },
-  { label: "Saint Pierre Assurances", test: /stpierreassurances/i },
-  { label: "Verlingue", test: /verlingue/i },
-  { label: "CCGA", test: /ccga-assurances/i },
-  { label: "Filhet-Allard", test: /filhetallard/i },
-  { label: "Entoria", test: /entoria/i },
+// `kind` distingue le PORTEUR (compagnie d'assurance = carrier) du COURTIER
+// (intermédiaire). Crucial : on ne doit JAMAIS mettre un courtier dans le champ
+// "Assureur" (bug vu en réel : Sada écrasé par Assurimo, AXA écrasé par GSA).
+const INSURER_HINTS: { label: string; kind: "carrier" | "courtier"; test: RegExp }[] = [
+  // Compagnies (porteurs)
+  { label: "AXA", kind: "carrier", test: /axa\.fr|\baxa\b/i },
+  { label: "Generali", kind: "carrier", test: /generali/i },
+  { label: "SADA", kind: "carrier", test: /\bsada\b|d[ée]fense\s+et\s+d.?assurances?/i },
+  { label: "Mila", kind: "carrier", test: /\bmila\b/i },
+  { label: "GAN", kind: "carrier", test: /\bgan\b|gan\.fr/i },
+  { label: "Groupama", kind: "carrier", test: /groupama/i },
+  { label: "MMA", kind: "carrier", test: /\bmma\b/i },
+  { label: "Allianz", kind: "carrier", test: /allianz/i },
+  { label: "Swiss Life", kind: "carrier", test: /swiss\s?life|swisslife/i },
+  { label: "Matmut", kind: "carrier", test: /matmut/i },
+  // Courtiers (intermédiaires)
+  { label: "Verspieren", kind: "courtier", test: /verspieren/i },
+  { label: "Odealim", kind: "courtier", test: /odealim|assurgerance/i },
+  { label: "Assurimo", kind: "courtier", test: /assurimo/i },
+  { label: "GSA", kind: "courtier", test: /groupegsa|\bgsa\b/i },
+  { label: "Cenac", kind: "courtier", test: /cenac/i },
+  { label: "Bessé", kind: "courtier", test: /besse\.fr|\bbessé\b/i },
+  { label: "P. Plasse", kind: "courtier", test: /pplasse/i },
+  { label: "Lamy Assurances", kind: "courtier", test: /lamy-assurances/i },
+  { label: "Bélier Assurances", kind: "courtier", test: /belier-assurances/i },
+  { label: "Saint Pierre Assurances", kind: "courtier", test: /stpierreassurances/i },
+  { label: "Verlingue", kind: "courtier", test: /verlingue/i },
+  { label: "CCGA", kind: "courtier", test: /ccga-assurances/i },
+  { label: "Filhet-Allard", kind: "courtier", test: /filhetallard/i },
+  { label: "Entoria", kind: "courtier", test: /entoria/i },
 ];
 
 // Mots-clés d'objet indiquant un fil d'assurance MRI exploitable.
@@ -205,8 +211,8 @@ function isUsableEmail(email: string | null): boolean {
   return !JUNK_EMAIL.some((re) => re.test(email));
 }
 
-function looksLikeInsurer(text: string): string | null {
-  for (const h of INSURER_HINTS) if (h.test.test(text)) return h.label;
+function looksLikeInsurer(text: string): { label: string; kind: "carrier" | "courtier" } | null {
+  for (const h of INSURER_HINTS) if (h.test.test(text)) return { label: h.label, kind: h.kind };
   return null;
 }
 
@@ -271,7 +277,7 @@ numeroContrat = le numéro de police/contrat exact. assureur = la compagnie d'as
 
 export async function extractInsuranceInfoFromFront(buildingId: string): Promise<InsuranceInfo> {
   const empty: InsuranceInfo = {
-    assureur: null, numeroContrat: null, mailCourtier: null,
+    assureur: null, courtier: null, numeroContrat: null, mailCourtier: null,
     isPartner: false, partnerKey: null,
     reliable: false, confidence: "basse", reasons: [],
     numeroSource: null, sampledConversations: 0,
@@ -301,14 +307,20 @@ export async function extractInsuranceInfoFromFront(buildingId: string): Promise
   let numero: string | null = null;
   let numeroSource: InsuranceInfo["numeroSource"] = null;
   let pdfFallback: FrontAttachment | null = null;
+  let courtier: string | null = null; // courtier (distinct du porteur)
   let insurerText = ""; // objets + corps des mails d'assureur (pour repérer le porteur → ODR)
 
+  // Range un indice détecté dans le bon champ (porteur vs courtier), sans écraser.
+  const applyHint = (h: { label: string; kind: "carrier" | "courtier" } | null) => {
+    if (!h) return;
+    if (h.kind === "carrier") { if (!assureur) assureur = h.label; }
+    else if (!courtier) courtier = h.label;
+  };
+
   for (const { c, subj } of ranked) {
-    // Assureur : indice depuis l'objet du fil (confirmé ensuite par l'expéditeur).
-    if (!assureur) assureur = looksLikeInsurer(subj);
-    // NB : le n° n'est PLUS extrait de l'objet de la conversation en aveugle
-    // (ça captait des "proposition de contrat PC-..." internes Matera). On ne le
-    // prend que sur un mail ENTRANT d'assureur (objet puis corps, boucle ci-dessous).
+    applyHint(looksLikeInsurer(subj)); // indice porteur/courtier depuis l'objet du fil
+    // NB : le n° n'est extrait que d'un mail ENTRANT d'assureur (objet puis corps),
+    // jamais de l'objet de la conversation en aveugle (évite les "proposition PC-...").
 
     const messages = await getMessages(c.id);
     for (const m of messages) {
@@ -316,12 +328,12 @@ export async function extractInsuranceInfoFromFront(buildingId: string): Promise
       const from = senderHandle(m);
       const body = m.text || m.body || m.blurb || "";
       const hay = `${m.subject ?? ""}\n${body}`;
-      // Assureur détecté via l'expéditeur OU le contenu (objet + corps).
-      const insurer = (from ? looksLikeInsurer(from) : null) || looksLikeInsurer(hay);
-      if (!insurer) continue;
+      // Indice porteur/courtier via l'expéditeur OU le contenu (objet + corps).
+      const hint = (from ? looksLikeInsurer(from) : null) || looksLikeInsurer(hay);
+      if (!hint) continue;
 
       insurerText += ` ${hay}`;
-      if (!assureur) assureur = insurer;
+      applyHint(hint);
       if (!mailCourtier && isUsableEmail(from)) mailCourtier = from;
       // N° : d'abord l'objet (le plus sûr), sinon le CORPS du mail (levier n°1).
       if (!numero) {
@@ -340,7 +352,7 @@ export async function extractInsuranceInfoFromFront(buildingId: string): Promise
         ) ?? null;
       }
     }
-    if (numero && mailCourtier && assureur) break; // on a tout
+    if (numero && mailCourtier && (assureur || courtier)) break; // on a de quoi agir
   }
 
   // Secours PDF pour le n° si absent des objets.
@@ -359,17 +371,21 @@ export async function extractInsuranceInfoFromFront(buildingId: string): Promise
   // (ex. Bessé → contrat Generali → doit aller en ODR, pas RS).
   const partnerKey = matchPartner(assureur) || matchPartner(insurerText);
   const reasons: string[] = [];
-  if (assureur) reasons.push(`assureur: ${assureur}`); else reasons.push("assureur introuvable");
+  if (assureur) reasons.push(`assureur: ${assureur}`);
+  if (courtier) reasons.push(`courtier: ${courtier}`);
+  if (!assureur && !courtier) reasons.push("assureur/courtier introuvable");
   if (mailCourtier) reasons.push(`mail: ${mailCourtier}`); else reasons.push("mail introuvable");
   if (numero) reasons.push(`n°: ${numero} (${numeroSource})`); else reasons.push("n° introuvable");
 
-  // Règle : fiable = assureur identifié ET (mail exploitable OU n° de contrat).
-  const reliable = !!assureur && (!!mailCourtier || !!numero);
+  // Fiable = un interlocuteur assurance identifié (porteur OU courtier) ET
+  // (mail exploitable OU n° de contrat).
+  const reliable = (!!assureur || !!courtier) && (!!mailCourtier || !!numero);
   const confidence: InsuranceInfo["confidence"] =
-    assureur && mailCourtier && numero ? "haute" : reliable ? "moyenne" : "basse";
+    (assureur || courtier) && mailCourtier && numero ? "haute" : reliable ? "moyenne" : "basse";
 
   return {
     assureur,
+    courtier,
     numeroContrat: numero,
     mailCourtier,
     isPartner: !!partnerKey,
