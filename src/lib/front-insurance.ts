@@ -110,6 +110,16 @@ const INSURER_HINTS: { label: string; kind: "carrier" | "courtier"; test: RegExp
   { label: "Entoria", kind: "courtier", test: /entoria/i },
 ];
 
+// Détecte qu'une valeur est en réalité un COURTIER et non un porteur. Sert à
+// repérer les cas où Omni a mis un courtier dans le champ "Assureur" (pollution
+// vue en réel : "PLASSE ( Courtier Axa )", "ODEALIM", "VERSPIEREN"…). On se base
+// sur le mot "courtier" OU un nom de courtier connu. Aucun porteur (AXA, Generali,
+// SADA, Mila, GAN, Groupama, MMA, Allianz, Swiss Life, Matmut) ne matche ces motifs.
+const COURTIER_VALUE = /\bcourtier\b|verspieren|odealim|assurg[ée]rance|assurimo|\bgsa\b|cenac|bess[ée]|\bplasse\b|\blamy\b|b[ée]lier|saint.?pierre|verlingue|ccga|filhet|entoria|hc\s*conseil/i;
+export function looksLikeCourtierValue(text: string | null | undefined): boolean {
+  return !!text && COURTIER_VALUE.test(text);
+}
+
 // Mots-clés d'objet indiquant un fil d'assurance MRI exploitable.
 const SUBJECT_INSURANCE = /assurance|multirisque|\bmri\b|police|contrat|avis d'?[ée]ch[ée]ance|appel de (?:prime|cotisation)|quittance|cotisation|sinistr/i;
 
