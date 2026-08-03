@@ -657,13 +657,15 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
               <Badge className="border" style={{ backgroundColor: "#EFFBF2", color: "#13762C", borderColor: "#BBF1C8" }}>Contrat mis à jour dans Duomo ✓</Badge>
             ) : pipeline.statut === "contrat_signe" ? (
               <Badge style={{ backgroundColor: "#13762C", color: "#ffffff" }}>Deal gagné — Contrat signé 🎉</Badge>
+            ) : pipeline.statut === "odr_en_cours" ? (
+              <Badge className="border" style={{ backgroundColor: "#FEF3C7", color: "#955804", borderColor: "#F5C55A" }}>Ordre de remplacement en cours</Badge>
             ) : (
               <Badge variant="secondary">{currentStep?.label} — étape {currentStepIndex + 1}/{PIPELINE_STEPS.length - 1}</Badge>
             )}
           </div>
         </div>
 
-        {(!isTerminal || isLost || pipeline.statut === "termine") && (
+        {((!isTerminal && pipeline.statut !== "odr_en_cours") || isLost || pipeline.statut === "termine") && (
           <div className="mt-4">
             <StepProgressBar
               steps={PIPELINE_STEPS.filter((s) => s.statut !== "termine" && s.statut !== "abandonne")}

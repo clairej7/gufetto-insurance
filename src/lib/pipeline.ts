@@ -14,12 +14,6 @@ export const PIPELINE_STEPS: {
     description: "Copropriété identifiée, aucune démarche engagée",
   },
   {
-    statut: "odr_en_cours",
-    label: "Ordre de remplacement en cours",
-    shortLabel: "ODR en cours",
-    description: "Copro déjà assurée chez un partenaire (AXA, Sada...) : ordre de remplacement pour que Matera devienne courtier et touche la commission",
-  },
-  {
     statut: "rs_en_cours",
     label: "En attente du relevé de sinistralité",
     shortLabel: "RS en cours",
@@ -73,13 +67,11 @@ export function getStepIndex(statut: PipelineStatut): number {
 }
 
 export function getNextStatut(current: PipelineStatut): PipelineStatut | null {
+  // ODR n'est PAS dans PIPELINE_STEPS (hors cycle linéaire, accessible via le
+  // toggle ODR uniquement) -> getStepIndex renvoie -1 et on retourne null.
   const idx = getStepIndex(current);
   if (idx === -1 || idx >= PIPELINE_STEPS.length - 1) return null;
-  const next = PIPELINE_STEPS[idx + 1].statut;
-  // ODR (ordre de remplacement) sort du cycle de vente classique : on n'y accède
-  // que via le toggle ODR, jamais via le bouton "Avancer". On la saute donc ici.
-  if (next === "odr_en_cours") return PIPELINE_STEPS[idx + 2]?.statut ?? null;
-  return next;
+  return PIPELINE_STEPS[idx + 1].statut;
 }
 
 export function getStepInfo(statut: PipelineStatut) {
