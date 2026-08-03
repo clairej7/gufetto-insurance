@@ -40,6 +40,7 @@ type FrontMessage = {
   created_at?: number;
   subject?: string | null;
   text?: string | null;
+  body?: string | null;
   blurb?: string | null;
   author?: { handle?: string; is_inbound?: boolean } | null;
   recipients?: FrontRecipient[];
@@ -58,7 +59,7 @@ export type InsuranceInfo = {
   confidence: "haute" | "moyenne" | "basse";
   reasons: string[];
   // Traçabilité
-  numeroSource: "objet" | "pdf" | null;
+  numeroSource: "objet" | "corps" | "pdf" | null;
   sampledConversations: number;
 };
 
@@ -70,7 +71,7 @@ export type InsuranceInfo = {
 const PARTNERS: { key: InsuranceInfo["partnerKey"]; patterns: RegExp }[] = [
   { key: "axa", patterns: /\baxa\b/i },
   { key: "generali", patterns: /\bgenerali\b/i },
-  { key: "sada", patterns: /\bsada\b/i },
+  { key: "sada", patterns: /\bsada\b|d[ée]fense\s+et\s+d.?assurances?/i },
   { key: "mila", patterns: /\bmila\b/i },
 ];
 
@@ -79,7 +80,7 @@ const PARTNERS: { key: InsuranceInfo["partnerKey"]; patterns: RegExp }[] = [
 const INSURER_HINTS: { label: string; test: RegExp }[] = [
   { label: "AXA", test: /axa\.fr|\baxa\b/i },
   { label: "Generali", test: /generali/i },
-  { label: "SADA", test: /\bsada\b/i },
+  { label: "SADA", test: /\bsada\b|d[ée]fense\s+et\s+d.?assurances?/i },
   { label: "Mila", test: /\bmila\b/i },
   { label: "GAN", test: /\bgan\b|gan\.fr/i },
   { label: "Groupama", test: /groupama/i },
@@ -215,19 +216,21 @@ export function matchPartner(assureur: string | null): InsuranceInfo["partnerKey
   return null;
 }
 
-// N° de contrat depuis un objet de mail. On privilégie les préfixes explicites
-// (police / contrat) ; on ignore "quittance" seul (≠ n° de contrat).
-function extractNumeroFromSubject(subject: string): string | null {
-  // On EXIGE un préfixe explicite police/contrat (le motif "n°" seul captait des
-  // références de sinistre — bug vu en réel sur SDC 4 Albert Mercier).
-  const m = subject.match(
-    /(?:police|contrat|contract|mri)\s*(?:n[°o]?|num[ée]ro|:)?\s*([A-Za-z0-9][A-Za-z0-9\/\-]{4,})/i,
+// N° de contrat depuis un texte (objet OU corps de mail). On exige un préfixe
+// explicite police / contrat / MRI (le motif "n°" seul captait des références
+// de sinistre — bug vu en réel sur SDC 4 Albert Mercier).
+function extractNumero(text: string): string | null {
+  // Token ISOLÉ (lookahead) et de longueur bornée -> évite de capter un token/URL
+  // long dans le corps (bug vu sur SDC 4 Albert Mercier en v2).
+  const m = text.match(
+    /(?:police|contrat|contract|mri)\s*(?:n[°o]?|num[ée]ro|:)?\s*([A-Za-z0-9][A-Za-z0-9\/\-]{3,17})(?![A-Za-z0-9])/i,
   );
   if (!m || !m[1]) return null;
   const cand = m[1].trim();
-  // Doit ressembler à un identifiant : au moins un chiffre. Évite de capter un
-  // mot ("contrat annuel" -> "annuel") vu en réel sur SDC 13 Naples.
-  return /\d/.test(cand) ? cand : null;
+  const digits = (cand.match(/\d/g) ?? []).length;
+  // Doit ressembler à un vrai n° : au moins 3 chiffres et ≤ 18 caractères. Évite
+  // un mot ("contrat annuel" -> "annuel") et les tokens parasites du corps.
+  return digits >= 3 && cand.length <= 18 ? cand : null;
 }
 
 // Secours PDF : lit une pièce jointe (contrat/avis) via Claude pour en tirer le
@@ -298,28 +301,36 @@ export async function extractInsuranceInfoFromFront(buildingId: string): Promise
   let numero: string | null = null;
   let numeroSource: InsuranceInfo["numeroSource"] = null;
   let pdfFallback: FrontAttachment | null = null;
+  let insurerText = ""; // objets + corps des mails d'assureur (pour repérer le porteur → ODR)
 
   for (const { c, subj } of ranked) {
     // Assureur : indice depuis l'objet du fil (confirmé ensuite par l'expéditeur).
     if (!assureur) assureur = looksLikeInsurer(subj);
     // NB : le n° n'est PLUS extrait de l'objet de la conversation en aveugle
     // (ça captait des "proposition de contrat PC-..." internes Matera). On ne le
-    // prend que sur l'objet d'un mail ENTRANT d'assureur (boucle ci-dessous).
+    // prend que sur un mail ENTRANT d'assureur (objet puis corps, boucle ci-dessous).
 
     const messages = await getMessages(c.id);
     for (const m of messages) {
       if (!m.is_inbound) continue; // on veut le mail ENTRANT de l'assureur/courtier
       const from = senderHandle(m);
-      const insurerByFrom = from ? looksLikeInsurer(from) : null;
-      const insurerBySubj = m.subject ? looksLikeInsurer(m.subject) : null;
-      const insurer = insurerByFrom || insurerBySubj;
+      const body = m.text || m.body || m.blurb || "";
+      const hay = `${m.subject ?? ""}\n${body}`;
+      // Assureur détecté via l'expéditeur OU le contenu (objet + corps).
+      const insurer = (from ? looksLikeInsurer(from) : null) || looksLikeInsurer(hay);
       if (!insurer) continue;
 
+      insurerText += ` ${hay}`;
       if (!assureur) assureur = insurer;
       if (!mailCourtier && isUsableEmail(from)) mailCourtier = from;
-      if (!numero && m.subject) {
-        const n = extractNumeroFromSubject(m.subject);
-        if (n) { numero = n; numeroSource = "objet"; }
+      // N° : d'abord l'objet (le plus sûr), sinon le CORPS du mail (levier n°1).
+      if (!numero) {
+        const nSub = m.subject ? extractNumero(m.subject) : null;
+        if (nSub) { numero = nSub; numeroSource = "objet"; }
+        else {
+          const nBody = extractNumero(body);
+          if (nBody) { numero = nBody; numeroSource = "corps"; }
+        }
       }
       // Mémorise un PDF (contrat/avis) au cas où le n° manque.
       if (!pdfFallback) {
@@ -343,7 +354,10 @@ export async function extractInsuranceInfoFromFront(buildingId: string): Promise
   }
 
   // ---- Fiabilité + aiguillage -------------------------------------------------
-  const partnerKey = matchPartner(assureur);
+  // Porteur partenaire (ODR) : depuis l'assureur détecté, SINON en scannant le
+  // contenu des mails d'assureur — corrige le cas courtier qui masque le porteur
+  // (ex. Bessé → contrat Generali → doit aller en ODR, pas RS).
+  const partnerKey = matchPartner(assureur) || matchPartner(insurerText);
   const reasons: string[] = [];
   if (assureur) reasons.push(`assureur: ${assureur}`); else reasons.push("assureur introuvable");
   if (mailCourtier) reasons.push(`mail: ${mailCourtier}`); else reasons.push("mail introuvable");
