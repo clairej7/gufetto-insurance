@@ -29,6 +29,7 @@ type FrontConversation = {
   subject?: string | null;
   status?: string;
   custom_fields?: Record<string, unknown>;
+  inboxes?: { id?: string; name?: string }[];
 };
 
 type FrontRecipient = { handle?: string; role?: string; name?: string };
@@ -107,6 +108,15 @@ const SUBJECT_INSURANCE = /assurance|multirisque|\bmri\b|police|contrat|avis d'?
 
 // Fils à EXCLURE comme source du "contrat courant" (donnée trompeuse).
 const SUBJECT_EXCLUDE = /devis|r[ée]siliation|r[ée]sili[ée]|mise en demeure/i;
+
+// Inbox Front où atterrissent les avis/quittances/mails d'assureur. Signal FORT
+// pour repérer un fil d'assurance même quand l'objet est cryptique (validé en
+// live : l'avis Bessé de SDC 27 Barsacq est dans "CCR PRO - Factures").
+const INSURER_INBOXES = /Assurance|Factures|Notif fournisseurs|Offre Pro/i;
+
+function inboxLooksInsurer(conv: FrontConversation): boolean {
+  return (conv.inboxes ?? []).some((i) => i.name && INSURER_INBOXES.test(i.name));
+}
 
 // Adresses non exploitables pour une relance (no-reply, services CNIL, etc.).
 const JUNK_EMAIL = [
@@ -209,6 +219,8 @@ function extractNumeroFromSubject(subject: string): string | null {
 // Secours PDF : lit une pièce jointe (contrat/avis) via Claude pour en tirer le
 // n° de contrat + l'assureur (réutilise le patron de /api/devis/extract).
 async function extractFromPdf(pdf: Buffer): Promise<{ numeroContrat: string | null; assureur: string | null }> {
+  // Secours PDF optionnel : sans clé Anthropic, on saute (le reste marche quand même).
+  if (!process.env.ANTHROPIC_API_KEY) return { numeroContrat: null, assureur: null };
   const PROMPT = `Tu lis un document d'assurance multirisque immeuble (MRI) : avis d'échéance, contrat ou attestation.
 Retourne UNIQUEMENT un JSON valide sans markdown : {"numeroContrat": string|null, "assureur": string|null}.
 numeroContrat = le numéro de police/contrat exact. assureur = la compagnie d'assurance.`;
@@ -252,12 +264,20 @@ export async function extractInsuranceInfoFromFront(buildingId: string): Promise
   const convs = await searchByBuildingId(buildingId);
   if (convs.length === 0) return { ...empty, reasons: ["aucune conversation Front"] };
 
-  // On priorise les conversations à signal assurance (objet), en écartant les
-  // devis/résiliations comme source de contrat courant.
+  // Sélection des fils candidats "assurance" : par OBJET (mots-clés) ET/OU par
+  // INBOX (Factures/Assurance/... où arrivent les avis, même si l'objet est
+  // cryptique). On écarte les devis/résiliations (source de contrat trompeuse).
+  // Score : objet assurance (2) > inbox assureur (1) ; on garde les mieux notés.
   const ranked = convs
-    .map((c) => ({ c, subj: (c.subject || "") }))
-    .filter((x) => SUBJECT_INSURANCE.test(x.subj) && !SUBJECT_EXCLUDE.test(x.subj))
-    .slice(0, 8); // borne : au plus 8 fils ouverts
+    .map((c) => ({ c, subj: c.subject || "" }))
+    .filter((x) => !SUBJECT_EXCLUDE.test(x.subj))
+    .map((x) => ({
+      ...x,
+      score: (SUBJECT_INSURANCE.test(x.subj) ? 2 : 0) + (inboxLooksInsurer(x.c) ? 1 : 0),
+    }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 12); // borne : au plus 12 fils ouverts
 
   let assureur: string | null = null;
   let mailCourtier: string | null = null;
