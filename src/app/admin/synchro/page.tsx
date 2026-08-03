@@ -48,7 +48,7 @@ export default async function SynchroPage() {
             (assureur, n° de contrat, mail courtier) depuis Front et aiguille : partenaire → ODR, fiable → RS
             en cours, sinon reste en « Aucune action ».
           </p>
-          <AutofillBatchButton limit={25} />
+          <AutofillBatchButton defaultTarget={Math.min(100, nbIdentifie)} stock={nbIdentifie} />
         </div>
         <SyncBoard runs={runs} />
       </main>
