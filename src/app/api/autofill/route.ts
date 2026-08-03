@@ -21,12 +21,18 @@ export async function POST(req: NextRequest) {
   }
   const actor = session?.user?.email || "cron@gufetto";
 
-  const body = await req.json().catch(() => ({} as { limit?: number }));
+  const body = await req.json().catch(() => ({} as { limit?: number; skip?: number }));
   const limit = Math.min(Number(body.limit) || 25, 100); // borne de sécurité
+  // Curseur : les dossiers NON fiables restent en "identifie". Pour enchaîner des
+  // lots sans les retraiter en boucle, l'appelant fait avancer `skip` du nombre de
+  // dossiers restés en place au lot précédent (ordre stable par id).
+  const skip = Math.max(0, Number(body.skip) || 0);
 
   const pipelines = await prisma.insurancePipeline.findMany({
     where: { statut: "identifie", copro: { archivedAt: null } },
     select: { id: true },
+    orderBy: { id: "asc" },
+    skip,
     take: limit,
   });
 
@@ -54,5 +60,16 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ success: true, restants_potentiels: pipelines.length === limit, stats, details });
+  // `count` = dossiers réellement pris dans ce lot ; `restes` = ceux restés en
+  // "identifie" (non fiables + erreurs) → l'appelant s'en sert pour avancer skip.
+  const moved = stats.versRs + stats.versOdr;
+  const restes = pipelines.length - moved;
+  return NextResponse.json({
+    success: true,
+    count: pipelines.length,
+    restes,
+    restants_potentiels: pipelines.length === limit,
+    stats,
+    details,
+  });
 }
