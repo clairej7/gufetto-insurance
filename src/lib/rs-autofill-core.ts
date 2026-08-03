@@ -6,7 +6,52 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import type { PipelineStatut } from "@/generated/prisma/client";
-import { extractInsuranceInfoFromFront, matchPartner, type InsuranceInfo } from "@/lib/front-insurance";
+import { extractInsuranceInfoFromFront, matchPartner, looksLikeCourtierValue, type InsuranceInfo } from "@/lib/front-insurance";
+
+// Champs contrat lus/écrits par l'autofill (sous-ensemble de Copro).
+type CoproContractFields = {
+  assureurActuel: string | null;
+  courtierActuel: string | null;
+  numeroContrat: string | null;
+  contactCourtierEmail: string | null;
+};
+
+// Calcule (sans écrire) le patch de champs contrat à appliquer + les notes
+// d'audit à tracer. Règle : fill-if-empty, MAIS si le champ assureur contient en
+// réalité un COURTIER (pollution Omni), on le traite comme mal rempli → on écrit
+// le vrai porteur (Front) à sa place et on déplace le courtier vers son champ (si
+// vide). On ne remplace JAMAIS un vrai porteur existant (protège le fix Sada/AXA).
+// Partagé par applyAutofill (temps réel/batch) et le script de nettoyage rétro.
+export function planContractWrite(
+  copro: CoproContractFields,
+  info: Pick<InsuranceInfo, "assureur" | "courtier" | "numeroContrat" | "mailCourtier">,
+): { data: Record<string, unknown>; auditNotes: string[] } {
+  const data: Record<string, unknown> = {};
+  const auditNotes: string[] = [];
+
+  const assureurEstCourtier = looksLikeCourtierValue(copro.assureurActuel);
+  const replacingAssureur = !!info.assureur && (!copro.assureurActuel || assureurEstCourtier);
+  if (replacingAssureur) {
+    if (assureurEstCourtier) {
+      auditNotes.push(
+        `Assureur corrigé : "${copro.assureurActuel}" (courtier mal placé par la synchro) → "${info.assureur}" (porteur, source Front). À vérifier si conflit sur le porteur.`,
+      );
+    }
+    data.assureurActuel = info.assureur;
+  }
+
+  // Champ courtier : priorité au courtier Front ; sinon on récupère le courtier
+  // mal placé qu'on vient de sortir du champ assureur.
+  if (!copro.courtierActuel) {
+    if (info.courtier) data.courtierActuel = info.courtier;
+    else if (assureurEstCourtier && replacingAssureur) data.courtierActuel = copro.assureurActuel;
+  }
+
+  if (info.numeroContrat && !copro.numeroContrat) data.numeroContrat = info.numeroContrat;
+  if (info.mailCourtier && !copro.contactCourtierEmail) data.contactCourtierEmail = info.mailCourtier;
+
+  return { data, auditNotes };
+}
 
 export type AutofillResult = {
   pipelineId: string;
@@ -39,19 +84,19 @@ export async function applyAutofill(
   const copro = pipeline.copro;
   const info = await extractInsuranceInfoFromFront(copro.buildingId);
 
-  // 1) Écrire les champs trouvés — UNIQUEMENT SI VIDES (on ne remplace jamais une
-  //    donnée existante ; bug vu en réel : Sada écrasé par Assurimo, AXA par GSA).
-  //    L'assureur ne reçoit qu'un PORTEUR (info.assureur, carrier) ; le courtier va
-  //    dans son propre champ. Cliquet posé pour protéger des syncs Omni ultérieures.
-  const data: Record<string, unknown> = {};
-  if (info.assureur && !copro.assureurActuel) data.assureurActuel = info.assureur;
-  if (info.courtier && !copro.courtierActuel) data.courtierActuel = info.courtier;
-  if (info.numeroContrat && !copro.numeroContrat) data.numeroContrat = info.numeroContrat;
-  if (info.mailCourtier && !copro.contactCourtierEmail) data.contactCourtierEmail = info.mailCourtier;
+  // 1) Écrire les champs trouvés (fill-if-empty + exception "courtier mal placé
+  //    dans le champ assureur" ; cf. planContractWrite). Cliquet posé pour figer
+  //    face aux syncs Omni. Les corrections d'assureur sont tracées en note.
+  const { data, auditNotes } = planContractWrite(copro, info);
   const wroteFields = Object.keys(data).length > 0;
   if (wroteFields) {
     data.contratVerrouilleLe = new Date();
     await prisma.copro.update({ where: { id: copro.id }, data });
+    for (const note of auditNotes) {
+      await prisma.pipelineEvent.create({
+        data: { pipelineId, type: "note_ajoutee", description: note, createdBy: actorEmail },
+      });
+    }
   }
 
   // 1 bis) Cas particulier "on était l'assureur avant" (probable Wakam à migrer) :
