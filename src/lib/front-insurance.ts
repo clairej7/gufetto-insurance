@@ -427,6 +427,26 @@ function parsePrimePayeeFromText(text: string): number | null {
   return m ? parseEuroAmount(m[1]) : null;
 }
 
+// Recherche Front en texte libre (ex. adresse de la copro). Secours indispensable :
+// les demandes de devis créées par /api/front/draft n'ont PAS toujours le custom
+// field building_id, donc searchByBuildingId peut les manquer. Boucle autonome pour
+// ne pas toucher searchByBuildingId (fix pagination traité dans une tâche à part).
+async function searchByText(query: string): Promise<FrontConversation[]> {
+  if (!query.trim()) return [];
+  const out: FrontConversation[] = [];
+  let path: string | null = `/conversations/search/${encodeURIComponent(query)}?limit=100`;
+  let guard = 0;
+  while (path && guard < 3) {
+    const data: FrontSearchResponse | null = await frontGet<FrontSearchResponse>(path);
+    if (!data) break;
+    out.push(...(data._results ?? []));
+    const nextUrl: string | null = data._pagination?.next ?? null;
+    path = nextUrl ? nextUrl.replace(/^https?:\/\/[^/]+/, "") : null;
+    guard++;
+  }
+  return out;
+}
+
 export type PrimePayeeResult = {
   montant: number | null;
   conversationId: string | null;
@@ -437,6 +457,7 @@ export type PrimePayeeResult = {
 export async function getDernierePrimePayeeFromFront(
   buildingId: string,
   pipelineId: string,
+  address?: string | null,
 ): Promise<PrimePayeeResult> {
   const empty = (reason: string): PrimePayeeResult => ({
     montant: null,
@@ -444,9 +465,18 @@ export async function getDernierePrimePayeeFromFront(
     matchedByRef: false,
     reason,
   });
-  if (!buildingId) return empty("building_id manquant");
+  if (!buildingId && !address) return empty("building_id et adresse manquants");
 
-  const convs = await searchByBuildingId(buildingId);
+  // Deux recherches fusionnées : (1) par custom field building_id (rapide, fiable
+  // quand posé) ; (2) par ADRESSE en texte libre — secours car les demandes de
+  // devis n'ont pas toujours le building_id. On dédup par id, puis on ancre sur
+  // gufetto-ref pour être certain du bon dossier.
+  const [byId, byAddr] = await Promise.all([
+    buildingId ? searchByBuildingId(buildingId) : Promise.resolve([] as FrontConversation[]),
+    address ? searchByText(address) : Promise.resolve([] as FrontConversation[]),
+  ]);
+  const seen = new Set<string>();
+  const convs = [...byId, ...byAddr].filter((c) => c.id && !seen.has(c.id) && seen.add(c.id));
   if (convs.length === 0) return empty("aucune conversation Front");
 
   // On privilégie les fils de demande de devis ; sinon on scanne tout.
