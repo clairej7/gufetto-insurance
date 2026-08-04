@@ -148,23 +148,29 @@ const JUNK_EMAIL = [
 // Appels Front bas niveau
 // ---------------------------------------------------------------------------
 
-async function frontGet<T>(path: string, attempts = 3): Promise<T | null> {
+async function frontGet<T>(pathOrUrl: string, attempts = 3): Promise<T | null> {
   if (!FRONT_TOKEN) throw new Error("FRONT_API_TOKEN manquant");
+  // `pathOrUrl` peut être un chemin relatif (ex. "/conversations/...") OU une URL
+  // absolue : les liens `_pagination.next` renvoyés par Front pointent vers l'hôte
+  // spécifique au compte (ex. https://matera.api.frontapp.com/...) et non vers
+  // FRONT_API_URL. On les suit tels quels ; le token étant scopé au compte, il
+  // vaut pour les deux hôtes.
+  const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${FRONT_API_URL}${pathOrUrl}`;
   for (let i = 1; i <= attempts; i++) {
     try {
-      const res = await fetch(`${FRONT_API_URL}${path}`, {
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${FRONT_TOKEN}` },
       });
       if (res.ok) return (await res.json()) as T;
       // 429 / 5xx = transitoire -> on retente ; autres codes -> on abandonne.
       if (res.status !== 429 && res.status < 500) {
-        console.error(`[front-insurance] GET ${path} -> ${res.status}: ${await res.text()}`);
+        console.error(`[front-insurance] GET ${url} -> ${res.status}: ${await res.text()}`);
         return null;
       }
     } catch (e) {
       // "fetch failed" réseau -> on retente jusqu'à épuisement.
       if (i === attempts) {
-        console.error(`[front-insurance] GET ${path} fetch failed:`, e instanceof Error ? e.message : e);
+        console.error(`[front-insurance] GET ${url} fetch failed:`, e instanceof Error ? e.message : e);
         return null;
       }
     }
@@ -185,9 +191,8 @@ async function searchByBuildingId(buildingId: string): Promise<FrontConversation
     const data: FrontSearchResponse | null = await frontGet<FrontSearchResponse>(path);
     if (!data) break;
     out.push(...(data._results ?? []));
-    const nextUrl: string | null = data._pagination?.next ?? null;
-    // `next` est une URL absolue -> on la re-relative pour frontGet.
-    path = nextUrl ? nextUrl.replace(FRONT_API_URL, "") : null;
+    // `next` est une URL absolue vers l'hôte du compte -> frontGet la suit telle quelle.
+    path = data._pagination?.next ?? null;
     guard++;
   }
   return out;
@@ -440,8 +445,8 @@ async function searchByText(query: string): Promise<FrontConversation[]> {
     const data: FrontSearchResponse | null = await frontGet<FrontSearchResponse>(path);
     if (!data) break;
     out.push(...(data._results ?? []));
-    const nextUrl: string | null = data._pagination?.next ?? null;
-    path = nextUrl ? nextUrl.replace(/^https?:\/\/[^/]+/, "") : null;
+    // `next` = URL absolue (hôte du compte) → frontGet la suit telle quelle.
+    path = data._pagination?.next ?? null;
     guard++;
   }
   return out;
