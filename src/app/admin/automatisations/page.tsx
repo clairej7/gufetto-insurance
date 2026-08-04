@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { AutofillBatchButton } from "@/components/admin/autofill-batch-button";
+import { VerifyPrimesBatchButton } from "@/components/admin/verify-primes-batch-button";
 
 type Etat = "deploye" | "encours" | "attente";
 const ETATS: Record<Etat, { label: string; bg: string; fg: string; dot: string }> = {
@@ -31,6 +32,11 @@ export default async function AutomatisationsPage() {
         },
       },
     },
+  });
+
+  // Dossiers en « Comparaison des devis » (devis_recus) dont on peut vérifier la prime.
+  const eligibleAuto6 = await prisma.insurancePipeline.count({
+    where: { statut: "devis_recus", copro: { archivedAt: null } },
   });
 
   const automations: {
@@ -88,6 +94,16 @@ export default async function AutomatisationsPage() {
         "En cours de construction sur une autre session de travail.",
       ],
     },
+    {
+      n: 6,
+      nom: "Comparer les devis et préparer le mail au CS",
+      etat: "encours",
+      description: [
+        "À l'étape « Comparaison des devis », la base de comparaison retient désormais la DERNIÈRE PRIME RÉELLEMENT PAYÉE (récupérée dans le mail de demande de devis envoyé à l'assureur, via le marqueur gufetto-ref) plutôt que la prime du contrat, souvent périmée. Sans ça, les devis paraissaient plus chers que la réalité.",
+        "Sur chaque dossier, le bouton « Vérifier le montant » récupère cette prime, la propage partout (carte « Contrat actuel », comparatif détaillé) et régénère automatiquement la recommandation au Conseil Syndical — aucune analyse ne peut plus partir avec l'ancien chiffre erroné. Une règle de cohérence protège les cas étranges (écart anormal contrat/prime → vérification manuelle).",
+        "Encore en cours : l'application automatique du bon montant à chaque dossier (sans clic), l'automatisation complète de la comparaison et la préparation/l'envoi du mail au CS. Le contrôle admin ci-dessous permet déjà de vérifier d'un coup toutes les comparaisons en cours.",
+      ],
+    },
   ];
 
   return (
@@ -99,7 +115,7 @@ export default async function AutomatisationsPage() {
             Automatisations
           </h1>
           <p className="text-sm mt-1" style={{ color: "#656576" }}>
-            Les 5 automatisations du parcours MRI — état d&apos;avancement et contrôles admin.
+            Les 6 automatisations du parcours MRI — état d&apos;avancement et contrôles admin.
           </p>
         </div>
 
@@ -156,6 +172,19 @@ export default async function AutomatisationsPage() {
                       (hors dossiers déjà clients / gagnés).
                     </p>
                     <AutofillBatchButton defaultTarget={Math.min(100, eligibleAuto1)} stock={eligibleAuto1} />
+                  </div>
+                )}
+
+                {/* Contrôle admin — automatisation 6 : vérifier toutes les comparaisons. */}
+                {a.n === 6 && (
+                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
+                      Contrôles admin
+                    </div>
+                    <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
+                      {eligibleAuto6} comparaison{eligibleAuto6 > 1 ? "s" : ""} de devis en cours — vérifie la dernière prime payée de chacune (via Front) et repère celles à recaler ou les cas étranges. Lecture seule.
+                    </p>
+                    <VerifyPrimesBatchButton stock={eligibleAuto6} />
                   </div>
                 )}
               </div>
