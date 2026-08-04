@@ -9,8 +9,13 @@ import { applyAutofill } from "@/lib/rs-autofill-core";
 //
 // NB : traitement SÉQUENTIEL et borné (limit) pour ménager les API Front/Anthropic
 // et rester sous le timeout d'une requête. Pour tout le stock, appeler plusieurs
-// fois (pagination naturelle : les dossiers aiguillés sortent de "identifie") ou
-// brancher un vrai job de fond. Throttle/kill-switch = tour de contrôle (à venir).
+// fois : un CURSEUR PERSISTANT (copro/pipeline.autofillTenteLe) fait avancer le
+// batch — on exclut les dossiers déjà tentés récemment, donc on ne re-traite plus
+// les mêmes non-fiables à chaque clic. Ils redeviennent éligibles après le délai.
+
+// Délai avant de re-tenter un dossier déjà passé par l'autofill (jours). Permet
+// de repasser plus tard sur les non-fiables (Front rétabli / données nettoyées).
+const RETRY_APRES_JOURS = 7;
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -21,20 +26,33 @@ export async function POST(req: NextRequest) {
   }
   const actor = session?.user?.email || "cron@gufetto";
 
-  const body = await req.json().catch(() => ({} as { limit?: number; skip?: number }));
+  const body = await req.json().catch(() => ({} as { limit?: number }));
   const limit = Math.min(Number(body.limit) || 25, 100); // borne de sécurité
-  // Curseur : les dossiers NON fiables restent en "identifie". Pour enchaîner des
-  // lots sans les retraiter en boucle, l'appelant fait avancer `skip` du nombre de
-  // dossiers restés en place au lot précédent (ordre stable par id).
-  const skip = Math.max(0, Number(body.skip) || 0);
 
+  // Curseur persistant : on exclut les dossiers déjà tentés il y a moins de
+  // RETRY_APRES_JOURS. Comme on marque chaque lot AVANT traitement (ci-dessous),
+  // les non-fiables ne réapparaissent plus au lot/clic suivant → le batch avance.
+  const cooldown = new Date(Date.now() - RETRY_APRES_JOURS * 24 * 60 * 60 * 1000);
   const pipelines = await prisma.insurancePipeline.findMany({
-    where: { statut: "identifie", copro: { archivedAt: null } },
+    where: {
+      statut: "identifie",
+      copro: { archivedAt: null },
+      OR: [{ autofillTenteLe: null }, { autofillTenteLe: { lt: cooldown } }],
+    },
     select: { id: true },
     orderBy: { id: "asc" },
-    skip,
     take: limit,
   });
+
+  // Marque tout le lot comme "tenté maintenant" AVANT de traiter : garantit qu'on
+  // ne le reprendra pas au prochain lot/clic, y compris les non-fiables et les
+  // dossiers qui déclencheraient une erreur (sinon boucle sur le même en-tête).
+  if (pipelines.length > 0) {
+    await prisma.insurancePipeline.updateMany({
+      where: { id: { in: pipelines.map((p) => p.id) } },
+      data: { autofillTenteLe: new Date() },
+    });
+  }
 
   const stats = { traites: 0, versRs: 0, versOdr: 0, nonFiables: 0, erreurs: 0 };
   const details: Array<Record<string, unknown>> = [];
@@ -60,14 +78,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // `count` = dossiers réellement pris dans ce lot ; `restes` = ceux restés en
-  // "identifie" (non fiables + erreurs) → l'appelant s'en sert pour avancer skip.
-  const moved = stats.versRs + stats.versOdr;
-  const restes = pipelines.length - moved;
+  // `count` = dossiers pris dans ce lot. `restants_potentiels` : le lot était plein
+  // → il reste probablement des dossiers éligibles (l'appelant peut ré-appeler).
   return NextResponse.json({
     success: true,
     count: pipelines.length,
-    restes,
     restants_potentiels: pipelines.length === limit,
     stats,
     details,
