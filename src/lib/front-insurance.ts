@@ -457,7 +457,7 @@ export type PrimePayeeResult = {
 export async function getDernierePrimePayeeFromFront(
   buildingId: string,
   pipelineId: string,
-  address?: string | null,
+  searchHints: (string | null | undefined)[] = [],
 ): Promise<PrimePayeeResult> {
   const empty = (reason: string): PrimePayeeResult => ({
     montant: null,
@@ -465,18 +465,20 @@ export async function getDernierePrimePayeeFromFront(
     matchedByRef: false,
     reason,
   });
-  if (!buildingId && !address) return empty("building_id et adresse manquants");
+  const terms = [...new Set(searchHints.map((t) => t?.trim()).filter((t): t is string => !!t))];
+  if (!buildingId && terms.length === 0) return empty("building_id et adresse/nom manquants");
 
-  // Deux recherches fusionnées : (1) par custom field building_id (rapide, fiable
-  // quand posé) ; (2) par ADRESSE en texte libre — secours car les demandes de
-  // devis n'ont pas toujours le building_id. On dédup par id, puis on ancre sur
-  // gufetto-ref pour être certain du bon dossier.
-  const [byId, byAddr] = await Promise.all([
+  // Recherches fusionnées : par custom field building_id (rapide quand posé) + par
+  // chaque indice texte (adresse ET nom). Indispensable car (a) les demandes de
+  // devis n'ont pas toujours le building_id, (b) copro.adresse est souvent null
+  // → on retombe sur copro.nom (qui contient l'adresse). On dédup par id, puis on
+  // ancre sur gufetto-ref pour être certain du bon dossier.
+  const results = await Promise.all([
     buildingId ? searchByBuildingId(buildingId) : Promise.resolve([] as FrontConversation[]),
-    address ? searchByText(address) : Promise.resolve([] as FrontConversation[]),
+    ...terms.map((t) => searchByText(t)),
   ]);
   const seen = new Set<string>();
-  const convs = [...byId, ...byAddr].filter((c) => c.id && !seen.has(c.id) && seen.add(c.id));
+  const convs = results.flat().filter((c) => c.id && !seen.has(c.id) && seen.add(c.id));
   if (convs.length === 0) return empty("aucune conversation Front");
 
   // On privilégie les fils de demande de devis ; sinon on scanne tout.
