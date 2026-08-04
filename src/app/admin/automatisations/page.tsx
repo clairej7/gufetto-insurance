@@ -1,0 +1,168 @@
+export const dynamic = "force-dynamic";
+
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { Navbar } from "@/components/navbar";
+import { AutofillBatchButton } from "@/components/admin/autofill-batch-button";
+
+type Etat = "deploye" | "encours" | "attente";
+const ETATS: Record<Etat, { label: string; bg: string; fg: string; dot: string }> = {
+  deploye: { label: "Déployé",    bg: "#EFFBF2", fg: "#13762C", dot: "#34C759" },
+  encours: { label: "En cours",   bg: "#FFF7EB", fg: "#955804", dot: "#F5A623" },
+  attente: { label: "En attente", bg: "#FFF5F5", fg: "#CA1E12", dot: "#F26D6D" },
+};
+
+export default async function AutomatisationsPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!session.user.isAdmin) redirect("/pipeline");
+
+  // Dossiers réellement éligibles au batch de l'automatisation 1 : "Identification"
+  // (identifie), non archivés, et PAS déjà classés clos/gagnés (client MRI hors Wakam).
+  const eligibleAuto1 = await prisma.insurancePipeline.count({
+    where: {
+      statut: "identifie",
+      copro: {
+        archivedAt: null,
+        NOT: {
+          clientMriStatut: "Insurance client",
+          NOT: { assureurActuel: { contains: "wakam", mode: "insensitive" } },
+        },
+      },
+    },
+  });
+
+  const automations: {
+    n: number;
+    nom: string;
+    etat: Etat;
+    description: string[];
+  }[] = [
+    {
+      n: 1,
+      nom: "Pré-remplissage depuis Front",
+      etat: "deploye",
+      description: [
+        "Pour chaque copropriété, l'automatisation interroge Front (l'ensemble des échanges rattachés au dossier via le building_id) et en extrait les 3 informations clés du contrat d'assurance : le mail du courtier/assureur, le nom de l'assureur porteur, et le numéro de contrat.",
+        "Elle écrit ces informations dans le dossier en mode « fill-if-empty » (elle ne remplace jamais une donnée déjà présente), pose un cliquet pour protéger ces champs des synchros Omni nocturnes, puis aiguille automatiquement le dossier : assureur partenaire (AXA, Generali, SADA, Mila) → ODR ; dossier fiable mais non partenaire → Récupération du RS ; sinon → reste en Identification.",
+        "Les cas ambigus sont signalés pour revue manuelle plutôt que traités à l'aveugle : courtier trouvé dans le champ assureur (corrigé + noté), ex-assuré Matera / probable Wakam, ou conflit de porteur (« Possible faux ODR »). Le batch ci-dessous ne touche jamais un dossier déjà gagné/client.",
+      ],
+    },
+    {
+      n: 2,
+      nom: "ODR — Ordre de Remplacement",
+      etat: "encours",
+      description: [
+        "Lorsqu'une copropriété est déjà assurée chez l'un des 4 partenaires (AXA, Generali, SADA, Mila), Matera peut devenir directement le nouveau courtier via un Ordre de Remplacement — sans passer par la demande de RS ni par les devis. C'est un raccourci majeur du pipeline.",
+        "L'identification et le rangement des dossiers dans l'étape « ODR en cours » sont déjà assurés par l'automatisation 1 (les deux sont fusionnées sur la partie routage).",
+        "Reste à construire : l'envoi effectif de l'ordre de remplacement aux assureurs, et la vérification du vrai porteur avant l'envoi. Les garde-fous sont déjà en place — les dossiers « Possible faux ODR » (le champ assureur contredit le porteur) et « Probable Wakam » sont signalés pour être exclus et traités à la main.",
+      ],
+    },
+    {
+      n: 3,
+      nom: "Complétion du mail courtier",
+      etat: "attente",
+      description: [
+        "Quand le mail du courtier n'a pas pu être récupéré via Front, cette automatisation le complète à partir d'une base de référence assureur → courtier (adresses de contact connues par compagnie / cabinet).",
+        "Objectif : maximiser la part de dossiers réellement contactables avant l'envoi des demandes de RS (automatisation 4), au lieu de les laisser bloqués faute d'adresse exploitable.",
+      ],
+    },
+    {
+      n: 4,
+      nom: "Envoi des demandes de RS",
+      etat: "attente",
+      description: [
+        "Envoie automatiquement les demandes de relevé de sinistralité (RS) aux courtiers / assureurs via Front, à partir des infos remplies par l'automatisation 1.",
+        "Gère le cycle complet : relances automatiques en l'absence de réponse, puis traitement des réponses entrantes — remercier, enregistrer le RS reçu, faire avancer le dossier à l'étape suivante, et archiver l'échange.",
+        "C'est le cœur historique du projet : automatiser l'étape RS, aujourd'hui faite à la main par les gestionnaires.",
+      ],
+    },
+    {
+      n: 5,
+      nom: "Demande de devis",
+      etat: "encours",
+      description: [
+        "Envoie les demandes de devis aux assureurs partenaires (AXA & Mila), réceptionne les deux devis, et fait avancer le dossier vers l'étape « Comparaison des devis ».",
+        "La base de comparaison s'appuie sur la dernière prime réellement payée par la copropriété (récupérée via Front), pour évaluer le gain proposé par chaque devis.",
+        "En cours de construction sur une autre session de travail.",
+      ],
+    },
+  ];
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Navbar user={session.user} />
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold" style={{ color: "#26262C", letterSpacing: "-0.02em" }}>
+            Automatisations
+          </h1>
+          <p className="text-sm mt-1" style={{ color: "#656576" }}>
+            Les 5 automatisations du parcours MRI — état d&apos;avancement et contrôles admin.
+          </p>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {automations.map((a) => {
+            const etat = ETATS[a.etat];
+            return (
+              <div
+                key={a.n}
+                style={{
+                  background: "#fff", border: "1px solid #E8E8EC", borderRadius: 12,
+                  padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)",
+                }}
+              >
+                {/* En-tête : n° + nom + badge état */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                  <span style={{
+                    flexShrink: 0, width: 28, height: 28, borderRadius: 8, background: "#F5F5FF",
+                    color: "#4E49FC", fontSize: 14, fontWeight: 700, display: "flex",
+                    alignItems: "center", justifyContent: "center",
+                  }}>
+                    {a.n}
+                  </span>
+                  <h2 style={{ fontSize: 16, fontWeight: 600, color: "#26262C", flex: 1 }}>
+                    Automatisation {a.n} — {a.nom}
+                  </h2>
+                  <span style={{
+                    display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0,
+                    padding: "4px 12px", borderRadius: 999, fontSize: 12, fontWeight: 600,
+                    background: etat.bg, color: etat.fg,
+                  }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: etat.dot }} />
+                    {etat.label}
+                  </span>
+                </div>
+
+                {/* Description */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 900 }}>
+                  {a.description.map((p, i) => (
+                    <p key={i} style={{ fontSize: 13, lineHeight: "20px", color: "#4E4E58", margin: 0 }}>
+                      {p}
+                    </p>
+                  ))}
+                </div>
+
+                {/* Contrôles admin — pour l'instant uniquement l'auto 1 (le batch). */}
+                {a.n === 1 && (
+                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
+                      Contrôles admin
+                    </div>
+                    <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
+                      {eligibleAuto1} dossier{eligibleAuto1 > 1 ? "s" : ""} en « Identification » encore à pré-remplir
+                      (hors dossiers déjà clients / gagnés).
+                    </p>
+                    <AutofillBatchButton defaultTarget={Math.min(100, eligibleAuto1)} stock={eligibleAuto1} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </main>
+    </div>
+  );
+}

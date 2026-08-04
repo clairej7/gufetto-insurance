@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LayoutDashboard, LogOut, CheckSquare, RefreshCw } from "lucide-react";
+import { LayoutDashboard, LogOut, CheckSquare, RefreshCw, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface NavbarProps {
@@ -80,6 +80,18 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
                     )}
                   >
                     Tracking
+                  </Link>
+                  <Link
+                    href="/admin/automatisations"
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                      pathname.startsWith("/admin/automatisations")
+                        ? "text-[#4E49FC] bg-[#F5F5FF]"
+                        : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
+                    )}
+                  >
+                    <Zap className="h-4 w-4" />
+                    Automatisations
                   </Link>
                   <Link
                     href="/admin/activite"
