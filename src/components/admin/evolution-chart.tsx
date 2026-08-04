@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   BarChart,
   Bar,
@@ -72,30 +73,92 @@ function buildWeeks(events: RawEvent[], gestionnaires: string[]): Record<string,
   return uniqueWeeks.map(w => ({ week: w.label, ...map[w.key] }));
 }
 
+const N_DAYS = 14;
+function getDayKey(date: Date): { key: string; label: string } {
+  const d = new Date(date);
+  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const label = d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" }); // ex. "lun 12"
+  return { key, label };
+}
+
+// Découpage par JOUR sur les N_DAYS derniers jours (pour voir "depuis hier").
+function buildDays(events: RawEvent[], gestionnaires: string[]): Record<string, unknown>[] {
+  const days: { key: string; label: string }[] = [];
+  const now = new Date();
+  for (let i = N_DAYS - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    days.push(getDayKey(d));
+  }
+  const map: Record<string, Record<string, number>> = {};
+  for (const dd of days) map[dd.key] = {};
+
+  for (const ev of events) {
+    if (gestionnaires.length > 0 && !gestionnaires.includes(ev.pipeline.copro.gestionnaireEmail ?? "")) continue;
+    const { key } = getDayKey(new Date(ev.createdAt));
+    if (!map[key]) continue;
+    const statut = LOST_STATUTS.has(ev.nouveauStatut ?? "") ? "_lost" : (ev.nouveauStatut ?? "");
+    if (!TRACKED.find(t => t.statut === statut)) continue;
+    map[key][statut] = (map[key][statut] ?? 0) + 1;
+  }
+  // On garde la clé "week" comme dataKey de l'axe X (c'est juste le libellé).
+  return days.map(dd => ({ week: dd.label, ...map[dd.key] }));
+}
+
 interface EvolutionChartProps {
   events: RawEvent[];
   filteredGestionnaires: string[];
 }
 
 export function EvolutionChart({ events, filteredGestionnaires }: EvolutionChartProps) {
-  const data = buildWeeks(events, filteredGestionnaires);
+  const [mode, setMode] = useState<"semaine" | "jour">("semaine");
+  const data = mode === "jour"
+    ? buildDays(events, filteredGestionnaires)
+    : buildWeeks(events, filteredGestionnaires);
   const hasData = data.some(w => TRACKED.some(t => (w as Record<string, unknown>)[t.statut]));
+
+  const toggle = (
+    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+      <div style={{ display: "flex", gap: 2, background: "#F7F7F8", borderRadius: 6, padding: 2 }}>
+        {(["semaine", "jour"] as const).map(m => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            style={{
+              fontSize: 12, fontWeight: 500, padding: "4px 12px", borderRadius: 4,
+              border: "none", cursor: "pointer",
+              background: mode === m ? "#fff" : "transparent",
+              color: mode === m ? "#26262C" : "#A2A1AF",
+              boxShadow: mode === m ? "0 1px 2px rgba(13,22,63,.08)" : "none",
+            }}
+          >
+            {m === "semaine" ? "Semaine" : "Jour (14 j)"}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 
   if (!hasData) {
     return (
-      <div style={{
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        height: 200, color: "#A2A1AF", fontSize: 13, gap: 8,
-      }}>
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M3 3v18h18M7 16l4-4 4 4 4-8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        Les transitions apparaîtront ici au fil des semaines
-      </div>
+      <>
+        {toggle}
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          height: 200, color: "#A2A1AF", fontSize: 13, gap: 8,
+        }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M3 3v18h18M7 16l4-4 4 4 4-8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {mode === "jour" ? "Aucune transition sur les 14 derniers jours" : "Les transitions apparaîtront ici au fil des semaines"}
+        </div>
+      </>
     );
   }
 
   return (
+    <>
+    {toggle}
     <ResponsiveContainer width="100%" height={220}>
       <BarChart data={data} barSize={14} barCategoryGap="30%">
         <CartesianGrid vertical={false} stroke="#F3F3F5" />
@@ -139,5 +202,6 @@ export function EvolutionChart({ events, filteredGestionnaires }: EvolutionChart
         ))}
       </BarChart>
     </ResponsiveContainer>
+    </>
   );
 }

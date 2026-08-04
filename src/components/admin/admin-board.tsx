@@ -300,8 +300,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
       {/* ── Évolution semaine par semaine ── */}
       <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Activité par semaine</span>
-          <span style={{ fontSize: 12, color: "#A2A1AF", fontFamily: FONT_MONO }}>transitions de statut · 12 dernières semaines</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Activité</span>
+          <span style={{ fontSize: 12, color: "#A2A1AF", fontFamily: FONT_MONO }}>transitions de statut · hors synchro Omni</span>
         </div>
         <EvolutionChart events={events} filteredGestionnaires={selectedGestionnaires} />
       </div>
