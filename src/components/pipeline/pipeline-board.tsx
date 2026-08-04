@@ -341,7 +341,9 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
   // KPIs : actifs = urgent + autres + ODR (l'ODR est un dossier en cours de
   //   travail → inclus pour que le compteur ne chute pas quand on aiguille en ODR).
   //   Exclut seulement clos (dont clients MRI) et perdus.
-  const actifsCount = filtered.filter(p => { const b = bucketOf(p); return b === "urgent" || b === "autre" || b === "odr"; }).length;
+  // "contrat_signe" = deal gagné (compté dans "gagnés") → exclu des "actifs"
+  // même si son bucket est urgent/autre, sinon il serait compté deux fois.
+  const actifsCount = filtered.filter(p => { const b = bucketOf(p); return (b === "urgent" || b === "autre" || b === "odr") && p.statut !== "contrat_signe"; }).length;
   const urgent = filtered.filter(p => bucketOf(p) === "urgent").length;
   // "Deals gagnés" : dossiers clos (clients MRI hors Wakam inclus) + contrat signé en cours.
   const dealsGagnes = filtered.filter(p => bucketOf(p) === "clos" || p.statut === "contrat_signe").length;
