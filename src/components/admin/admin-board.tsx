@@ -169,18 +169,29 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
   // sont comptés par bucket. Ainsi un client "identifié" tombe dans "Clos", pas
   // dans "Identifié" -> mêmes nombres des deux côtés, plus de dossiers qui
   // "sautent" d'une étape à l'autre entre les deux interfaces.
+  const rowsForCol = (statut: string): Pipeline[] => {
+    if (statut === "_perdu") return flost;
+    if (statut === "_clos") return fp.filter(p => bucketOf(p) === "clos");
+    if (statut === "odr_en_cours") return fp.filter(p => bucketOf(p) === "odr");
+    // Signé = deal gagné à part (hors "actifs", hors "clos").
+    if (statut === "contrat_signe") return fp.filter(p => p.statut === "contrat_signe" && bucketOf(p) !== "clos");
+    return fp.filter(p => p.statut === statut && isActif(p));
+  };
+  const sumPrime = (rows: Pipeline[]) => rows.reduce((s, p) => s + (p.copro.primeActuelle ?? 0), 0);
   const barData = STAGE_COLS.map(col => {
-    let count: number;
-    if (col.statut === "_perdu") count = lostCount;
-    else if (col.statut === "_clos") count = fp.filter(p => bucketOf(p) === "clos").length;
-    else if (col.statut === "odr_en_cours") count = fp.filter(p => bucketOf(p) === "odr").length;
-    // Signé = deal gagné à part (hors "actifs", hors "clos") ; compté par statut.
-    else if (col.statut === "contrat_signe") count = fp.filter(p => p.statut === "contrat_signe" && bucketOf(p) !== "clos").length;
-    else count = fp.filter(p => p.statut === col.statut && isActif(p)).length;
-    return { ...col, count };
+    const rows = rowsForCol(col.statut);
+    return { ...col, count: rows.length, prime: sumPrime(rows) };
   });
   const maxBar = Math.max(...barData.map(b => b.count), 1);
+  const maxPrime = Math.max(...barData.map(b => b.prime), 1);
   const CHART_H = 140;
+
+  // Montants (primes) et ARR potentiel (25% de la prime) par catégorie.
+  const primeActifs = sumPrime(activePipelines);
+  const primeGagnes = sumPrime(wonPipelines);
+  const primePerdus = sumPrime(flost);
+  const fmtEur = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
+  const fmtEurC = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} M€` : n >= 1e3 ? `${Math.round(n / 1e3)} k€` : `${Math.round(n)} €`;
 
   // Regroupement visuel du graphe en 4 zones (contenu identique, juste l'affichage).
   const byStatut = Object.fromEntries(barData.map(b => [b.statut, b] as const));
@@ -198,6 +209,22 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
           {bar.count}
         </span>
         <div style={{ width: "100%", height: barH, background: bar.count > 0 ? bar.bar : "#F3F3F5", borderRadius: "4px 4px 0 0", transition: "height 300ms ease", opacity: bar.count > 0 ? 1 : 0.4 }} />
+        <div style={{ width: "100%", height: 1, background: "#E8E8EC" }} />
+        <span style={{ fontSize: 11, color: "#656576", textAlign: "center", marginTop: 6, lineHeight: "13px", fontWeight: 500, maxWidth: "100%", whiteSpace: "normal", wordBreak: "break-word" }}>
+          {bar.shortLabel}
+        </span>
+      </div>
+    );
+  };
+
+  const renderRevenueBar = (bar: (typeof barData)[number]) => {
+    const barH = bar.prime > 0 ? Math.max(Math.round((bar.prime / maxPrime) * CHART_H), 6) : 0;
+    return (
+      <div key={bar.statut} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 0, height: "100%", justifyContent: "flex-end" }}>
+        <span style={{ fontSize: bar.prime > 0 ? 13 : 12, fontWeight: 700, color: bar.prime > 0 ? bar.fg : "#C0C0C9", fontVariantNumeric: "tabular-nums", marginBottom: 4, minHeight: 22, display: "flex", alignItems: "flex-end" }}>
+          {bar.prime > 0 ? fmtEurC(bar.prime) : "—"}
+        </span>
+        <div style={{ width: "100%", height: barH, background: bar.prime > 0 ? bar.bar : "#F3F3F5", borderRadius: "4px 4px 0 0", transition: "height 300ms ease", opacity: bar.prime > 0 ? 1 : 0.4 }} />
         <div style={{ width: "100%", height: 1, background: "#E8E8EC" }} />
         <span style={{ fontSize: 11, color: "#656576", textAlign: "center", marginTop: 6, lineHeight: "13px", fontWeight: 500, maxWidth: "100%", whiteSpace: "normal", wordBreak: "break-word" }}>
           {bar.shortLabel}
@@ -316,6 +343,62 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
             </div>
           </div>
 
+        </div>
+      </div>
+
+      {/* ── Revenus — montants en jeu ── */}
+      <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
+        <div style={{ marginBottom: 6 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Revenus — montants en jeu</span>
+        </div>
+        <div style={{ fontSize: 12, color: "#955804", background: "#FFF7EB", border: "1px solid #F5E0B0", borderRadius: 6, padding: "6px 10px", marginBottom: 20 }}>
+          ⚠️ Certains montants de prime sont mal renseignés dans les données — chiffres indicatifs.
+        </div>
+
+        {/* Sous-partie 1 : montant (somme des primes) par étape, mêmes 4 zones */}
+        <div style={{ display: "flex", alignItems: "stretch" }}>
+          <div style={{ flex: 6, display: "flex", flexDirection: "column" }}>
+            <div style={{ ...sectionTitle, color: "#656576" }}>{fmtEur(primeActifs)} · actifs</div>
+            <div style={barsRow}>
+              {G_FUNNEL.map(renderRevenueBar)}
+              <div style={dividerBars} />
+              {G_ODR.map(renderRevenueBar)}
+            </div>
+          </div>
+          <div style={dividerFull} />
+          <div style={{ flex: 2, display: "flex", flexDirection: "column" }}>
+            <div style={{ ...sectionTitle, color: "#13762C" }}>{fmtEur(primeGagnes)} · gagnés</div>
+            <div style={barsRow}>{G_GAGNE.map(renderRevenueBar)}</div>
+          </div>
+          <div style={dividerFull} />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            <div style={{ ...sectionTitle, color: "#CA1E12" }}>{fmtEur(primePerdus)} · perdus</div>
+            <div style={barsRow}>{G_PERDU.map(renderRevenueBar)}</div>
+          </div>
+        </div>
+
+        {/* Sous-partie 2 : synthèse montant + ARR potentiel (×0,25) */}
+        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginTop: 8, marginBottom: 12 }}>Synthèse & ARR potentiel</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+          {[
+            { label: "Actifs", prime: primeActifs, color: "#26262C" },
+            { label: "Gagnés", prime: primeGagnes, color: "#13762C" },
+            { label: "Perdus", prime: primePerdus, color: "#CA1E12" },
+          ].map(b => (
+            <div key={b.label} style={{ border: "1px solid #E8E8EC", borderRadius: 8, padding: "14px 16px", background: "#FBFBFB" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, fontFamily: FONT_MONO, textTransform: "uppercase", letterSpacing: "0.04em", color: b.color, marginBottom: 12 }}>{b.label}</div>
+              <div style={{ display: "flex", gap: 24 }}>
+                <div>
+                  <div style={{ fontSize: 19, fontWeight: 700, color: "#26262C", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{fmtEur(b.prime)}</div>
+                  <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>Montant en jeu</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 19, fontWeight: 700, color: b.color, fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{fmtEur(b.prime * 0.25)}</div>
+                  <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>ARR potentiel (×0,25)</div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
