@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { resolvePrimeReference } from "@/lib/devis-prime";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -46,6 +47,9 @@ type CoproInput = {
   adresse?: string | null;
   contactCsNom?: string | null;
   primeActuelle?: number | null;
+  // Dernière prime payée (mail de demande de devis Front) — base de comparaison
+  // prioritaire sur la prime du contrat quand cohérente (cf. resolvePrimeReference).
+  primePayee?: number | null;
   gestionnaireEmail?: string | null;
   gestionnaireNom?: string | null;
 };
@@ -97,7 +101,11 @@ function buildPrompt(
   devis: DevisInput[],
   recommandeAssureur?: string
 ): string {
-  const basePrime = contratActuel.primeTTC ?? copro.primeActuelle;
+  // Base de comparaison = prime de référence (dernière prime payée si cohérente,
+  // sinon prime du contrat). En cas étrange (`value` null), on retombe sur le
+  // contrat pour ne pas casser la génération de l'email.
+  const primeRef = resolvePrimeReference(contratActuel.primeTTC ?? copro.primeActuelle, copro.primePayee);
+  const basePrime = primeRef.value ?? contratActuel.primeTTC ?? copro.primeActuelle;
   const gestionnaireNom = copro.gestionnaireNom?.trim() || formatGestionnaireNom(copro.gestionnaireEmail);
 
   const lines: string[] = [
@@ -111,7 +119,7 @@ function buildPrompt(
     "CONSIGNE : N'ajoute AUCUNE note, aucun commentaire méta, aucune réserve après l'email. Rédige uniquement le corps du mail professionnel.",
     "",
     `=== CONTRAT ACTUEL (${contratActuel.assureur ?? "Assureur actuel"}) ===`,
-    `Prime TTC annuelle : ${formatPrime(contratActuel.primeTTC ?? copro.primeActuelle)}`,
+    `Prime TTC annuelle : ${formatPrime(basePrime)}`,
   ];
 
   if (contratActuel.franchiseIncendie) lines.push(`Franchise incendie : ${contratActuel.franchiseIncendie}`);
@@ -133,9 +141,9 @@ function buildPrompt(
     if (basePrime != null) {
       const econ = basePrime - d.primeTTC;
       if (econ > 0) {
-        lines.push(`Économie vs contrat actuel : −${Math.abs(econ).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €/an`);
+        lines.push(`Économie vs prime actuelle : −${Math.abs(econ).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €/an`);
       } else {
-        lines.push(`Surcoût vs contrat actuel : +${Math.abs(econ).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €/an`);
+        lines.push(`Surcoût vs prime actuelle : +${Math.abs(econ).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €/an`);
       }
     }
     if (d.data.franchiseIncendie) lines.push(`Franchise incendie : ${d.data.franchiseIncendie}`);

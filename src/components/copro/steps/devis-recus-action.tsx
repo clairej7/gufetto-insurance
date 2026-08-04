@@ -16,6 +16,7 @@ import {
   Sparkles,
   RefreshCw,
   ArrowRight,
+  Search,
 } from "lucide-react";
 import {
   addDevisRecu,
@@ -25,6 +26,7 @@ import {
   advanceStatut,
   logRecoSent,
 } from "@/lib/actions";
+import { resolvePrimeReference, parseEuroAmount } from "@/lib/devis-prime";
 
 async function uploadPdf(file: File, pipelineId: string): Promise<string | null> {
   try {
@@ -521,11 +523,13 @@ function RecoAndEmailSection({
   copro,
   contratActuelData,
   allDevis,
+  primePayee,
 }: {
   pipelineId: string;
   copro: DevisRecusActionProps["copro"];
   contratActuelData: ExtractedData;
   allDevis: DevisRecu[];
+  primePayee?: number | null;
 }) {
   const [isPending, startTransition] = useTransition();
   const [isChanging, setIsChanging] = useState(false);
@@ -553,6 +557,7 @@ function RecoAndEmailSection({
             adresse: copro.adresse,
             contactCsNom: copro.contactCsNom,
             primeActuelle: copro.primeActuelle,
+            primePayee: primePayee ?? null,
             gestionnaireEmail: copro.gestionnaireEmail,
             gestionnaireNom: copro.gestionnaireNom,
           },
@@ -789,6 +794,11 @@ export function DevisRecusAction({
   const [freshContrat, setFreshContrat] = useState<ExtractedData | null>(null);
   const [freshDevis, setFreshDevis] = useState<ExtractedData[]>([]);
 
+  // Dernière prime payée récupérée depuis le mail de demande de devis (Front).
+  const [primePayee, setPrimePayee] = useState<number | null>(null);
+  const [checkingPrime, setCheckingPrime] = useState(false);
+  const [manualPrime, setManualPrime] = useState(""); // saisie en cas étrange (bloqué)
+
   // Display data: fresh extraction takes priority, then DB props
   const displayContrat = freshContrat ?? parseData(contratActuelData);
   const displayDevisList = freshDevis.length > 0
@@ -806,11 +816,17 @@ export function DevisRecusAction({
       }));
 
   const contratPrime = displayContrat.primeTTC ?? copro.primeActuelle;
+  // Base de comparaison = prime de référence (dernière prime payée vérifiée via
+  // Front si cohérente ; cf. resolvePrimeReference). Cas étrange → saisie manuelle.
+  const primeRef = resolvePrimeReference(contratPrime, primePayee);
+  const manualNum = parseEuroAmount(manualPrime);
+  const effectiveBase: number | null =
+    primeRef.flag === "bloque" ? manualNum : primeRef.value ?? contratPrime;
 
   const cols: ColDef[] = [
     {
       label: displayContrat.assureur ?? copro.assureurActuel ?? "Contrat actuel",
-      prime: contratPrime,
+      prime: effectiveBase ?? contratPrime,
       data: displayContrat,
       isCurrent: true,
     },
@@ -821,6 +837,35 @@ export function DevisRecusAction({
       isRecommande: d.recommande,
     })),
   ];
+
+  async function checkPrime() {
+    setCheckingPrime(true);
+    try {
+      const res = await fetch("/api/devis/prime-payee", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pipelineId }),
+      });
+      const json = (await res.json()) as {
+        success?: boolean;
+        montant?: number | null;
+        matchedByRef?: boolean;
+        reason?: string;
+        error?: string;
+      };
+      if (json.success && json.montant != null) {
+        setPrimePayee(json.montant);
+        toast.success(
+          `Dernière prime payée : ${formatPrime(json.montant)}${json.matchedByRef ? "" : " (dossier non confirmé)"}`,
+        );
+      } else {
+        toast.error(`Prime introuvable — ${json.reason ?? json.error ?? "inconnu"}`);
+      }
+    } catch {
+      toast.error("Erreur réseau");
+    }
+    setCheckingPrime(false);
+  }
 
   async function handleCompare() {
     if (!contratFile || !devis1File) return;
@@ -986,6 +1031,56 @@ export function DevisRecusAction({
         </button>
       </div>
 
+      {/* Base de comparaison : dernière prime payée (mail de demande de devis) */}
+      <div
+        className="rounded-xl border p-3 flex items-center justify-between gap-3"
+        style={{
+          borderColor: primeRef.flag === "bloque" ? "#F5C4C0" : "#E8E8EC",
+          background: primeRef.flag === "bloque" ? "#FEF2F1" : "#FAFAFA",
+        }}
+      >
+        <div className="text-sm" style={{ color: "#656576" }}>
+          {primePayee == null ? (
+            <>
+              Base de comparaison : <strong>prime du contrat {formatPrime(contratPrime)}</strong>. Le contrat
+              peut dater — vérifie la dernière prime payée.
+            </>
+          ) : primeRef.flag === "bloque" ? (
+            <span style={{ color: "#CA1E12" }}>
+              Écart anormal : contrat {formatPrime(contratPrime)} vs dernière prime payée {formatPrime(primePayee)}.
+              Saisis le montant à retenir.
+            </span>
+          ) : primeRef.source === "prime" ? (
+            <>
+              Base recalée sur la <strong>dernière prime payée {formatPrime(primePayee)}</strong> (au lieu du contrat{" "}
+              {formatPrime(contratPrime)}).
+            </>
+          ) : (
+            <>
+              Contrat {formatPrime(contratPrime)} conservé (≥ dernière prime payée {formatPrime(primePayee)}).
+            </>
+          )}
+        </div>
+        {primeRef.flag === "bloque" ? (
+          <Input
+            value={manualPrime}
+            onChange={(e) => setManualPrime(e.target.value)}
+            placeholder="Montant à retenir €"
+            className="w-40 shrink-0"
+          />
+        ) : (
+          <Button
+            onClick={checkPrime}
+            disabled={checkingPrime}
+            className="flex items-center gap-2 shrink-0 font-medium"
+            style={{ backgroundColor: "#F0EFFF", color: "#4E49FC" }}
+          >
+            {checkingPrime ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            Vérifier le montant
+          </Button>
+        )}
+      </div>
+
       {/* Summary cards */}
       <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${1 + displayDevisList.length}, 1fr)` }}>
         <SummaryCard
@@ -999,7 +1094,7 @@ export function DevisRecusAction({
             label={`Devis ${i + 1}`}
             data={d.data}
             isRecommande={d.recommande}
-            primeActuelle={contratPrime}
+            primeActuelle={effectiveBase}
           />
         ))}
       </div>
@@ -1019,6 +1114,7 @@ export function DevisRecusAction({
             copro={copro}
             contratActuelData={displayContrat}
             allDevis={dbDevis}
+            primePayee={effectiveBase}
           />
         ) : (
           <div className="flex items-center gap-2 text-sm rounded-xl px-4 py-3" style={{ background: "#F0EFFF", color: "#8784FD" }}>

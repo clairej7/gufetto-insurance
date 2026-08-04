@@ -15,6 +15,7 @@
 // à ajuster avec les retours du terrain.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { parseEuroAmount } from "@/lib/devis-prime";
 
 const FRONT_API_URL = "https://api2.frontapp.com";
 const FRONT_TOKEN = process.env.FRONT_API_TOKEN;
@@ -406,4 +407,75 @@ export async function extractInsuranceInfoFromFront(buildingId: string): Promise
     numeroSource,
     sampledConversations: ranked.length,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Dernière prime payée — depuis le mail de demande de devis déjà envoyé
+// ---------------------------------------------------------------------------
+//
+// Source de vérité (choix Quentin) : le mail "Matera - demande de devis MRI"
+// envoyé à l'assureur porte la ligne "- Dernières primes payées : X €". On le
+// retrouve par building_id (même mécanisme que l'auto 1) puis on ancre sur le
+// marqueur caché `gufetto-ref:<pipelineId>:` posé par /api/front/draft, pour être
+// certain du bon dossier. Sert de base de comparaison (cf. resolvePrimeReference).
+
+const PRIME_PAYEE_RE =
+  /derni[eè]res?\s+primes?\s+pay[ée]es?\s*:?\s*([\d][\d\s.,  ]*?)\s*€/i;
+
+function parsePrimePayeeFromText(text: string): number | null {
+  const m = text.match(PRIME_PAYEE_RE);
+  return m ? parseEuroAmount(m[1]) : null;
+}
+
+export type PrimePayeeResult = {
+  montant: number | null;
+  conversationId: string | null;
+  matchedByRef: boolean; // true = ancré sur gufetto-ref (dossier certain)
+  reason: string;
+};
+
+export async function getDernierePrimePayeeFromFront(
+  buildingId: string,
+  pipelineId: string,
+): Promise<PrimePayeeResult> {
+  const empty = (reason: string): PrimePayeeResult => ({
+    montant: null,
+    conversationId: null,
+    matchedByRef: false,
+    reason,
+  });
+  if (!buildingId) return empty("building_id manquant");
+
+  const convs = await searchByBuildingId(buildingId);
+  if (convs.length === 0) return empty("aucune conversation Front");
+
+  // On privilégie les fils de demande de devis ; sinon on scanne tout.
+  const devisConvs = convs.filter((c) => /demande\s+de\s+devis/i.test(c.subject ?? ""));
+  const pool = devisConvs.length > 0 ? devisConvs : convs;
+
+  let fallback: PrimePayeeResult | null = null;
+
+  for (const c of pool) {
+    const messages = await getMessages(c.id);
+    for (const m of messages) {
+      const html = m.body ?? ""; // marqueur gufetto-ref = span caché dans le HTML
+      const plain = m.text ?? m.blurb ?? ""; // "Dernières primes payées" = texte visible
+      const montant = parsePrimePayeeFromText(`${m.subject ?? ""}\n${plain || html}`);
+      if (montant == null) continue;
+      if (html.includes(`gufetto-ref:${pipelineId}:`)) {
+        return { montant, conversationId: c.id, matchedByRef: true, reason: "gufetto-ref (dossier exact)" };
+      }
+      // Sans marqueur confirmé : repli seulement si le fil est bien une demande de devis.
+      if (!fallback && devisConvs.length > 0) {
+        fallback = {
+          montant,
+          conversationId: c.id,
+          matchedByRef: false,
+          reason: "sujet 'demande de devis' (dossier non confirmé par gufetto-ref)",
+        };
+      }
+    }
+  }
+
+  return fallback ?? empty("prime introuvable dans les demandes de devis Front");
 }
