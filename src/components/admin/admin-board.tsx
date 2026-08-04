@@ -132,9 +132,9 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostGestionnaires
     clientMriStatut: p.copro.clientMriStatut,
     assureurActuel: p.copro.assureurActuel,
   });
-  // ODR inclus : dossier en cours de travail → compté dans "actifs" (cohérent avec
-  // la page Pipeline ; évite que le compteur chute quand on aiguille en ODR).
-  const isActif = (p: Pipeline) => { const b = bucketOf(p); return b === "urgent" || b === "autre" || b === "odr"; };
+  // ODR inclus (dossier en cours de travail). "contrat_signe" exclu : c'est un
+  // deal gagné (compté dans "gagnés"), sinon double-comptage actifs+gagnés.
+  const isActif = (p: Pipeline) => { const b = bucketOf(p); return (b === "urgent" || b === "autre" || b === "odr") && p.statut !== "contrat_signe"; };
 
   // "Deals gagnés" = clos (clients MRI hors Wakam inclus) + contrat signé en cours.
   const wonPipelines     = fp.filter(p => bucketOf(p) === "clos" || p.statut === "contrat_signe");
@@ -164,6 +164,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostGestionnaires
     if (col.statut === "_perdu") count = lostCount;
     else if (col.statut === "_clos") count = fp.filter(p => bucketOf(p) === "clos").length;
     else if (col.statut === "odr_en_cours") count = fp.filter(p => bucketOf(p) === "odr").length;
+    // Signé = deal gagné à part (hors "actifs", hors "clos") ; compté par statut.
+    else if (col.statut === "contrat_signe") count = fp.filter(p => p.statut === "contrat_signe" && bucketOf(p) !== "clos").length;
     else count = fp.filter(p => p.statut === col.statut && isActif(p)).length;
     return { ...col, count };
   });
