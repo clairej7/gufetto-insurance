@@ -36,7 +36,17 @@ export async function POST(req: NextRequest) {
   const pipelines = await prisma.insurancePipeline.findMany({
     where: {
       statut: "identifie",
-      copro: { archivedAt: null },
+      copro: {
+        archivedAt: null,
+        // On ne prospecte QUE des "identifié" réellement actifs : on exclut les
+        // dossiers déjà classés "clos/gagné". Pour un identifié, clos = client MRI
+        // HubSpot ("Insurance client") hors Wakam. Sinon le batch aiguillerait en
+        // ODR des clients existants (mal rangés à l'étape "identifié" par l'import).
+        NOT: {
+          clientMriStatut: "Insurance client",
+          NOT: { assureurActuel: { contains: "wakam", mode: "insensitive" } },
+        },
+      },
       OR: [{ autofillTenteLe: null }, { autofillTenteLe: { lt: cooldown } }],
     },
     select: { id: true },
