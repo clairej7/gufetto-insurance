@@ -49,7 +49,7 @@ const STAGE_COLS: { statut: string; label: string; shortLabel: string; bg: strin
   { statut: "devis_recus",        label: "Devis reçus",      shortLabel: "Devis reçus", bg: "#EBEBFF", fg: "#3C38C7", bar: "#7C79F8" },
   { statut: "envoye_cs",          label: "Validé CS",        shortLabel: "Validé CS",   bg: "#FFF7EB", fg: "#955804", bar: "#F5A623" },
   { statut: "contrat_signe",      label: "Contrat signé",    shortLabel: "Signé",       bg: "#EFFBF2", fg: "#13762C", bar: "#34C759" },
-  { statut: "termine",            label: "Clôturé",          shortLabel: "Clôturé",     bg: "#CFF2D8", fg: "#0E5D22", bar: "#0E5D22" },
+  { statut: "_clos",              label: "Clos",             shortLabel: "Clos",        bg: "#CFF2D8", fg: "#0E5D22", bar: "#0E5D22" },
   { statut: "_perdu",             label: "Perdus",           shortLabel: "Perdus",      bg: "#FFF5F5", fg: "#CA1E12", bar: "#F26D6D" },
 ];
 
@@ -58,20 +58,6 @@ const STAGE_COLS: { statut: string; label: string; shortLabel: string; bg: strin
 // barres + Perdus = total). resiliation_envoyee / sepa_complete = "clos par statut"
 // (cf. CLOSED_BY_STATUT) → barre Clôturé. rs_recu / validation_cs = sous-états rares
 // repliés sur l'étape précédente la plus proche.
-const STATUT_TO_BAR: Record<string, string> = {
-  identifie: "identifie",
-  odr_en_cours: "odr_en_cours",
-  rs_en_cours: "rs_en_cours",
-  rs_recu: "rs_en_cours",
-  devis_demandes: "devis_demandes",
-  devis_recus: "devis_recus",
-  envoye_cs: "envoye_cs",
-  validation_cs: "envoye_cs",
-  contrat_signe: "contrat_signe",
-  resiliation_envoyee: "termine",
-  sepa_complete: "termine",
-  termine: "termine",
-};
 
 type TagVariant = "primary" | "warning" | "success" | "success-filled" | "error" | "neutral";
 const TAG_BG: Record<TagVariant, string> = {
@@ -168,12 +154,19 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostGestionnaires
     activeKpi === "gagnes"  ? { label: "Deals gagnés",     rows: wonPipelines }    : null;
 
   /* ── Bar chart data ── */
-  const barData = STAGE_COLS.map(col => ({
-    ...col,
-    count: col.statut === "_perdu"
-      ? lostCount
-      : fp.filter(p => STATUT_TO_BAR[p.statut] === col.statut).length,
-  }));
+  // Répartition alignée sur les buckets (comme la page Pipeline) : les barres
+  // d'étape ne comptent que les dossiers ACTIFS de cette étape ; ODR/Clos/Perdus
+  // sont comptés par bucket. Ainsi un client "identifié" tombe dans "Clos", pas
+  // dans "Identifié" -> mêmes nombres des deux côtés, plus de dossiers qui
+  // "sautent" d'une étape à l'autre entre les deux interfaces.
+  const barData = STAGE_COLS.map(col => {
+    let count: number;
+    if (col.statut === "_perdu") count = lostCount;
+    else if (col.statut === "_clos") count = fp.filter(p => bucketOf(p) === "clos").length;
+    else if (col.statut === "odr_en_cours") count = fp.filter(p => bucketOf(p) === "odr").length;
+    else count = fp.filter(p => p.statut === col.statut && isActif(p)).length;
+    return { ...col, count };
+  });
   const maxBar = Math.max(...barData.map(b => b.count), 1);
   const CHART_H = 140;
 
