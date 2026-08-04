@@ -253,7 +253,7 @@ export function ActivityBoard({ loginEvents, pipelineEvents }: ActivityBoardProp
           </div>
         ) : (
           <div style={{ padding: "8px 0" }}>
-            {filtered.map(ev => {
+            {filtered.slice(0, 500).map(ev => {
               const email = ev.kind === "login" ? ev.email : ev.createdBy;
               const { icon, text, color } = getEventLabel(ev);
               return (
@@ -279,6 +279,11 @@ export function ActivityBoard({ loginEvents, pipelineEvents }: ActivityBoardProp
                 </div>
               );
             })}
+            {filtered.length > 500 && (
+              <div style={{ padding: "12px 16px", fontSize: 12, fontStyle: "italic", color: "#A2A1AF", borderTop: "1px solid #F3F3F5" }}>
+                … {filtered.length - 500} activités plus anciennes non affichées ici — les compteurs par utilisateur ci-dessus restent complets sur 30 jours.
+              </div>
+            )}
           </div>
         )}
       </div>
