@@ -300,7 +300,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
 
           {/* Zone 3 : Gagnés (signé + clos) */}
           <div style={{ flex: 2, display: "flex", flexDirection: "column" }}>
-            <div style={{ ...sectionTitle, color: "#13762C" }}>Deals gagnés · signature {tauxSignature}%</div>
+            <div style={{ ...sectionTitle, color: "#13762C" }}>{wonPipelines.length} deals gagnés · signature {tauxSignature}%</div>
             <div style={barsRow}>
               {G_GAGNE.map(renderBar)}
             </div>
@@ -310,7 +310,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
 
           {/* Zone 4 : Perdus */}
           <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-            <div style={{ ...sectionTitle, color: "#CA1E12" }}>Deals perdus · perte {tauxPerte}%</div>
+            <div style={{ ...sectionTitle, color: "#CA1E12" }}>{lostCount} deals perdus · perte {tauxPerte}%</div>
             <div style={barsRow}>
               {G_PERDU.map(renderBar)}
             </div>
