@@ -242,12 +242,16 @@ function SummaryCard({
   isCurrent,
   isRecommande,
   primeActuelle,
+  primeOverride,
 }: {
   label: string;
   data: ExtractedData;
   isCurrent?: boolean;
   isRecommande?: boolean;
   primeActuelle?: number | null;
+  // Montant à afficher à la place de data.primeTTC (ex. dernière prime payée
+  // recalée sur la carte "Contrat actuel").
+  primeOverride?: number | null;
 }) {
   const econ =
     !isCurrent && primeActuelle != null && data.primeTTC != null
@@ -288,7 +292,7 @@ function SummaryCard({
           className="text-2xl font-bold mt-1"
           style={{ color: isRecommande ? "#4E49FC" : "#26262C" }}
         >
-          {formatPrime(data.primeTTC)}
+          {formatPrime(primeOverride ?? data.primeTTC)}
         </p>
         <p className="text-xs mt-0.5" style={{ color: "#A2A1AF" }}>/ an TTC</p>
       </div>
@@ -590,6 +594,27 @@ function RecoAndEmailSection({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Régénère automatiquement la reco quand la base de comparaison (dernière prime
+  // payée vérifiée) change → aucune reco ne part avec l'ancien chiffre erroné.
+  const lastPrimePayeeRef = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    const current = primePayee ?? null;
+    if (lastPrimePayeeRef.current === undefined) {
+      lastPrimePayeeRef.current = current; // 1er rendu : mémorise sans régénérer
+      return;
+    }
+    if (current !== lastPrimePayeeRef.current) {
+      lastPrimePayeeRef.current = current;
+      if (recommande) {
+        hasAutoGenRef.current = null;
+        const d = recommande;
+        // Différé hors du corps de l'effet (évite un setState synchrone).
+        queueMicrotask(() => generateEmail(d));
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primePayee]);
 
   async function handleSelectDevis(d: DevisRecu) {
     hasAutoGenRef.current = d.id;
@@ -1087,6 +1112,7 @@ export function DevisRecusAction({
           label="Contrat actuel"
           data={displayContrat}
           isCurrent
+          primeOverride={effectiveBase}
         />
         {displayDevisList.map((d, i) => (
           <SummaryCard
