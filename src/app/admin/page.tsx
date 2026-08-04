@@ -50,8 +50,17 @@ export default async function AdminPage() {
   // Events des 12 dernières semaines pour le graphe d'évolution
   const twelveWeeksAgo = new Date();
   twelveWeeksAgo.setDate(twelveWeeksAgo.getDate() - 84);
+  // Toute transition de statut "faite par nous" : changements manuels, actions
+  // manuelles ET aiguillages de l'automatisation 1 (loggés en sync_auto). On
+  // exclut la synchro Omni nocturne (createdBy "sync") pour ne pas noyer le graphe
+  // sous le pic d'import initial + le bruit quotidien.
   const events = await prisma.pipelineEvent.findMany({
-    where: { type: "statut_change", nouveauStatut: { not: null }, createdAt: { gte: twelveWeeksAgo } },
+    where: {
+      type: { in: ["statut_change", "action_manuelle", "sync_auto"] },
+      nouveauStatut: { not: null },
+      createdBy: { not: "sync" },
+      createdAt: { gte: twelveWeeksAgo },
+    },
     include: { pipeline: { select: { copro: { select: { gestionnaireEmail: true } } } } },
     orderBy: { createdAt: "asc" },
   });
