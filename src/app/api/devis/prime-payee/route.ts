@@ -13,15 +13,18 @@ export async function POST(req: NextRequest) {
 
   const pipeline = await prisma.insurancePipeline.findUnique({
     where: { id: pipelineId },
-    select: { copro: { select: { buildingId: true, adresse: true } } },
+    select: { copro: { select: { buildingId: true, adresse: true, nom: true } } },
   });
 
   const buildingId = pipeline?.copro?.buildingId;
+  // copro.adresse est souvent null → on passe aussi le nom (qui contient l'adresse)
+  // comme indice de recherche Front.
   const adresse = pipeline?.copro?.adresse ?? null;
-  if (!buildingId && !adresse) {
-    return NextResponse.json({ error: "copro introuvable (building_id + adresse absents)" }, { status: 404 });
+  const nom = pipeline?.copro?.nom ?? null;
+  if (!buildingId && !adresse && !nom) {
+    return NextResponse.json({ error: "copro introuvable (building_id + adresse + nom absents)" }, { status: 404 });
   }
 
-  const result = await getDernierePrimePayeeFromFront(buildingId ?? "", pipelineId, adresse);
+  const result = await getDernierePrimePayeeFromFront(buildingId ?? "", pipelineId, [adresse, nom]);
   return NextResponse.json({ success: true, ...result });
 }
