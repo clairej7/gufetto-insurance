@@ -146,7 +146,9 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostGestionnaires
     clientMriStatut: p.copro.clientMriStatut,
     assureurActuel: p.copro.assureurActuel,
   });
-  const isActif = (p: Pipeline) => { const b = bucketOf(p); return b === "urgent" || b === "autre"; };
+  // ODR inclus : dossier en cours de travail → compté dans "actifs" (cohérent avec
+  // la page Pipeline ; évite que le compteur chute quand on aiguille en ODR).
+  const isActif = (p: Pipeline) => { const b = bucketOf(p); return b === "urgent" || b === "autre" || b === "odr"; };
 
   // "Deals gagnés" = clos (clients MRI hors Wakam inclus) + contrat signé en cours.
   const wonPipelines     = fp.filter(p => bucketOf(p) === "clos" || p.statut === "contrat_signe");
