@@ -23,22 +23,27 @@ export default async function AdminPage() {
     orderBy: { copro: { dateEcheance: "asc" } },
   });
 
-  // Dossiers perdus (exclus du dataset actif ci-dessus) : juste de quoi compter
-  // la barre "Perdus" du graphe, filtrable par gestionnaire.
+  // Dossiers perdus (exclus du dataset actif ci-dessus) : passés EN ENTIER (avec
+  // échéance) pour la carte "Perdus" cliquable + le filtre échéance.
   const lostPipelines = await prisma.insurancePipeline.findMany({
     where: {
       statut: { in: ["abandonne", "refuse", "non_assurable"] },
       copro: { archivedAt: null },
     },
-    select: { copro: { select: { gestionnaireEmail: true } } },
+    include: {
+      copro: true,
+      taskCompletions: { include: { task: true } },
+    },
+    orderBy: { copro: { dateEcheance: "asc" } },
   });
-  const lostGestionnaires = lostPipelines.map((p) => p.copro.gestionnaireEmail);
 
   const taskTemplates = await prisma.stageTaskTemplate.findMany();
 
   const gestionnaires = [
     ...new Set(
-      pipelines.map((p) => p.copro.gestionnaireEmail).filter(Boolean) as string[]
+      [...pipelines, ...lostPipelines]
+        .map((p) => p.copro.gestionnaireEmail)
+        .filter(Boolean) as string[]
     ),
   ].sort();
 
@@ -58,7 +63,7 @@ export default async function AdminPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold" style={{ color: "#26262C", letterSpacing: "-0.02em" }}>Tracking</h1>
           <p className="text-sm mt-1" style={{ color: "#656576" }}>
-            {pipelines.length} dossiers · {gestionnaires.length} gestionnaires
+            {pipelines.length + lostPipelines.length} dossiers · {gestionnaires.length} gestionnaires
           </p>
         </div>
         <AdminBoard
@@ -66,7 +71,7 @@ export default async function AdminPage() {
           taskTemplates={taskTemplates}
           gestionnaires={gestionnaires}
           events={events as Parameters<typeof AdminBoard>[0]["events"]}
-          lostGestionnaires={lostGestionnaires}
+          lostPipelines={lostPipelines as Parameters<typeof AdminBoard>[0]["lostPipelines"]}
         />
       </main>
     </div>

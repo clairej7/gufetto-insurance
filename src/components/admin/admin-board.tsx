@@ -35,9 +35,9 @@ interface AdminBoardProps {
   taskTemplates: Array<{ id: string; statut: string; required: boolean }>;
   gestionnaires: string[];
   events: RawEvent[];
-  // Email gestionnaire de chaque dossier perdu (abandonné/refusé/non assurable),
-  // exclus du dataset `pipelines` actif-only mais comptés dans la barre "Perdus".
-  lostGestionnaires: (string | null)[];
+  // Dossiers perdus (abandonné/refusé/non assurable) : dataset séparé, passé EN
+  // ENTIER pour la carte "Perdus" cliquable et le filtre échéance.
+  lostPipelines: Pipeline[];
 }
 
 
@@ -85,6 +85,13 @@ const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
 const FONT_SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
 const FONT_MONO = "ui-monospace, Menlo, Consolas, monospace";
 
+// Filtre échéance (même modèle que la page Pipeline).
+const selectStyle: React.CSSProperties = {
+  fontSize: 13, height: 32, padding: "0 8px",
+  border: "1px solid #E8E8EC", borderRadius: 4,
+  background: "#fff", color: "#26262C", outline: "none", cursor: "pointer",
+};
+
 const TH: React.CSSProperties = {
   background: "#FBFBFB", fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600,
   textTransform: "uppercase", letterSpacing: "0.04em", color: "#A2A1AF",
@@ -101,10 +108,11 @@ const TD: React.CSSProperties = {
 const TD_LEFT: React.CSSProperties  = { ...TD, textAlign: "left" };
 const TD_RIGHT: React.CSSProperties = { ...TD, textAlign: "right" };
 
-type KpiFilter = "actifs" | "urgents" | "gagnes" | null;
+type KpiFilter = "actifs" | "gagnes" | "perdus" | null;
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostGestionnaires }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
+  const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
 
   // Libellé d'affichage par email (nom Omni si présent, sinon dérivation).
@@ -113,15 +121,20 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostGestionnaires
     if (p.copro.gestionnaireEmail) gestioNomByEmail.set(p.copro.gestionnaireEmail, p.copro.gestionnaireNom);
   }
 
-  const fp = selectedGestionnaires.length > 0
-    ? pipelines.filter(p => selectedGestionnaires.includes(p.copro.gestionnaireEmail ?? ""))
-    : pipelines;
-
-  // Dossiers perdus : hors dataset `pipelines` (actif-only), comptés à part pour
-  // la barre "Perdus". On respecte le filtre gestionnaire courant.
-  const lostCount = selectedGestionnaires.length > 0
-    ? lostGestionnaires.filter(e => selectedGestionnaires.includes(e ?? "")).length
-    : lostGestionnaires.length;
+  // Filtres appliqués aux deux datasets (actifs+gagnés = `fp`, perdus = `flost`).
+  const gestioMatch = (p: Pipeline) =>
+    selectedGestionnaires.length === 0 || selectedGestionnaires.includes(p.copro.gestionnaireEmail ?? "");
+  const inEcheance = (p: Pipeline) => {
+    if (selectedEcheance === "all") return true;
+    const d = getDaysUntilEcheance(p.copro.dateEcheance);
+    if (selectedEcheance === "lt2")   return d !== null && d <= 60;
+    if (selectedEcheance === "bt2_6") return d !== null && d > 60 && d <= 180;
+    if (selectedEcheance === "gt6")   return d !== null && d > 180;
+    return true;
+  };
+  const fp    = pipelines.filter(p => gestioMatch(p) && inEcheance(p));
+  const flost = lostPipelines.filter(p => gestioMatch(p) && inEcheance(p));
+  const lostCount = flost.length;
 
   function toggleKpi(k: KpiFilter) { setActiveKpi(prev => prev === k ? null : k); }
 
@@ -136,22 +149,19 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostGestionnaires
   // deal gagné (compté dans "gagnés"), sinon double-comptage actifs+gagnés.
   const isActif = (p: Pipeline) => { const b = bucketOf(p); return (b === "urgent" || b === "autre" || b === "odr") && p.statut !== "contrat_signe"; };
 
-  // "Deals gagnés" = clos (clients MRI hors Wakam inclus) + contrat signé en cours.
+  // "Deals gagnés" = clos (clients MRI hors Wakam inclus) + contrat signé.
   const wonPipelines     = fp.filter(p => bucketOf(p) === "clos" || p.statut === "contrat_signe");
-  const urgentPipelines  = fp.filter(p => {
-    if (!isActif(p)) return false;
-    const d = getDaysUntilEcheance(p.copro.dateEcheance);
-    return d !== null && d <= 60;
-  });
   const activePipelines  = fp.filter(isActif);
-  const tauxSignature    = activePipelines.length > 0
-    ? Math.round((wonPipelines.length / (activePipelines.length + wonPipelines.length)) * 100)
-    : 0;
+
+  // Taux calculés sur le VRAI total (actifs + gagnés + perdus).
+  const realTotal     = activePipelines.length + wonPipelines.length + lostCount;
+  const tauxSignature = realTotal > 0 ? Math.round((wonPipelines.length / realTotal) * 100) : 0;
+  const tauxPerte     = realTotal > 0 ? Math.round((lostCount / realTotal) * 100) : 0;
 
   const kpiDetail: { label: string; rows: Pipeline[] } | null =
-    activeKpi === "actifs"  ? { label: "Dossiers actifs",  rows: activePipelines } :
-    activeKpi === "urgents" ? { label: "Urgents < 2 mois", rows: urgentPipelines } :
-    activeKpi === "gagnes"  ? { label: "Deals gagnés",     rows: wonPipelines }    : null;
+    activeKpi === "actifs" ? { label: "Dossiers actifs", rows: activePipelines } :
+    activeKpi === "gagnes" ? { label: "Deals gagnés",    rows: wonPipelines }    :
+    activeKpi === "perdus" ? { label: "Dossiers perdus", rows: flost }           : null;
 
   /* ── Bar chart data ── */
   // Répartition alignée sur les buckets (comme la page Pipeline) : les barres
@@ -172,8 +182,6 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostGestionnaires
   const maxBar = Math.max(...barData.map(b => b.count), 1);
   const CHART_H = 140;
 
-  const totalWon = wonPipelines.length;
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, fontFamily: FONT_SANS }}>
 
@@ -187,6 +195,12 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostGestionnaires
           renderOption={(e) => gestionnaireLabel(e, gestioNomByEmail.get(e))}
           width={200}
         />
+        <select value={selectedEcheance} onChange={(e) => setSelectedEcheance(e.target.value)} style={selectStyle}>
+          <option value="all">Toutes les échéances</option>
+          <option value="lt2">{"< 2 mois"}</option>
+          <option value="bt2_6">2 à 6 mois</option>
+          <option value="gt6">{"> 6 mois"}</option>
+        </select>
         {selectedGestionnaires.length > 0 && (() => {
           const totalDossiers = fp.length + lostCount; // actifs + perdus, comme dans Pipeline
           return (
@@ -200,9 +214,9 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostGestionnaires
       {/* ── KPIs ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
         {([
-          { filter: "actifs"  as KpiFilter, label: "Dossiers actifs",   value: activePipelines.length,                              color: "#26262C",                              numeric: true  },
-          { filter: "urgents" as KpiFilter, label: "Urgents < 2 mois",  value: urgentPipelines.length,                              color: urgentPipelines.length > 0 ? "#CA1E12" : "#26262C", numeric: true },
-          { filter: "gagnes"  as KpiFilter, label: "Deals gagnés",      value: totalWon,                                            color: totalWon > 0 ? "#13762C" : "#26262C",   numeric: true  },
+          { filter: "actifs" as KpiFilter, label: "Dossiers actifs", value: activePipelines.length, color: "#26262C",                                     numeric: true },
+          { filter: "gagnes" as KpiFilter, label: "Deals gagnés",     value: wonPipelines.length,    color: wonPipelines.length > 0 ? "#13762C" : "#26262C", numeric: true },
+          { filter: "perdus" as KpiFilter, label: "Dossiers perdus",  value: lostCount,              color: lostCount > 0 ? "#CA1E12" : "#26262C",           numeric: true },
         ]).map(({ filter, label, value, color, numeric }) => {
           const isActive = filter !== null && activeKpi === filter;
           const clickable = filter !== null;
@@ -239,11 +253,14 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostGestionnaires
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 20 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Répartition par étape</span>
           <span style={{ fontSize: 12, color: "#A2A1AF", fontFamily: FONT_MONO }}>{activePipelines.length} dossiers actifs</span>
-          {tauxSignature > 0 && (
-            <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 600, color: "#13762C" }}>
+          <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#13762C" }}>
               Taux de signature : {tauxSignature}%
             </span>
-          )}
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#CA1E12" }}>
+              Taux de perte : {tauxPerte}%
+            </span>
+          </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: CHART_H + 40 }}>
