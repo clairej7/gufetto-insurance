@@ -433,6 +433,69 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
     </div>
   );
 
+  // Séparateur pointillé vertical entre les 4 zones du kanban.
+  const dotSepStyle: React.CSSProperties = { alignSelf: "stretch", borderLeft: "1px dashed #C0C0C9", flexShrink: 0, margin: "0 2px" };
+
+  // Rendu d'une colonne d'étape "active" (funnel + Signé). Extrait pour pouvoir
+  // le réutiliser dans l'ordre voulu (Signé va dans la zone 3 avec Clos).
+  const renderStepColumn = (step: (typeof PIPELINE_STEPS)[number]) => {
+    const items = filtered.filter((p) => {
+      if (p.statut !== step.statut) return false;
+      const b = bucketOf(p);
+      return b === "urgent" || b === "autre";
+    });
+    return (
+      <div key={step.statut} style={{ minWidth: 200, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#656576" }}>
+            {step.shortLabel}
+          </span>
+          {items.length > 0 && (
+            <span style={{ fontSize: 11, fontWeight: 500, padding: "1px 6px", background: "#E8E8EC", borderRadius: 10, color: "#656576", fontVariantNumeric: "tabular-nums" }}>
+              {items.length}
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {items.map((p) => {
+            const days = getDaysUntilEcheance(p.copro.dateEcheance);
+            const borderColor = getUrgencyBorderColor(days);
+            const nextAction = getNextAction(p, taskTemplates);
+            return (
+              <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
+                <div style={{
+                  background: "#fff", borderRadius: 6, padding: "10px 12px",
+                  border: "1px solid #E8E8EC", borderLeft: `3px solid ${borderColor}`,
+                  cursor: "pointer", transition: "box-shadow 120ms",
+                }}
+                  onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.copro.nom}</div>
+                  {nextAction && (
+                    <div style={{ marginTop: 6 }}>
+                      <Tag variant={ACTION_VARIANT[nextAction.actionType] ?? "neutral"}>{nextAction.shortLabel}</Tag>
+                    </div>
+                  )}
+                  {days !== null && (
+                    <div style={{ marginTop: 6, fontSize: 11, fontWeight: 600, color: borderColor === "#E8E8EC" ? "#A2A1AF" : borderColor }}>
+                      {days < 0 ? `+${Math.abs(days)} j` : `J-${days}`}
+                    </div>
+                  )}
+                </div>
+              </Link>
+            );
+          })}
+          {items.length === 0 && (
+            <div style={{ borderRadius: 6, padding: 12, textAlign: "center", fontSize: 12, border: "1px dashed #E8E8EC", background: "#F7F7F8", color: "#A2A1AF" }}>
+              Vide
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Stats */}
@@ -573,80 +636,24 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
             </>
           )
         ) : (
-          /* Kanban */
+          /* Kanban — 4 zones (même ordre que le Tracking) */
           <div style={{ display: "flex", gap: 16, overflowX: "auto", padding: 16 }}>
-            {PIPELINE_STEPS.filter((s) => s.statut !== "termine").map((step) => {
-              // Colonnes d'étape = dossiers actifs uniquement (les clos/perdus,
-              // dont les clients MRI, vont dans leurs colonnes dédiées).
-              const items = filtered.filter((p) => {
-                if (p.statut !== step.statut) return false;
-                const b = bucketOf(p);
-                return b === "urgent" || b === "autre";
-              });
-              return (
-                <div key={step.statut} style={{ minWidth: 200, flexShrink: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#656576" }}>
-                      {step.shortLabel}
-                    </span>
-                    {items.length > 0 && (
-                      <span style={{ fontSize: 11, fontWeight: 500, padding: "1px 6px", background: "#E8E8EC", borderRadius: 10, color: "#656576", fontVariantNumeric: "tabular-nums" }}>
-                        {items.length}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {items.map((p) => {
-                      const days = getDaysUntilEcheance(p.copro.dateEcheance);
-                      const borderColor = getUrgencyBorderColor(days);
-                      const nextAction = getNextAction(p, taskTemplates);
-                      return (
-                        <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
-                          <div style={{
-                            background: "#fff", borderRadius: 6, padding: "10px 12px",
-                            border: "1px solid #E8E8EC", borderLeft: `3px solid ${borderColor}`,
-                            cursor: "pointer", transition: "box-shadow 120ms",
-                          }}
-                            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
-                            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
-                          >
-                            <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.copro.nom}</div>
-                            {nextAction && (
-                              <div style={{ marginTop: 6 }}>
-                                <Tag variant={ACTION_VARIANT[nextAction.actionType] ?? "neutral"}>{nextAction.shortLabel}</Tag>
-                              </div>
-                            )}
-                            {days !== null && (
-                              <div style={{ marginTop: 6, fontSize: 11, fontWeight: 600, color: borderColor === "#E8E8EC" ? "#A2A1AF" : borderColor }}>
-                                {days < 0 ? `+${Math.abs(days)} j` : `J-${days}`}
-                              </div>
-                            )}
-                          </div>
-                        </Link>
-                      );
-                    })}
-                    {items.length === 0 && (
-                      <div style={{ borderRadius: 6, padding: 12, textAlign: "center", fontSize: 12, border: "1px dashed #E8E8EC", background: "#F7F7F8", color: "#A2A1AF" }}>
-                        Vide
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {/* Zone 1 : funnel actif (Signé exclu, il va en zone 3 avec Clos) */}
+            {PIPELINE_STEPS.filter((s) => s.statut !== "termine" && s.statut !== "contrat_signe").map(renderStepColumn)}
 
-            {/* Séparateur + colonnes Clos et Perdus */}
             {(() => {
               const odrKanban = filtered.filter(p => bucketOf(p) === "odr");
               const closKanban = filtered.filter(p => bucketOf(p) === "clos");
               const perdusKanban = filtered.filter(p => bucketOf(p) === "perdu");
+              const signeStep = PIPELINE_STEPS.find(s => s.statut === "contrat_signe")!;
               return (
                 <>
-                  <div style={{ width: 1, background: "#E8E8EC", flexShrink: 0, margin: "0 4px" }} />
+                  {/* Zone 2 : ODR */}
+                  <div style={dotSepStyle} />
                   <div style={{ minWidth: 200, flexShrink: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#955804" }}>
-                        ODR
+                        ODR en cours
                       </span>
                       {odrKanban.length > 0 && (
                         <span style={{ fontSize: 11, fontWeight: 500, padding: "1px 6px", background: "#FFF7EB", borderRadius: 10, color: "#955804", fontVariantNumeric: "tabular-nums" }}>
@@ -681,6 +688,9 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                       )}
                     </div>
                   </div>
+                  {/* Zone 3 : Signé + Clos */}
+                  <div style={dotSepStyle} />
+                  {renderStepColumn(signeStep)}
                   <div style={{ minWidth: 200, flexShrink: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#13762C" }}>
@@ -719,6 +729,8 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                       )}
                     </div>
                   </div>
+                  {/* Zone 4 : Perdus */}
+                  <div style={dotSepStyle} />
                   <div style={{ minWidth: 200, flexShrink: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#CA1E12" }}>
