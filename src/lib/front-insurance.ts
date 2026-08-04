@@ -466,14 +466,16 @@ export async function getDernierePrimePayeeFromFront(
     reason,
   });
   const terms = [...new Set(searchHints.map((t) => t?.trim()).filter((t): t is string => !!t))];
-  if (!buildingId && terms.length === 0) return empty("building_id et adresse/nom manquants");
+  if (!pipelineId) return empty("pipelineId manquant");
 
-  // Recherches fusionnées : par custom field building_id (rapide quand posé) + par
-  // chaque indice texte (adresse ET nom). Indispensable car (a) les demandes de
-  // devis n'ont pas toujours le building_id, (b) copro.adresse est souvent null
-  // → on retombe sur copro.nom (qui contient l'adresse). On dédup par id, puis on
-  // ancre sur gufetto-ref pour être certain du bon dossier.
+  // Recherche PRINCIPALE par le marqueur gufetto-ref (unique par dossier, toujours
+  // posé par /api/front/draft, indexé par Front) → le plus fiable, indépendant du
+  // building_id (pas toujours posé sur les demandes), de copro.adresse (souvent
+  // null) et de copro.nom (le préfixe "SDC ..." casse le match texte).
+  // building_id + indices texte restent en complément. Dédup par id, puis ancrage
+  // gufetto-ref pour certifier le dossier.
   const results = await Promise.all([
+    searchByText(`gufetto-ref:${pipelineId}`),
     buildingId ? searchByBuildingId(buildingId) : Promise.resolve([] as FrontConversation[]),
     ...terms.map((t) => searchByText(t)),
   ]);
