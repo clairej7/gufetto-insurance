@@ -182,6 +182,35 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
   const maxBar = Math.max(...barData.map(b => b.count), 1);
   const CHART_H = 140;
 
+  // Regroupement visuel du graphe en 4 zones (contenu identique, juste l'affichage).
+  const byStatut = Object.fromEntries(barData.map(b => [b.statut, b] as const));
+  const grp = (statuts: string[]) => statuts.map(s => byStatut[s]).filter(Boolean);
+  const G_FUNNEL = grp(["identifie", "rs_en_cours", "devis_demandes", "devis_recus", "envoye_cs"]);
+  const G_ODR    = grp(["odr_en_cours"]);
+  const G_GAGNE  = grp(["contrat_signe", "_clos"]);
+  const G_PERDU  = grp(["_perdu"]);
+
+  const renderBar = (bar: (typeof barData)[number]) => {
+    const barH = bar.count > 0 ? Math.max(Math.round((bar.count / maxBar) * CHART_H), 6) : 0;
+    return (
+      <div key={bar.statut} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 0, height: "100%", justifyContent: "flex-end" }}>
+        <span style={{ fontSize: bar.count > 0 ? 15 : 12, fontWeight: 700, color: bar.count > 0 ? bar.fg : "#C0C0C9", fontVariantNumeric: "tabular-nums", marginBottom: 4, minHeight: 22, display: "flex", alignItems: "flex-end" }}>
+          {bar.count}
+        </span>
+        <div style={{ width: "100%", height: barH, background: bar.count > 0 ? bar.bar : "#F3F3F5", borderRadius: "4px 4px 0 0", transition: "height 300ms ease", opacity: bar.count > 0 ? 1 : 0.4 }} />
+        <div style={{ width: "100%", height: 1, background: "#E8E8EC" }} />
+        <span style={{ fontSize: 11, color: "#656576", textAlign: "center", marginTop: 6, lineHeight: "14px", fontWeight: 500, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {bar.shortLabel}
+        </span>
+      </div>
+    );
+  };
+
+  const dividerFull: React.CSSProperties = { alignSelf: "stretch", borderLeft: "1px dashed #C0C0C9", margin: "0 10px" };
+  const dividerBars: React.CSSProperties = { alignSelf: "stretch", borderLeft: "1px dashed #DADAE0", margin: "0 6px" };
+  const sectionTitle: React.CSSProperties = { fontSize: 12, fontFamily: FONT_MONO, fontWeight: 600, textAlign: "center", marginBottom: 14, whiteSpace: "nowrap" };
+  const barsRow: React.CSSProperties = { display: "flex", alignItems: "flex-end", gap: 8, height: CHART_H + 40 };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, fontFamily: FONT_SANS }}>
 
@@ -250,50 +279,43 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
 
       {/* ── Bar chart : répartition par étape ── */}
       <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 20 }}>
+        <div style={{ marginBottom: 18 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Répartition par étape</span>
-          <span style={{ fontSize: 12, color: "#A2A1AF", fontFamily: FONT_MONO }}>{activePipelines.length} dossiers actifs</span>
-          <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#13762C" }}>
-              Taux de signature : {tauxSignature}%
-            </span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#CA1E12" }}>
-              Taux de perte : {tauxPerte}%
-            </span>
-          </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: CHART_H + 40 }}>
-          {barData.map(bar => {
-            const barH = bar.count > 0 ? Math.max(Math.round((bar.count / maxBar) * CHART_H), 6) : 0;
-            return (
-              <div key={bar.statut} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 0, height: "100%", justifyContent: "flex-end" }}>
-                {/* Count */}
-                <span style={{
-                  fontSize: bar.count > 0 ? 15 : 12, fontWeight: 700, color: bar.count > 0 ? bar.fg : "#C0C0C9",
-                  fontVariantNumeric: "tabular-nums", marginBottom: 4, minHeight: 22, display: "flex", alignItems: "flex-end",
-                }}>
-                  {bar.count}
-                </span>
-                {/* Bar */}
-                <div style={{
-                  width: "100%", height: barH, background: bar.count > 0 ? bar.bar : "#F3F3F5",
-                  borderRadius: "4px 4px 0 0", transition: "height 300ms ease",
-                  opacity: bar.count > 0 ? 1 : 0.4,
-                }} />
-                {/* Baseline */}
-                <div style={{ width: "100%", height: 1, background: "#E8E8EC" }} />
-                {/* Label */}
-                <span style={{
-                  fontSize: 11, color: "#656576", textAlign: "center", marginTop: 6,
-                  lineHeight: "14px", fontWeight: 500, maxWidth: "100%", overflow: "hidden",
-                  textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}>
-                  {bar.shortLabel}
-                </span>
-              </div>
-            );
-          })}
+        {/* 4 zones séparées par des pointillés, chacune avec son titre. */}
+        <div style={{ display: "flex", alignItems: "stretch" }}>
+
+          {/* Zones 1 + 2 : Actifs (funnel + ODR) */}
+          <div style={{ flex: 6, display: "flex", flexDirection: "column" }}>
+            <div style={{ ...sectionTitle, color: "#656576" }}>{activePipelines.length} dossiers actifs</div>
+            <div style={barsRow}>
+              {G_FUNNEL.map(renderBar)}
+              <div style={dividerBars} />
+              {G_ODR.map(renderBar)}
+            </div>
+          </div>
+
+          <div style={dividerFull} />
+
+          {/* Zone 3 : Gagnés (signé + clos) */}
+          <div style={{ flex: 2, display: "flex", flexDirection: "column" }}>
+            <div style={{ ...sectionTitle, color: "#13762C" }}>Deals gagnés · signature {tauxSignature}%</div>
+            <div style={barsRow}>
+              {G_GAGNE.map(renderBar)}
+            </div>
+          </div>
+
+          <div style={dividerFull} />
+
+          {/* Zone 4 : Perdus */}
+          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            <div style={{ ...sectionTitle, color: "#CA1E12" }}>Deals perdus · perte {tauxPerte}%</div>
+            <div style={barsRow}>
+              {G_PERDU.map(renderBar)}
+            </div>
+          </div>
+
         </div>
       </div>
 
