@@ -12,11 +12,13 @@ export default async function ActivitePage() {
 
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 jours
 
+  // Pas de limite : on veut TOUS les events des 30 derniers jours pour que les
+  // compteurs par utilisateur soient exacts (la fenêtre 30 j borne déjà le volume).
+  // Le rendu de la liste chronologique est plafonné côté composant (perf).
   const [loginEvents, pipelineEvents] = await Promise.all([
     prisma.userLoginEvent.findMany({
       where: { createdAt: { gte: since } },
       orderBy: { createdAt: "desc" },
-      take: 200,
     }),
     prisma.pipelineEvent.findMany({
       where: {
@@ -25,7 +27,6 @@ export default async function ActivitePage() {
       },
       include: { pipeline: { include: { copro: { select: { nom: true } } } } },
       orderBy: { createdAt: "desc" },
-      take: 200,
     }),
   ]);
 
