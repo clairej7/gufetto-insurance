@@ -454,41 +454,20 @@ export type PrimePayeeResult = {
   reason: string;
 };
 
-export async function getDernierePrimePayeeFromFront(
-  buildingId: string,
+// Scanne des conversations Front pour y trouver la ligne "Dernières primes payées".
+// Retourne dès qu'un montant est ancré sur le gufetto-ref du dossier (certain) ;
+// sinon, si allowNoRef, garde un repli "sujet demande de devis".
+async function scanConvsForPrime(
+  convs: FrontConversation[],
   pipelineId: string,
-  searchHints: (string | null | undefined)[] = [],
-): Promise<PrimePayeeResult> {
-  const empty = (reason: string): PrimePayeeResult => ({
-    montant: null,
-    conversationId: null,
-    matchedByRef: false,
-    reason,
-  });
-  const terms = [...new Set(searchHints.map((t) => t?.trim()).filter((t): t is string => !!t))];
-  if (!pipelineId) return empty("pipelineId manquant");
-
-  // Recherche PRINCIPALE par le marqueur gufetto-ref (unique par dossier, toujours
-  // posé par /api/front/draft, indexé par Front) → le plus fiable, indépendant du
-  // building_id (pas toujours posé sur les demandes), de copro.adresse (souvent
-  // null) et de copro.nom (le préfixe "SDC ..." casse le match texte).
-  // building_id + indices texte restent en complément. Dédup par id, puis ancrage
-  // gufetto-ref pour certifier le dossier.
-  const results = await Promise.all([
-    searchByText(`gufetto-ref:${pipelineId}`),
-    buildingId ? searchByBuildingId(buildingId) : Promise.resolve([] as FrontConversation[]),
-    ...terms.map((t) => searchByText(t)),
-  ]);
+  allowNoRef: boolean,
+): Promise<PrimePayeeResult | null> {
   const seen = new Set<string>();
-  const convs = results.flat().filter((c) => c.id && !seen.has(c.id) && seen.add(c.id));
-  if (convs.length === 0) return empty("aucune conversation Front");
-
-  // On privilégie les fils de demande de devis ; sinon on scanne tout.
-  const devisConvs = convs.filter((c) => /demande\s+de\s+devis/i.test(c.subject ?? ""));
-  const pool = devisConvs.length > 0 ? devisConvs : convs;
+  const uniq = convs.filter((c) => c.id && !seen.has(c.id) && seen.add(c.id));
+  const devisConvs = uniq.filter((c) => /demande\s+de\s+devis/i.test(c.subject ?? ""));
+  const pool = devisConvs.length > 0 ? devisConvs : uniq;
 
   let fallback: PrimePayeeResult | null = null;
-
   for (const c of pool) {
     const messages = await getMessages(c.id);
     for (const m of messages) {
@@ -499,17 +478,45 @@ export async function getDernierePrimePayeeFromFront(
       if (html.includes(`gufetto-ref:${pipelineId}:`)) {
         return { montant, conversationId: c.id, matchedByRef: true, reason: "gufetto-ref (dossier exact)" };
       }
-      // Sans marqueur confirmé : repli seulement si le fil est bien une demande de devis.
-      if (!fallback && devisConvs.length > 0) {
-        fallback = {
-          montant,
-          conversationId: c.id,
-          matchedByRef: false,
-          reason: "sujet 'demande de devis' (dossier non confirmé par gufetto-ref)",
-        };
+      if (allowNoRef && !fallback && devisConvs.length > 0) {
+        fallback = { montant, conversationId: c.id, matchedByRef: false, reason: "sujet 'demande de devis' (dossier non confirmé)" };
       }
     }
   }
+  return fallback;
+}
 
-  return fallback ?? empty("prime introuvable dans les demandes de devis Front");
+export async function getDernierePrimePayeeFromFront(
+  buildingId: string,
+  pipelineId: string,
+  searchHints: (string | null | undefined)[] = [],
+  refOnly = false,
+): Promise<PrimePayeeResult> {
+  const empty = (reason: string): PrimePayeeResult => ({
+    montant: null,
+    conversationId: null,
+    matchedByRef: false,
+    reason,
+  });
+  if (!pipelineId) return empty("pipelineId manquant");
+
+  // 1) PRIORITAIRE : recherche par le marqueur gufetto-ref (unique par dossier,
+  // toujours posé par /api/front/draft, indexé par Front). Rapide et fiable → on
+  // court-circuite dès qu'on a un résultat, sans lancer les recherches lentes.
+  const byRef = await scanConvsForPrime(await searchByText(`gufetto-ref:${pipelineId}`), pipelineId, false);
+  if (byRef) return byRef;
+
+  // Mode ref-only (batch) : on s'arrête là (introuvable instantané pour les dossiers
+  // sans marqueur, sans payer les recherches building_id/adresse lentes).
+  if (refOnly) return empty("prime introuvable (pas de gufetto-ref)");
+
+  // 2) SECOURS (dossiers sans marqueur ref) : building_id + adresse/nom. Plus lent
+  // (building_id peut paginer) → réservé aux cas où le ref n'a rien donné.
+  const terms = [...new Set(searchHints.map((t) => t?.trim()).filter((t): t is string => !!t))];
+  if (!buildingId && terms.length === 0) return empty("prime introuvable (ni gufetto-ref, ni building_id/nom)");
+  const results = await Promise.all([
+    buildingId ? searchByBuildingId(buildingId) : Promise.resolve([] as FrontConversation[]),
+    ...terms.map((t) => searchByText(t)),
+  ]);
+  return (await scanConvsForPrime(results.flat(), pipelineId, true)) ?? empty("prime introuvable dans les demandes de devis Front");
 }
