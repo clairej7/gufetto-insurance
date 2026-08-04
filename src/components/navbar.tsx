@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LayoutDashboard, LogOut, CheckSquare, RefreshCw, Zap } from "lucide-react";
+import { LayoutDashboard, LogOut, CheckSquare, RefreshCw, Zap, BarChart3, ScrollText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface NavbarProps {
@@ -79,6 +79,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
                         : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
                     )}
                   >
+                    <BarChart3 className="h-4 w-4" />
                     Tracking
                   </Link>
                   <Link
@@ -102,6 +103,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
                         : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
                     )}
                   >
+                    <ScrollText className="h-4 w-4" />
                     Logs
                   </Link>
                   <Link
