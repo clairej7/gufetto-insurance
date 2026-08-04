@@ -32,7 +32,6 @@ export function AutofillBatchButton({ defaultTarget = 100, stock }: { defaultTar
     setAgg(EMPTY);
     cancelRef.current = false;
 
-    let skip = 0;
     let processed = 0;
     const total: Stats = { ...EMPTY };
 
@@ -42,7 +41,7 @@ export function AutofillBatchButton({ defaultTarget = 100, stock }: { defaultTar
         const res = await fetch("/api/autofill", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ limit: take, skip }),
+          body: JSON.stringify({ limit: take }),
         });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || `Erreur ${res.status}`);
@@ -54,8 +53,9 @@ export function AutofillBatchButton({ defaultTarget = 100, stock }: { defaultTar
         total.nonFiables += s.nonFiables;
         total.erreurs += s.erreurs;
 
+        // Curseur persistant côté serveur (autofillTenteLe) → pas de `skip` :
+        // chaque appel renvoie des dossiers frais, non re-traités.
         processed += json.count ?? 0;
-        skip += json.restes ?? 0; // sauter les dossiers restés en "Aucune action"
         setProgress(processed);
         setAgg({ ...total });
 

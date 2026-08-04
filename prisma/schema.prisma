@@ -148,6 +148,11 @@ model InsurancePipeline {
   nouveauDateEffet        DateTime?
   nouveauPrimeTTC         Float?
 
+  // Dernière tentative d'autofill (automatisation 1). Sert de curseur persistant :
+  // le batch exclut les dossiers tentés récemment → il avance dans le stock au
+  // lieu de re-traiter les mêmes non-fiables à chaque clic. Re-tenté après un délai.
+  autofillTenteLe DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
