@@ -74,13 +74,13 @@ function Tag({ children, variant = "neutral" }: { children: React.ReactNode; var
 }
 
 const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
-  identifie:      { label: "Non démarré",    variant: "neutral" },
-  odr_en_cours:   { label: "ODR en cours",   variant: "warning" },
-  rs_en_cours:    { label: "RS en cours",    variant: "primary" },
-  devis_demandes: { label: "Devis demandés", variant: "primary" },
-  devis_recus:    { label: "Devis partagés", variant: "primary" },
-  envoye_cs:      { label: "Devis validé",   variant: "warning" },
-  contrat_signe:  { label: "Contrat signé",  variant: "success-filled" },
+  identifie:      { label: "Identification",       variant: "neutral" },
+  odr_en_cours:   { label: "ODR en cours",         variant: "warning" },
+  rs_en_cours:    { label: "Récupération du RS",   variant: "primary" },
+  devis_demandes: { label: "Demande des devis",    variant: "primary" },
+  devis_recus:    { label: "Comparaison des devis", variant: "primary" },
+  envoye_cs:      { label: "Validation du CS",     variant: "warning" },
+  contrat_signe:  { label: "Signé",                variant: "success-filled" },
   termine:        { label: "Clôturé",        variant: "success" },
   abandonne:      { label: "Abandonné",      variant: "error" },
   refuse:         { label: "Refus client",   variant: "error" },

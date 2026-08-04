@@ -42,13 +42,13 @@ interface AdminBoardProps {
 
 
 const STAGE_COLS: { statut: string; label: string; shortLabel: string; bg: string; fg: string; bar: string }[] = [
-  { statut: "identifie",          label: "Identifié",        shortLabel: "Identifié",   bg: "#F7F7F8", fg: "#656576", bar: "#D4D4DC" },
-  { statut: "odr_en_cours",       label: "ODR en cours",     shortLabel: "ODR",         bg: "#FFF7EB", fg: "#955804", bar: "#F5C55A" },
-  { statut: "rs_en_cours",        label: "RS en cours",      shortLabel: "RS",          bg: "#F5F5FF", fg: "#4E49FC", bar: "#B8B5FD" },
-  { statut: "devis_demandes",     label: "Devis demandés",   shortLabel: "Devis dem.",  bg: "#F5F5FF", fg: "#4E49FC", bar: "#9B97FC" },
-  { statut: "devis_recus",        label: "Devis reçus",      shortLabel: "Devis reçus", bg: "#EBEBFF", fg: "#3C38C7", bar: "#7C79F8" },
-  { statut: "envoye_cs",          label: "Validé CS",        shortLabel: "Validé CS",   bg: "#FFF7EB", fg: "#955804", bar: "#F5A623" },
-  { statut: "contrat_signe",      label: "Contrat signé",    shortLabel: "Signé",       bg: "#EFFBF2", fg: "#13762C", bar: "#34C759" },
+  { statut: "identifie",          label: "Identification",      shortLabel: "Identification",       bg: "#F7F7F8", fg: "#656576", bar: "#D4D4DC" },
+  { statut: "odr_en_cours",       label: "ODR en cours",        shortLabel: "ODR en cours",         bg: "#FFF7EB", fg: "#955804", bar: "#F5C55A" },
+  { statut: "rs_en_cours",        label: "Récupération du RS",  shortLabel: "Récupération du RS",   bg: "#F5F5FF", fg: "#4E49FC", bar: "#B8B5FD" },
+  { statut: "devis_demandes",     label: "Demande des devis",   shortLabel: "Demande des devis",    bg: "#F5F5FF", fg: "#4E49FC", bar: "#9B97FC" },
+  { statut: "devis_recus",        label: "Comparaison des devis", shortLabel: "Comparaison des devis", bg: "#EBEBFF", fg: "#3C38C7", bar: "#7C79F8" },
+  { statut: "envoye_cs",          label: "Validation du CS",    shortLabel: "Validation du CS",     bg: "#FFF7EB", fg: "#955804", bar: "#F5A623" },
+  { statut: "contrat_signe",      label: "Signé",               shortLabel: "Signé",                bg: "#EFFBF2", fg: "#13762C", bar: "#34C759" },
   { statut: "_clos",              label: "Clos",             shortLabel: "Clos",        bg: "#CFF2D8", fg: "#0E5D22", bar: "#0E5D22" },
   { statut: "_perdu",             label: "Perdus",           shortLabel: "Perdus",      bg: "#FFF5F5", fg: "#CA1E12", bar: "#F26D6D" },
 ];
@@ -69,13 +69,13 @@ const TAG_FG: Record<TagVariant, string> = {
   "success-filled": "#ffffff", error: "#CA1E12", neutral: "#656576",
 };
 const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
-  identifie:      { label: "Non démarré",    variant: "neutral" },
-  odr_en_cours:   { label: "ODR en cours",   variant: "warning" },
-  rs_en_cours:    { label: "RS en cours",    variant: "primary" },
-  devis_demandes: { label: "Devis demandés", variant: "primary" },
-  devis_recus:    { label: "Devis partagés", variant: "primary" },
-  envoye_cs:      { label: "Devis validé",   variant: "warning" },
-  contrat_signe:  { label: "Contrat signé",  variant: "success-filled" },
+  identifie:      { label: "Identification",       variant: "neutral" },
+  odr_en_cours:   { label: "ODR en cours",         variant: "warning" },
+  rs_en_cours:    { label: "Récupération du RS",   variant: "primary" },
+  devis_demandes: { label: "Demande des devis",    variant: "primary" },
+  devis_recus:    { label: "Comparaison des devis", variant: "primary" },
+  envoye_cs:      { label: "Validation du CS",     variant: "warning" },
+  contrat_signe:  { label: "Signé",                variant: "success-filled" },
   termine:        { label: "Clôturé",        variant: "success" },
   abandonne:      { label: "Abandonné",      variant: "error" },
   refuse:         { label: "Refus client",   variant: "error" },
@@ -199,7 +199,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
         </span>
         <div style={{ width: "100%", height: barH, background: bar.count > 0 ? bar.bar : "#F3F3F5", borderRadius: "4px 4px 0 0", transition: "height 300ms ease", opacity: bar.count > 0 ? 1 : 0.4 }} />
         <div style={{ width: "100%", height: 1, background: "#E8E8EC" }} />
-        <span style={{ fontSize: 11, color: "#656576", textAlign: "center", marginTop: 6, lineHeight: "14px", fontWeight: 500, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: 11, color: "#656576", textAlign: "center", marginTop: 6, lineHeight: "13px", fontWeight: 500, maxWidth: "100%", whiteSpace: "normal", wordBreak: "break-word" }}>
           {bar.shortLabel}
         </span>
       </div>
