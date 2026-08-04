@@ -184,6 +184,32 @@ export async function applyAutofill(
     });
   }
 
+  // 3) Détection "possible faux ODR" : on aiguille en ODR sur un porteur PARTENAIRE
+  //    (souvent trouvé par Front), alors que le champ assureur contient DÉJÀ un
+  //    AUTRE porteur réel (ni courtier, ni le même partenaire) → conflit probable
+  //    (Front a pu voir un vieux mail d'un ancien assureur). On pose une note à
+  //    marqueur stable "Possible faux ODR" (une seule fois) : les futures
+  //    automatisations ODR pourront exclure ces cas d'office pour traitement manuel.
+  if (targetStatut === "odr_en_cours") {
+    const champAssureur = typeof data.assureurActuel === "string" ? data.assureurActuel : copro.assureurActuel;
+    const odrPartner = info.partnerKey ?? matchPartner(effAssureur);
+    if (champAssureur && !looksLikeCourtierValue(champAssureur) && matchPartner(champAssureur) !== odrPartner) {
+      const dejaNote = await prisma.pipelineEvent.count({
+        where: { pipelineId, type: "note_ajoutee", description: { contains: "Possible faux ODR" } },
+      });
+      if (!dejaNote) {
+        await prisma.pipelineEvent.create({
+          data: {
+            pipelineId,
+            type: "note_ajoutee",
+            description: `Possible faux ODR, vérifier assureur (champ : « ${champAssureur} » ≠ porteur ODR « ${effAssureur} »)`,
+            createdBy: actorEmail,
+          },
+        });
+      }
+    }
+  }
+
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${pipelineId}`);
   return {
