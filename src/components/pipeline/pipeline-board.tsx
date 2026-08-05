@@ -486,21 +486,22 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                   border: won ? "1px solid #CDEFD9" : "1px solid #E8E8EC",
                   borderLeft: won ? "3px solid #52C77E" : `3px solid ${borderColor}`,
                   cursor: "pointer", transition: "box-shadow 120ms",
+                  minHeight: 76, display: "flex", flexDirection: "column",
                 }}
                   onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
                   onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                 >
                   <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.copro.nom}</div>
-                  {nextAction && (
-                    <div style={{ marginTop: 6 }}>
-                      <Tag variant={ACTION_VARIANT[nextAction.actionType] ?? "neutral"}>{nextAction.shortLabel}</Tag>
-                    </div>
-                  )}
-                  {days !== null && (
-                    <div style={{ marginTop: 6, fontSize: 11, fontWeight: 600, color: borderColor === "#E8E8EC" ? "#A2A1AF" : borderColor }}>
-                      {days < 0 ? `+${Math.abs(days)} j` : `J-${days}`}
-                    </div>
-                  )}
+                  <div style={{ marginTop: "auto", paddingTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                    <span style={{ minWidth: 0, overflow: "hidden" }}>
+                      {nextAction && <Tag variant={ACTION_VARIANT[nextAction.actionType] ?? "neutral"}>{nextAction.shortLabel}</Tag>}
+                    </span>
+                    {days !== null && (
+                      <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", color: borderColor === "#E8E8EC" ? "#A2A1AF" : borderColor }}>
+                        {days < 0 ? `+${Math.abs(days)} j` : `J-${days}`}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </Link>
             );
@@ -714,7 +715,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                       {odrKanban.map((p) => (
                         <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
                           <div style={{
-                            background: "#FFFBEB", borderRadius: 6, padding: "10px 12px",
+                            background: "#FFFBEB", borderRadius: 6, padding: "10px 12px", minHeight: 76,
                             border: "1px solid #F5D98A", borderLeft: "3px solid #F5A623",
                             cursor: "pointer", transition: "box-shadow 120ms",
                           }}
@@ -753,7 +754,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                       {odrEnvoyeKanban.map((p) => (
                         <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
                           <div style={{
-                            background: "#FFF6EA", borderRadius: 6, padding: "10px 12px",
+                            background: "#FFF6EA", borderRadius: 6, padding: "10px 12px", minHeight: 76,
                             border: "1px solid #EBB878", borderLeft: "3px solid #E8943A",
                             cursor: "pointer", transition: "box-shadow 120ms",
                           }}
@@ -793,7 +794,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                       {odrAccepteKanban.map((p) => (
                         <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
                           <div style={{
-                            background: "#F1FCF5", borderRadius: 6, padding: "10px 12px",
+                            background: "#F1FCF5", borderRadius: 6, padding: "10px 12px", minHeight: 76,
                             border: "1px solid #CDEFD9", borderLeft: "3px solid #52C77E",
                             cursor: "pointer", transition: "box-shadow 120ms",
                           }}
@@ -832,7 +833,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                       {closKanban.map((p) => (
                         <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
                           <div style={{
-                            background: "#F7FDF9", borderRadius: 6, padding: "10px 12px",
+                            background: "#F7FDF9", borderRadius: 6, padding: "10px 12px", minHeight: 76,
                             border: "1px solid #BBF1C8", borderLeft: "3px solid #13762C",
                             cursor: "pointer", transition: "box-shadow 120ms",
                           }}
@@ -872,7 +873,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                       {perdusKanban.map((p) => (
                         <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
                           <div style={{
-                            background: "#FFF5F5", borderRadius: 6, padding: "10px 12px",
+                            background: "#FFF5F5", borderRadius: 6, padding: "10px 12px", minHeight: 76,
                             border: "1px solid #F1CCCC", borderLeft: "3px solid #CA1E12",
                             cursor: "pointer", transition: "box-shadow 120ms",
                           }}
