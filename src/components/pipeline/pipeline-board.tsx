@@ -477,11 +477,14 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
             const days = getDaysUntilEcheance(p.copro.dateEcheance);
             const borderColor = getUrgencyBorderColor(days);
             const nextAction = getNextAction(p, taskTemplates);
+            // "Signé" = deal gagné : fond vert CLAIR (plus clair que les clos).
+            const won = step.statut === "contrat_signe";
             return (
               <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
                 <div style={{
-                  background: "#fff", borderRadius: 6, padding: "10px 12px",
-                  border: "1px solid #E8E8EC", borderLeft: `3px solid ${borderColor}`,
+                  background: won ? "#F1FCF5" : "#fff", borderRadius: 6, padding: "10px 12px",
+                  border: won ? "1px solid #CDEFD9" : "1px solid #E8E8EC",
+                  borderLeft: won ? "3px solid #52C77E" : `3px solid ${borderColor}`,
                   cursor: "pointer", transition: "box-shadow 120ms",
                 }}
                   onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
@@ -790,8 +793,8 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                       {odrAccepteKanban.map((p) => (
                         <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
                           <div style={{
-                            background: "#EAFBEF", borderRadius: 6, padding: "10px 12px",
-                            border: "1px solid #A6E7BC", borderLeft: "3px solid #13762C",
+                            background: "#F1FCF5", borderRadius: 6, padding: "10px 12px",
+                            border: "1px solid #CDEFD9", borderLeft: "3px solid #52C77E",
                             cursor: "pointer", transition: "box-shadow 120ms",
                           }}
                             onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
