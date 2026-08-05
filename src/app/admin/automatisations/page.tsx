@@ -6,6 +6,8 @@ import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { AutofillBatchButton } from "@/components/admin/autofill-batch-button";
 import { VerifyPrimesBatchButton } from "@/components/admin/verify-primes-batch-button";
+import { OdrControls } from "@/components/admin/odr-controls";
+import { getOdrByPartner, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 
 type Etat = "deploye" | "encours" | "attente";
 const ETATS: Record<Etat, { label: string; bg: string; fg: string; dot: string }> = {
@@ -39,6 +41,16 @@ export default async function AutomatisationsPage() {
     where: { statut: "devis_recus", copro: { archivedAt: null } },
   });
 
+  // ODR non encore envoyés, groupés par assureur (Automatisation 2).
+  const odrBuckets = await getOdrByPartner();
+  const odrPartners = odrBuckets.map((b) => ({
+    key: b.key,
+    label: b.label,
+    ready: b.ready.length,
+    missing: b.missingNum.length,
+    flagged: b.flagged.length,
+  }));
+
   const automations: {
     n: number;
     nom: string;
@@ -62,7 +74,7 @@ export default async function AutomatisationsPage() {
       description: [
         "Lorsqu'une copropriété est déjà assurée chez l'un des 4 partenaires (AXA, Generali, SADA, Mila), Matera peut devenir directement le nouveau courtier via un Ordre de Remplacement — sans passer par la demande de RS ni par les devis. C'est un raccourci majeur du pipeline.",
         "L'identification et le rangement des dossiers dans l'étape « ODR en cours » sont déjà assurés par l'automatisation 1 (les deux sont fusionnées sur la partie routage).",
-        "Reste à construire : l'envoi effectif de l'ordre de remplacement aux assureurs, et la vérification du vrai porteur avant l'envoi. Les garde-fous sont déjà en place — les dossiers « Possible faux ODR » (le champ assureur contredit le porteur) et « Probable Wakam » sont signalés pour être exclus et traités à la main.",
+        "L'envoi de l'ordre de remplacement est désormais outillé (contrôles ci-dessous) : par assureur, on sort la liste des copros en « ODR en cours » avec leur n° de contrat, on génère la lettre ODR remplie (PDF) et on l'envoie directement via Front — les dossiers passent alors en « ODR envoyées ». Les garde-fous sont en place : les dossiers « Possible faux ODR » (le champ assureur contredit le porteur) et « Probable Wakam » sont exclus de l'envoi, et ceux sans n° de contrat sont isolés (ils ne peuvent pas figurer dans la lettre tant que le numéro n'est pas récupéré).",
         "Trois étapes ODR dans le pipeline : « ODR en cours » (ordre identifié) → « ODR envoyées » (ordre transmis à l'assureur, en attente de réponse — encore ACTIF) → « ODR acceptés » (l'assureur a validé). Les deux premières sont dans les dossiers actifs ; « ODR acceptés » est un DEAL GAGNÉ (compté à gauche de « Signé » et « Clos »), même si notre mandat de courtier ne démarre qu'à l'échéance du contrat actuel. Le remplissage de « ODR envoyées » et « ODR acceptés » se fera à partir des listes d'ordres passés / acceptés par AXA / Generali / SADA / Mila ; le suivi détaillé par assureur est visible dans la carte « Suivi des ODR » du Tracking.",
       ],
     },
@@ -190,6 +202,16 @@ export default async function AutomatisationsPage() {
                       (hors dossiers déjà clients / gagnés).
                     </p>
                     <AutofillBatchButton defaultTarget={Math.min(100, eligibleAuto1)} stock={eligibleAuto1} />
+                  </div>
+                )}
+
+                {/* Contrôles admin — automatisation 2 : ODR (export / template / envoi). */}
+                {a.n === 2 && (
+                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
+                      Contrôles admin
+                    </div>
+                    <OdrControls template={ODR_TEMPLATE_TEXT} partners={odrPartners} />
                   </div>
                 )}
 
