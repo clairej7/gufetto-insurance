@@ -76,6 +76,7 @@ function Tag({ children, variant = "neutral" }: { children: React.ReactNode; var
 const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
   identifie:      { label: "Identification",       variant: "neutral" },
   odr_en_cours:   { label: "ODR en cours",         variant: "warning" },
+  odr_accepte:    { label: "ODR accepté",          variant: "success" },
   rs_en_cours:    { label: "Récupération du RS",   variant: "primary" },
   devis_demandes: { label: "Demande des devis",    variant: "primary" },
   devis_recus:    { label: "Comparaison des devis", variant: "primary" },
@@ -356,14 +357,15 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
     const d = getDaysUntilEcheance(p.copro.dateEcheance);
     return actif && d !== null && d <= 180;
   }).length;
-  // "Deals gagnés" : dossiers clos (clients MRI hors Wakam inclus) + contrat signé en cours.
-  const dealsGagnes = filtered.filter(p => bucketOf(p) === "clos" || p.statut === "contrat_signe").length;
+  // "Deals gagnés" : clos (clients MRI hors Wakam inclus) + contrat signé + ODR accepté.
+  const dealsGagnes = filtered.filter(p => bucketOf(p) === "clos" || p.statut === "contrat_signe" || p.statut === "odr_accepte").length;
 
-  const urgents = sorted.filter(p => bucketOf(p) === "urgent");
-  const autres  = sorted.filter(p => bucketOf(p) === "autre");
-  const odrs    = sorted.filter(p => bucketOf(p) === "odr");
-  const clos    = sorted.filter(p => bucketOf(p) === "clos");
-  const perdus  = sorted.filter(p => bucketOf(p) === "perdu");
+  const urgents      = sorted.filter(p => bucketOf(p) === "urgent");
+  const autres       = sorted.filter(p => bucketOf(p) === "autre");
+  const odrs         = sorted.filter(p => bucketOf(p) === "odr");
+  const odrAcceptes  = sorted.filter(p => bucketOf(p) === "odr_accepte");
+  const clos         = sorted.filter(p => bucketOf(p) === "clos");
+  const perdus       = sorted.filter(p => bucketOf(p) === "perdu");
 
   // Toolbar shared between views
   const toolbar = (
@@ -614,6 +616,20 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                       ))}
                     </>
                   )}
+                  {odrAcceptes.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={5} style={{ padding: "10px 16px 8px", background: "#EAFBEF", borderTop: "2px solid #E8E8EC" }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "#13762C" }}>
+                            ODR acceptés — deals gagnés — {odrAcceptes.length}
+                          </span>
+                        </td>
+                      </tr>
+                      {odrAcceptes.map((p) => (
+                        <PipelineRow key={p.id} pipeline={p} taskTemplates={taskTemplates} cloture />
+                      ))}
+                    </>
+                  )}
                   {clos.length > 0 && (
                     <>
                       <tr>
@@ -654,6 +670,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
 
             {(() => {
               const odrKanban = filtered.filter(p => bucketOf(p) === "odr");
+              const odrAccepteKanban = filtered.filter(p => bucketOf(p) === "odr_accepte");
               const closKanban = filtered.filter(p => bucketOf(p) === "clos");
               const perdusKanban = filtered.filter(p => bucketOf(p) === "perdu");
               const signeStep = PIPELINE_STEPS.find(s => s.statut === "contrat_signe")!;
@@ -699,8 +716,46 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                       )}
                     </div>
                   </div>
-                  {/* Zone 3 : Signé + Clos */}
+                  {/* Zone 3 : Gagnés — ODR acceptés + Signé + Clos */}
                   <div style={dotSepStyle} />
+                  <div style={{ minWidth: 200, flexShrink: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#13762C" }}>
+                        ODR acceptés
+                      </span>
+                      {odrAccepteKanban.length > 0 && (
+                        <span style={{ fontSize: 11, fontWeight: 500, padding: "1px 6px", background: "#EAFBEF", borderRadius: 10, color: "#13762C", fontVariantNumeric: "tabular-nums" }}>
+                          {odrAccepteKanban.length}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {odrAccepteKanban.map((p) => (
+                        <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
+                          <div style={{
+                            background: "#EAFBEF", borderRadius: 6, padding: "10px 12px",
+                            border: "1px solid #A6E7BC", borderLeft: "3px solid #13762C",
+                            cursor: "pointer", transition: "box-shadow 120ms",
+                          }}
+                            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
+                            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
+                          >
+                            <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {p.copro.nom}
+                            </div>
+                            <div style={{ marginTop: 4 }}>
+                              <Tag variant="success">ODR accepté</Tag>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                      {odrAccepteKanban.length === 0 && (
+                        <div style={{ borderRadius: 6, padding: 12, textAlign: "center", fontSize: 12, border: "1px dashed #A6E7BC", background: "#EAFBEF", color: "#A2A1AF" }}>
+                          Vide
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   {renderStepColumn(signeStep)}
                   <div style={{ minWidth: 200, flexShrink: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>

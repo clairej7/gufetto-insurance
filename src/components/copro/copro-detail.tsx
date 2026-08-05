@@ -659,13 +659,15 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
               <Badge style={{ backgroundColor: "#13762C", color: "#ffffff" }}>Deal gagné — Contrat signé 🎉</Badge>
             ) : pipeline.statut === "odr_en_cours" ? (
               <Badge className="border" style={{ backgroundColor: "#FEF3C7", color: "#955804", borderColor: "#F5C55A" }}>Ordre de remplacement en cours</Badge>
+            ) : pipeline.statut === "odr_accepte" ? (
+              <Badge style={{ backgroundColor: "#13762C", color: "#ffffff" }}>Deal gagné — ODR accepté 🎉</Badge>
             ) : (
               <Badge variant="secondary">{currentStep?.label} — étape {currentStepIndex + 1}/{PIPELINE_STEPS.length - 1}</Badge>
             )}
           </div>
         </div>
 
-        {((!isTerminal && pipeline.statut !== "odr_en_cours") || isLost || pipeline.statut === "termine") && (
+        {((!isTerminal && pipeline.statut !== "odr_en_cours" && pipeline.statut !== "odr_accepte") || isLost || pipeline.statut === "termine") && (
           <div className="mt-4">
             <StepProgressBar
               steps={PIPELINE_STEPS.filter((s) => s.statut !== "termine" && s.statut !== "abandonne")}
@@ -833,46 +835,42 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                 <Building2 className="h-4 w-4" />
                 ODR
               </h3>
-              <div className="flex gap-2">
-                <button
-                  disabled={isPending}
-                  onClick={() => {
-                    if (pipeline.statut === "odr_en_cours") return;
-                    startTransition(async () => {
-                      try {
-                        await goToStatut(pipeline.id, "odr_en_cours");
-                        toast.success("Passée en ODR en cours");
-                      } catch {
-                        toast.error("Erreur");
-                      }
-                    });
-                  }}
-                  className="text-xs font-medium px-3 py-1 rounded-full border transition-colors disabled:opacity-50"
-                  style={pipeline.statut === "odr_en_cours"
-                    ? { backgroundColor: "#34C759", borderColor: "#34C759", color: "#FFFFFF" }
-                    : { backgroundColor: "#FFFFFF", borderColor: "#E4E4EB", color: "#26262C" }}
-                >
-                  Oui
-                </button>
-                <button
-                  disabled={isPending}
-                  onClick={() => {
-                    if (pipeline.statut !== "odr_en_cours") return;
-                    startTransition(async () => {
-                      try {
-                        await goToStatut(pipeline.id, "identifie");
-                      } catch {
-                        toast.error("Erreur");
-                      }
-                    });
-                  }}
-                  className="text-xs font-medium px-3 py-1 rounded-full border transition-colors disabled:opacity-50"
-                  style={pipeline.statut !== "odr_en_cours"
-                    ? { backgroundColor: "#FFFFFF", borderColor: "#E4E4EB", color: "#26262C" }
-                    : { backgroundColor: "#FFFFFF", borderColor: "#E4E4EB", color: "#26262C" }}
-                >
-                  Non
-                </button>
+              {/* Cycle ODR : Non → En cours → Accepté (deal gagné, mandat à l'échéance). */}
+              <div className="flex gap-1.5">
+                {([
+                  { statut: "identifie",    label: "Non",      active: { bg: "#FFFFFF", bd: "#E4E4EB", fg: "#26262C" } },
+                  { statut: "odr_en_cours", label: "En cours", active: { bg: "#F5A623", bd: "#F5A623", fg: "#FFFFFF" } },
+                  { statut: "odr_accepte",  label: "Accepté",  active: { bg: "#13762C", bd: "#13762C", fg: "#FFFFFF" } },
+                ] as const).map((opt) => {
+                  const isCurrent =
+                    opt.statut === "identifie"
+                      ? pipeline.statut !== "odr_en_cours" && pipeline.statut !== "odr_accepte"
+                      : pipeline.statut === opt.statut;
+                  return (
+                    <button
+                      key={opt.statut}
+                      disabled={isPending || isCurrent}
+                      onClick={() => {
+                        if (isCurrent) return;
+                        startTransition(async () => {
+                          try {
+                            await goToStatut(pipeline.id, opt.statut);
+                            if (opt.statut === "odr_en_cours") toast.success("Passée en ODR en cours");
+                            else if (opt.statut === "odr_accepte") toast.success("ODR accepté — deal gagné 🎉");
+                          } catch {
+                            toast.error("Erreur");
+                          }
+                        });
+                      }}
+                      className="text-xs font-medium px-3 py-1 rounded-full border transition-colors disabled:opacity-60"
+                      style={isCurrent
+                        ? { backgroundColor: opt.active.bg, borderColor: opt.active.bd, color: opt.active.fg }
+                        : { backgroundColor: "#FFFFFF", borderColor: "#E4E4EB", color: "#26262C" }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </Card>

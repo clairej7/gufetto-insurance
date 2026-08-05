@@ -63,6 +63,7 @@ export default async function AutomatisationsPage() {
         "Lorsqu'une copropriété est déjà assurée chez l'un des 4 partenaires (AXA, Generali, SADA, Mila), Matera peut devenir directement le nouveau courtier via un Ordre de Remplacement — sans passer par la demande de RS ni par les devis. C'est un raccourci majeur du pipeline.",
         "L'identification et le rangement des dossiers dans l'étape « ODR en cours » sont déjà assurés par l'automatisation 1 (les deux sont fusionnées sur la partie routage).",
         "Reste à construire : l'envoi effectif de l'ordre de remplacement aux assureurs, et la vérification du vrai porteur avant l'envoi. Les garde-fous sont déjà en place — les dossiers « Possible faux ODR » (le champ assureur contredit le porteur) et « Probable Wakam » sont signalés pour être exclus et traités à la main.",
+        "Deux étapes ODR dans le pipeline : « ODR en cours » (ordre identifié, envoyé progressivement aux assureurs) puis « ODR acceptés » — l'assureur a validé l'ordre. Un ODR accepté est un DEAL GAGNÉ (compté à gauche de « Signé » et « Clos » dans les deals gagnés), même si notre mandat de courtier ne démarre qu'à l'échéance du contrat actuel. Le remplissage de « ODR acceptés » se fera à partir des listes d'ordres acceptés par AXA / Generali / SADA / Mila ; le suivi détaillé par assureur est visible dans la carte « Suivi des ODR » du Tracking.",
       ],
     },
     {
