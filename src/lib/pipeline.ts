@@ -92,7 +92,8 @@ export type DossierBucket = "perdu" | "odr" | "odr_envoye" | "odr_accepte" | "cl
 
 const LOST_STATUTS: PipelineStatut[] = ["abandonne", "refuse", "non_assurable"];
 // "Clos par le statut de vente" : Contract Uploaded (resiliation_envoyee) et +.
-const CLOSED_BY_STATUT: PipelineStatut[] = ["resiliation_envoyee", "sepa_complete", "termine"];
+// odr_en_vigueur = ODR accepté ET en vigueur (récupération passée) → deal gagné/clos.
+const CLOSED_BY_STATUT: PipelineStatut[] = ["resiliation_envoyee", "sepa_complete", "termine", "odr_en_vigueur"];
 
 // Wakam : on ne travaille plus avec eux. Même si HubSpot dit "client", il faut
 // migrer → on ne clôt PAS via la règle client, on suit le sales status.

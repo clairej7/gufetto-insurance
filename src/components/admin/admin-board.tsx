@@ -10,6 +10,7 @@ type Pipeline = {
   id: string;
   statut: string;
   nouveauPrimeTTC: number | null;
+  odrPartenaire: string | null;
   copro: {
     nom: string;
     adresse: string | null;
@@ -75,6 +76,7 @@ const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
   odr_en_cours:   { label: "ODR en cours",         variant: "warning" },
   odr_envoye:     { label: "ODR envoyée",          variant: "warning" },
   odr_accepte:    { label: "ODR accepté",          variant: "success" },
+  odr_en_vigueur: { label: "ODR en vigueur",       variant: "success-filled" },
   rs_en_cours:    { label: "Récupération du RS",   variant: "primary" },
   devis_demandes: { label: "Demande des devis",    variant: "primary" },
   devis_recus:    { label: "Comparaison des devis", variant: "primary" },
@@ -89,21 +91,24 @@ const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
 const FONT_SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
 const FONT_MONO = "ui-monospace, Menlo, Consolas, monospace";
 
-// Les 4 assureurs partenaires ODR. Motifs tolérants (accent/faute) — mêmes règles
-// que l'autofill (ex. Generali mal orthographié). Sert au suivi ODR par assureur.
-// `odrOnly` : chez SADA & Generali on ne fait QUE de l'ODR → un dossier clos assuré
-// chez eux est (quasi) forcément un ODR gagné. Chez AXA & Mila on fait aussi du
-// remplacement classique (devis) → un clos n'est PAS forcément un ODR → on ne
-// l'approxime pas dans les clos (on attendra un marqueur ODR fiable).
-const ODR_INSURERS: { key: string; label: string; re: RegExp; odrOnly: boolean }[] = [
-  { key: "axa",      label: "AXA",      re: /\baxa\b/i,          odrOnly: false },
-  { key: "generali", label: "Generali", re: /g[eé]n[eé]?rali/i,  odrOnly: true  },
-  { key: "sada",     label: "SADA",     re: /\bsada\b/i,         odrOnly: true  },
-  { key: "mila",     label: "Mila",     re: /\bmila\b/i,         odrOnly: false },
+// Les 4 assureurs partenaires ODR. Le suivi s'appuie sur le MARQUEUR persistant
+// `pipeline.odrPartenaire` (posé au traitement d'une liste ODR) — fiable à travers
+// toutes les étapes, y compris une fois le dossier clos (contrairement à l'assureur
+// seul : un clos AXA n'est pas forcément un ODR).
+const ODR_INSURERS: { key: string; label: string }[] = [
+  { key: "axa",      label: "AXA" },
+  { key: "generali", label: "Generali" },
+  { key: "sada",     label: "SADA" },
+  { key: "mila",     label: "Mila" },
 ];
-const ODR_ONLY_KEYS = new Set(ODR_INSURERS.filter(i => i.odrOnly).map(i => i.key));
-const matchOdrInsurer = (assureur: string | null): string | null =>
-  ODR_INSURERS.find((i) => assureur && i.re.test(assureur))?.key ?? null;
+const odrPartenaireKey = (marqueur: string | null): string | null => {
+  const v = (marqueur ?? "").toUpperCase();
+  if (v.includes("AXA")) return "axa";
+  if (/GEN[EÉ]?RALI/.test(v)) return "generali";
+  if (v.includes("SADA")) return "sada";
+  if (v.includes("MILA")) return "mila";
+  return null;
+};
 
 // Filtre échéance (même modèle que la page Pipeline).
 const selectStyle: React.CSSProperties = {
@@ -218,24 +223,23 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
   const fmtEur = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
   const fmtEurC = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} M€` : n >= 1e3 ? `${Math.round(n / 1e3)} k€` : `${Math.round(n)} €`;
 
-  // ── Suivi des ODR (maquette) ──────────────────────────────────────────────
-  // Mini-pipeline ODR : en cours → acceptés → présents dans les clos. Les "clos
-  // issus d'un ODR" sont approchés par heuristique (dossier clos dont l'assureur
-  // est un des 4 partenaires) — pas de marqueur dédié pour l'instant.
-  const odrEnCoursRows  = fp.filter(p => bucketOf(p) === "odr");
-  const odrEnvoyeRows   = fp.filter(p => bucketOf(p) === "odr_envoye");
-  const odrAccepteRows  = fp.filter(p => bucketOf(p) === "odr_accepte");
-  // Clos comptés comme ODR UNIQUEMENT pour les partenaires ODR-only (SADA, Generali).
-  // Chez AXA/Mila un clos peut être un remplacement classique (devis) → exclu.
-  const odrClosRows     = fp.filter(p => bucketOf(p) === "clos" && ODR_ONLY_KEYS.has(matchOdrInsurer(p.copro.assureurActuel) ?? ""));
+  // ── Suivi des ODR ─────────────────────────────────────────────────────────
+  // Dossiers ODR = ceux portant le marqueur `odrPartenaire`. Mini-pipeline :
+  // en cours → envoyé → accepté → clos (odr_en_vigueur + ODR devenu client-clos).
+  // Les perdus/refusés sont dans lostPipelines (hors `fp`) → exclus d'office.
+  const odrRows         = fp.filter(p => !!p.odrPartenaire);
+  const odrEnCoursRows  = odrRows.filter(p => p.statut === "odr_en_cours");
+  const odrEnvoyeRows   = odrRows.filter(p => p.statut === "odr_envoye");
+  const odrAccepteRows  = odrRows.filter(p => p.statut === "odr_accepte");
+  const odrClosRows     = odrRows.filter(p => bucketOf(p) === "clos");
   const odrAllRows      = [...odrEnCoursRows, ...odrEnvoyeRows, ...odrAccepteRows, ...odrClosRows];
   const odrStages = [
-    { key: "odr",     label: "ODR en cours",         rows: odrEnCoursRows, color: "#955804" },
-    { key: "envoye",  label: "ODR envoyées",         rows: odrEnvoyeRows,  color: "#8A4B04" },
-    { key: "accepte", label: "ODR acceptés",         rows: odrAccepteRows, color: "#13762C" },
-    { key: "clos",    label: "ODR présents (clos)",  rows: odrClosRows,    color: "#0E5D22" },
+    { key: "odr",     label: "ODR en cours",  rows: odrEnCoursRows, color: "#955804" },
+    { key: "envoye",  label: "ODR envoyées",  rows: odrEnvoyeRows,  color: "#8A4B04" },
+    { key: "accepte", label: "ODR acceptés",  rows: odrAccepteRows, color: "#13762C" },
+    { key: "clos",    label: "ODR clos",      rows: odrClosRows,    color: "#0E5D22" },
   ];
-  const insurerRows = (key: string, rows: Pipeline[]) => rows.filter(p => matchOdrInsurer(p.copro.assureurActuel) === key);
+  const insurerRows = (key: string, rows: Pipeline[]) => rows.filter(p => odrPartenaireKey(p.odrPartenaire) === key);
   const stageMt = (rows: Pipeline[], label: string, color: string) => { const mt = sumPrime(rows); return { label, count: rows.length, montant: mt, arr: mt * 0.25, color }; };
   const odrByInsurer = ODR_INSURERS.map(ins => {
     const enCours = insurerRows(ins.key, odrEnCoursRows);
@@ -473,10 +477,10 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
           </span>
         </div>
         <div style={{ fontSize: 12, color: "#656576", marginBottom: 18 }}>
-          Vue à déployer : avancement des ordres de remplacement chez nos 4 partenaires.
-          « ODR acceptés » se remplira avec les listes AXA / Generali / SADA / Mila.
+          Avancement des ordres de remplacement chez nos 4 partenaires, à partir du marqueur ODR
+          posé sur chaque dossier au traitement des listes (AXA / Generali / SADA / Mila).
           <br />
-          <span style={{ color: "#A2A1AF" }}>ℹ️ « ODR clos » n'est approché (dossier clos assuré chez le partenaire) que pour <b>SADA</b> et <b>Generali</b>, chez qui on ne fait que de l'ODR. Chez <b>AXA</b> et <b>Mila</b> un clos peut être un remplacement classique (devis) → non compté tant qu'on n'a pas de marqueur ODR fiable. Les refusés / perdus ne sont jamais comptés.</span>
+          <span style={{ color: "#A2A1AF" }}>ℹ️ « ODR clos » = ODR accepté et en vigueur (récupération passée) ou devenu client. Les refusés / perdus ne sont jamais comptés.</span>
         </div>
 
         {/* Par assureur : nb dossiers + montant en jeu + ARR, puis répartition par stade */}
