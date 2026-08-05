@@ -105,6 +105,22 @@ export default async function AutomatisationsPage() {
         "Encore en cours : l'application automatique du bon montant à chaque dossier (sans clic), l'automatisation complète de la comparaison et la préparation/l'envoi du mail au CS. Le contrôle admin ci-dessous permet déjà de vérifier d'un coup toutes les comparaisons en cours.",
       ],
     },
+    {
+      n: 7,
+      nom: "Message Slack au gestionnaire (devis reçus) & finalisation",
+      etat: "attente",
+      description: [
+        "À venir — contenu à préciser.",
+      ],
+    },
+    {
+      n: 8,
+      nom: "Agent de nettoyage de la data & remontée des cas étranges",
+      etat: "attente",
+      description: [
+        "À venir — contenu à préciser.",
+      ],
+    },
   ];
 
   return (
@@ -116,7 +132,7 @@ export default async function AutomatisationsPage() {
             Automatisations
           </h1>
           <p className="text-sm mt-1" style={{ color: "#656576" }}>
-            Les 6 automatisations du parcours MRI — état d&apos;avancement et contrôles admin.
+            Les 8 automatisations du parcours MRI — état d&apos;avancement et contrôles admin.
           </p>
         </div>
 
