@@ -229,7 +229,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
     { key: "clos",    label: "ODR présents (clos)",  rows: odrClosRows,    color: "#0E5D22" },
   ];
   const insurerRows = (key: string, rows: Pipeline[]) => rows.filter(p => matchOdrInsurer(p.copro.assureurActuel) === key);
-  const stageMt = (rows: Pipeline[], label: string, color: string) => { const mt = sumPrime(rows); return { label, montant: mt, arr: mt * 0.25, color }; };
+  const stageMt = (rows: Pipeline[], label: string, color: string) => { const mt = sumPrime(rows); return { label, count: rows.length, montant: mt, arr: mt * 0.25, color }; };
   const odrByInsurer = ODR_INSURERS.map(ins => {
     const enCours = insurerRows(ins.key, odrEnCoursRows);
     const envoye  = insurerRows(ins.key, odrEnvoyeRows);
@@ -475,7 +475,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
 
         {/* Par assureur : nb dossiers + montant en jeu + ARR, puis répartition par stade */}
         <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginBottom: 10 }}>Dossiers ODR par assureur — toutes étapes</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12, marginBottom: 24 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12, marginBottom: 24 }}>
           {odrByInsurer.map(ins => (
             <div key={ins.label} style={{ border: "1px solid #E8E8EC", borderRadius: 8, padding: "14px 16px", background: "#FBFBFB" }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#26262C", marginBottom: 10 }}>{ins.label}</div>
@@ -498,8 +498,9 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
               <div style={{ marginTop: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", fontSize: 10, fontFamily: FONT_MONO, color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.03em", paddingBottom: 5 }}>
                   <span style={{ flex: 1 }} />
-                  <span style={{ width: 62, textAlign: "right" }}>En jeu</span>
-                  <span style={{ width: 62, textAlign: "right" }}>ARR</span>
+                  <span style={{ width: 34, textAlign: "right" }}>Nb</span>
+                  <span style={{ width: 58, textAlign: "right" }}>En jeu</span>
+                  <span style={{ width: 58, textAlign: "right" }}>ARR</span>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                   {ins.stages.map(st => (
@@ -508,10 +509,13 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
                         <span style={{ width: 6, height: 6, borderRadius: "50%", background: st.color, flexShrink: 0 }} />
                         {st.label}
                       </span>
-                      <span style={{ width: 62, textAlign: "right", fontWeight: 600, color: st.montant > 0 ? "#26262C" : "#C0C0C9", fontVariantNumeric: "tabular-nums" }}>
+                      <span style={{ width: 34, textAlign: "right", fontWeight: 600, color: st.count > 0 ? "#26262C" : "#C0C0C9", fontVariantNumeric: "tabular-nums" }}>
+                        {st.count}
+                      </span>
+                      <span style={{ width: 58, textAlign: "right", fontWeight: 600, color: st.montant > 0 ? "#26262C" : "#C0C0C9", fontVariantNumeric: "tabular-nums" }}>
                         {st.montant > 0 ? fmtEurC(st.montant) : "—"}
                       </span>
-                      <span style={{ width: 62, textAlign: "right", fontWeight: 600, color: st.arr > 0 ? "#13762C" : "#C0C0C9", fontVariantNumeric: "tabular-nums" }}>
+                      <span style={{ width: 58, textAlign: "right", fontWeight: 600, color: st.arr > 0 ? "#13762C" : "#C0C0C9", fontVariantNumeric: "tabular-nums" }}>
                         {st.arr > 0 ? fmtEurC(st.arr) : "—"}
                       </span>
                     </div>
