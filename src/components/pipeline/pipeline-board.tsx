@@ -76,6 +76,7 @@ function Tag({ children, variant = "neutral" }: { children: React.ReactNode; var
 const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
   identifie:      { label: "Identification",       variant: "neutral" },
   odr_en_cours:   { label: "ODR en cours",         variant: "warning" },
+  odr_envoye:     { label: "ODR envoyée",          variant: "warning" },
   odr_accepte:    { label: "ODR accepté",          variant: "success" },
   rs_en_cours:    { label: "Récupération du RS",   variant: "primary" },
   devis_demandes: { label: "Demande des devis",    variant: "primary" },
@@ -344,7 +345,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
   //   Exclut seulement clos (dont clients MRI) et perdus.
   // "contrat_signe" = deal gagné (compté dans "gagnés") → exclu des "actifs"
   // même si son bucket est urgent/autre, sinon il serait compté deux fois.
-  const actifsCount = filtered.filter(p => { const b = bucketOf(p); return (b === "urgent" || b === "autre" || b === "odr") && p.statut !== "contrat_signe"; }).length;
+  const actifsCount = filtered.filter(p => { const b = bucketOf(p); return (b === "urgent" || b === "autre" || b === "odr" || b === "odr_envoye") && p.statut !== "contrat_signe"; }).length;
   // « Échéance < 6 mois » : TOUS les dossiers à traiter dont l'échéance est ≤ 180 j,
   // ODR INCLUS (un ODR se traite en parallèle → il reste "à traiter"). On garde le
   // périmètre "actifs" (exclut clos / perdus / signés, qui ne sont plus à traiter).
@@ -353,7 +354,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
   // le batch alors que la date d'échéance n'avait pas bougé.
   const echeanceProche = filtered.filter(p => {
     const b = bucketOf(p);
-    const actif = (b === "urgent" || b === "autre" || b === "odr") && p.statut !== "contrat_signe";
+    const actif = (b === "urgent" || b === "autre" || b === "odr" || b === "odr_envoye") && p.statut !== "contrat_signe";
     const d = getDaysUntilEcheance(p.copro.dateEcheance);
     return actif && d !== null && d <= 180;
   }).length;
@@ -363,6 +364,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
   const urgents      = sorted.filter(p => bucketOf(p) === "urgent");
   const autres       = sorted.filter(p => bucketOf(p) === "autre");
   const odrs         = sorted.filter(p => bucketOf(p) === "odr");
+  const odrEnvoyes   = sorted.filter(p => bucketOf(p) === "odr_envoye");
   const odrAcceptes  = sorted.filter(p => bucketOf(p) === "odr_accepte");
   const clos         = sorted.filter(p => bucketOf(p) === "clos");
   const perdus       = sorted.filter(p => bucketOf(p) === "perdu");
@@ -616,6 +618,20 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                       ))}
                     </>
                   )}
+                  {odrEnvoyes.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={5} style={{ padding: "10px 16px 8px", background: "#FFF3E3", borderTop: "2px solid #E8E8EC" }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "#8A4B04" }}>
+                            ODR envoyées — en attente de réponse — {odrEnvoyes.length}
+                          </span>
+                        </td>
+                      </tr>
+                      {odrEnvoyes.map((p) => (
+                        <PipelineRow key={p.id} pipeline={p} taskTemplates={taskTemplates} odr />
+                      ))}
+                    </>
+                  )}
                   {odrAcceptes.length > 0 && (
                     <>
                       <tr>
@@ -670,6 +686,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
 
             {(() => {
               const odrKanban = filtered.filter(p => bucketOf(p) === "odr");
+              const odrEnvoyeKanban = filtered.filter(p => bucketOf(p) === "odr_envoye");
               const odrAccepteKanban = filtered.filter(p => bucketOf(p) === "odr_accepte");
               const closKanban = filtered.filter(p => bucketOf(p) === "clos");
               const perdusKanban = filtered.filter(p => bucketOf(p) === "perdu");
@@ -711,6 +728,45 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                       ))}
                       {odrKanban.length === 0 && (
                         <div style={{ borderRadius: 6, padding: 12, textAlign: "center", fontSize: 12, border: "1px dashed #F5D98A", background: "#FFFBEB", color: "#A2A1AF" }}>
+                          Vide
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {/* Zone 2 (suite) : ODR envoyées — toujours actif */}
+                  <div style={{ minWidth: 200, flexShrink: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#8A4B04" }}>
+                        ODR envoyées
+                      </span>
+                      {odrEnvoyeKanban.length > 0 && (
+                        <span style={{ fontSize: 11, fontWeight: 500, padding: "1px 6px", background: "#FFF1DC", borderRadius: 10, color: "#8A4B04", fontVariantNumeric: "tabular-nums" }}>
+                          {odrEnvoyeKanban.length}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {odrEnvoyeKanban.map((p) => (
+                        <Link key={p.id} href={`/pipeline/${p.id}`} style={{ textDecoration: "none" }}>
+                          <div style={{
+                            background: "#FFF6EA", borderRadius: 6, padding: "10px 12px",
+                            border: "1px solid #EBB878", borderLeft: "3px solid #E8943A",
+                            cursor: "pointer", transition: "box-shadow 120ms",
+                          }}
+                            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
+                            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
+                          >
+                            <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {p.copro.nom}
+                            </div>
+                            <div style={{ marginTop: 4 }}>
+                              <Tag variant="warning">ODR envoyée</Tag>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                      {odrEnvoyeKanban.length === 0 && (
+                        <div style={{ borderRadius: 6, padding: 12, textAlign: "center", fontSize: 12, border: "1px dashed #EBB878", background: "#FFF6EA", color: "#A2A1AF" }}>
                           Vide
                         </div>
                       )}

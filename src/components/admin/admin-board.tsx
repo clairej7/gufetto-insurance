@@ -44,6 +44,7 @@ interface AdminBoardProps {
 const STAGE_COLS: { statut: string; label: string; shortLabel: string; bg: string; fg: string; bar: string }[] = [
   { statut: "identifie",          label: "Identification",      shortLabel: "Identification",       bg: "#F7F7F8", fg: "#656576", bar: "#D4D4DC" },
   { statut: "odr_en_cours",       label: "ODR en cours",        shortLabel: "ODR en cours",         bg: "#FFF7EB", fg: "#955804", bar: "#F5C55A" },
+  { statut: "odr_envoye",         label: "ODR envoyées",        shortLabel: "ODR envoyées",         bg: "#FFF1DC", fg: "#8A4B04", bar: "#E8943A" },
   { statut: "rs_en_cours",        label: "Récupération du RS",  shortLabel: "Récupération du RS",   bg: "#F5F5FF", fg: "#4E49FC", bar: "#B8B5FD" },
   { statut: "devis_demandes",     label: "Demande des devis",   shortLabel: "Demande des devis",    bg: "#F5F5FF", fg: "#4E49FC", bar: "#9B97FC" },
   { statut: "devis_recus",        label: "Comparaison des devis", shortLabel: "Comparaison des devis", bg: "#EBEBFF", fg: "#3C38C7", bar: "#7C79F8" },
@@ -72,6 +73,7 @@ const TAG_FG: Record<TagVariant, string> = {
 const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
   identifie:      { label: "Identification",       variant: "neutral" },
   odr_en_cours:   { label: "ODR en cours",         variant: "warning" },
+  odr_envoye:     { label: "ODR envoyée",          variant: "warning" },
   odr_accepte:    { label: "ODR accepté",          variant: "success" },
   rs_en_cours:    { label: "Récupération du RS",   variant: "primary" },
   devis_demandes: { label: "Demande des devis",    variant: "primary" },
@@ -160,7 +162,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
   });
   // ODR inclus (dossier en cours de travail). "contrat_signe" exclu : c'est un
   // deal gagné (compté dans "gagnés"), sinon double-comptage actifs+gagnés.
-  const isActif = (p: Pipeline) => { const b = bucketOf(p); return (b === "urgent" || b === "autre" || b === "odr") && p.statut !== "contrat_signe"; };
+  const isActif = (p: Pipeline) => { const b = bucketOf(p); return (b === "urgent" || b === "autre" || b === "odr" || b === "odr_envoye") && p.statut !== "contrat_signe"; };
 
   // "Deals gagnés" = clos (clients MRI hors Wakam inclus) + contrat signé + ODR accepté
   // (ordre validé par l'assureur ; deal gagné même si le mandat démarre à l'échéance).
@@ -187,6 +189,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
     if (statut === "_perdu") return flost;
     if (statut === "_clos") return fp.filter(p => bucketOf(p) === "clos");
     if (statut === "odr_en_cours") return fp.filter(p => bucketOf(p) === "odr");
+    // ODR envoyé = étape active dédiée (bucket odr_envoye).
+    if (statut === "odr_envoye") return fp.filter(p => bucketOf(p) === "odr_envoye");
     // ODR accepté = deal gagné dédié (bucket odr_accepte).
     if (statut === "odr_accepte") return fp.filter(p => bucketOf(p) === "odr_accepte");
     // Signé = deal gagné à part (hors "actifs", hors "clos").
@@ -214,11 +218,13 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
   // issus d'un ODR" sont approchés par heuristique (dossier clos dont l'assureur
   // est un des 4 partenaires) — pas de marqueur dédié pour l'instant.
   const odrEnCoursRows  = fp.filter(p => bucketOf(p) === "odr");
+  const odrEnvoyeRows   = fp.filter(p => bucketOf(p) === "odr_envoye");
   const odrAccepteRows  = fp.filter(p => bucketOf(p) === "odr_accepte");
   const odrClosRows     = fp.filter(p => bucketOf(p) === "clos" && matchOdrInsurer(p.copro.assureurActuel) !== null);
-  const odrAllRows      = [...odrEnCoursRows, ...odrAccepteRows, ...odrClosRows];
+  const odrAllRows      = [...odrEnCoursRows, ...odrEnvoyeRows, ...odrAccepteRows, ...odrClosRows];
   const odrStages = [
     { key: "odr",     label: "ODR en cours",         rows: odrEnCoursRows, color: "#955804" },
+    { key: "envoye",  label: "ODR envoyées",         rows: odrEnvoyeRows,  color: "#8A4B04" },
     { key: "accepte", label: "ODR acceptés",         rows: odrAccepteRows, color: "#13762C" },
     { key: "clos",    label: "ODR présents (clos)",  rows: odrClosRows,    color: "#0E5D22" },
   ];
@@ -231,7 +237,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
   const byStatut = Object.fromEntries(barData.map(b => [b.statut, b] as const));
   const grp = (statuts: string[]) => statuts.map(s => byStatut[s]).filter(Boolean);
   const G_FUNNEL = grp(["identifie", "rs_en_cours", "devis_demandes", "devis_recus", "envoye_cs"]);
-  const G_ODR    = grp(["odr_en_cours"]);
+  const G_ODR    = grp(["odr_en_cours", "odr_envoye"]);
   const G_GAGNE  = grp(["odr_accepte", "contrat_signe", "_clos"]);
   const G_PERDU  = grp(["_perdu"]);
 
@@ -463,7 +469,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
 
         {/* Mini-pipeline ODR : en cours → acceptés → clos, avec Nb / montant / ARR */}
         <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginBottom: 10 }}>Pipeline ODR — nombre · montant en jeu · ARR potentiel (×0,25)</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
           {odrStages.map(st => {
             const prime = sumPrime(st.rows);
             return (
