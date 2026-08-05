@@ -405,7 +405,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
       />
       <MultiSelectFilter
         placeholder="Toutes les étapes"
-        options={PIPELINE_STEPS.map((s) => s.statut)}
+        options={["identifie", "odr_en_cours", "odr_envoye", "rs_en_cours", "devis_demandes", "devis_recus", "envoye_cs", "odr_accepte", "odr_en_vigueur", "contrat_signe"]}
         value={selectedStatut}
         onChange={setSelectedStatut}
         renderOption={(s) => STATUT_TAG[s]?.label ?? s}
