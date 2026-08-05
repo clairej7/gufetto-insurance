@@ -70,8 +70,9 @@ export default async function AutomatisationsPage() {
       nom: "Complétion du mail courtier",
       etat: "attente",
       description: [
-        "Quand le mail du courtier n'a pas pu être récupéré via Front, cette automatisation le complète à partir d'une base de référence assureur → courtier (adresses de contact connues par compagnie / cabinet).",
-        "Objectif : maximiser la part de dossiers réellement contactables avant l'envoi des demandes de RS (automatisation 4), au lieu de les laisser bloqués faute d'adresse exploitable.",
+        "Cette automatisation s'applique uniquement à l'étape « Récupération du RS » (RS en cours). Son but : mieux trouver le mail du courtier lorsqu'il est correctement identifié, afin de pouvoir ensuite envoyer plus facilement le mail de demande de RS (automatisation 4). Elle fait deux choses, en s'appuyant sur une base de référence de courtiers et d'assureurs.",
+        "1) Filtre de vérification courtier / assureur : chaque dossier arrivant du pré-remplissage est repassé au crible. L'assureur trouvé à l'étape précédente est vérifié dans la base ; s'il s'agit en réalité d'un courtier (erreur fréquente), le dossier est renvoyé à l'étape « Identification » plutôt que de rester bloqué en RS avec une donnée fausse.",
+        "2) Complétion du mail courtier : quand les infos sont bonnes mais que le mail du courtier manque (non récupéré via Front), l'automatisation le complète à partir de cette même base (adresses de contact connues par cabinet / compagnie). Objectif : maximiser la part de dossiers réellement contactables avant l'envoi des demandes de RS, au lieu de les laisser bloqués faute d'adresse exploitable.",
       ],
     },
     {
