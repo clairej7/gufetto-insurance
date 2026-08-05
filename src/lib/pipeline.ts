@@ -88,7 +88,7 @@ export function getDaysUntilEcheance(dateEcheance: Date | null): number | null {
 // ─── Classement d'un dossier en sections (mutuellement exclusives) ───────────
 // Un dossier tombe dans EXACTEMENT un bucket, déterminé par priorité.
 
-export type DossierBucket = "perdu" | "odr" | "odr_accepte" | "clos" | "urgent" | "autre";
+export type DossierBucket = "perdu" | "odr" | "odr_envoye" | "odr_accepte" | "clos" | "urgent" | "autre";
 
 const LOST_STATUTS: PipelineStatut[] = ["abandonne", "refuse", "non_assurable"];
 // "Clos par le statut de vente" : Contract Uploaded (resiliation_envoyee) et +.
@@ -123,6 +123,9 @@ export function categoriseDossier(input: {
   if (LOST_STATUTS.includes(input.statut as PipelineStatut)) return "perdu";
   // 1 bis. ODR (ordre de remplacement) : sortie de cycle, catégorie dédiée (fond jaune).
   if (input.statut === "odr_en_cours") return "odr";
+  // 1 bis-2. ODR ENVOYÉ : ordre transmis à l'assureur, en attente de réponse.
+  // Toujours ACTIF (pas encore gagné), mais étape distincte pour le suivi.
+  if (input.statut === "odr_envoye") return "odr_envoye";
   // 1 ter. ODR ACCEPTÉ : ordre validé par l'assureur → deal GAGNÉ, mais mandat pas
   // encore actif (démarre à l'échéance du contrat en cours). Catégorie dédiée,
   // testée avant la clôture-client pour rester identifiable dans le suivi ODR.
