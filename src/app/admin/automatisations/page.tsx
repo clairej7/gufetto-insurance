@@ -49,6 +49,7 @@ export default async function AutomatisationsPage() {
     ready: b.ready.length,
     missing: b.missingNum.length,
     flagged: b.flagged.length,
+    flaggedReady: b.flagged.filter((d) => d.numeroContrat).length,
   }));
 
   const automations: {

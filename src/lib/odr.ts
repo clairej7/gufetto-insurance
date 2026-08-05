@@ -4,6 +4,8 @@
 // liste des contrats, en PDF, et en CSV pour l'export. L'envoi effectif via Front
 // et le passage en « ODR envoyées » sont gérés par la route /api/odr/send.
 
+import fs from "fs";
+import path from "path";
 import { PDFDocument, StandardFonts, PDFFont, PDFPage } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
 import { matchPartner } from "@/lib/front-insurance";
@@ -76,6 +78,14 @@ export async function getOdrByPartner(): Promise<OdrPartnerBucket[]> {
   }
 
   return ODR_PARTNERS.map((p) => buckets.get(p.key)!);
+}
+
+// Dossiers qui iront dans la lettre : les prêts, + éventuellement les ex-flaggés
+// (auto 1) qui portent un n° de contrat — ceux-ci ont été re-vérifiés via la passe
+// Matera, donc réintégrables sur demande (case « inclure les flaggés »).
+export function letterDossiers(bucket: OdrPartnerBucket, includeFlagged: boolean): OdrDossier[] {
+  const extra = includeFlagged ? bucket.flagged.filter((d) => d.numeroContrat) : [];
+  return [...bucket.ready, ...extra];
 }
 
 // ---- Template ODR (texte affiché dans l'admin + corps du mail de repli) ----
@@ -231,6 +241,28 @@ export async function renderOdrPdf(dossiers: OdrDossier[], dateStr: string): Pro
   draw(`Fait à Paris le Date : ${dateStr}`);
   gap(6);
   draw("Lu et approuvé");
+
+  // Bloc signature + cachet Matera (fidèle au template docx). Best-effort : si les
+  // fichiers manquent, on n'ajoute rien plutôt que de casser la génération.
+  try {
+    const sigBuf = fs.readFileSync(path.join(process.cwd(), "public/odr/odr_signature.png"));
+    const cachetBuf = fs.readFileSync(path.join(process.cwd(), "public/odr/odr_cachet.png"));
+    const sig = await pdf.embedPng(sigBuf);
+    const cachet = await pdf.embedPng(cachetBuf);
+    const sigW = 140,
+      sigH = (sig.height / sig.width) * sigW;
+    const cachetW = 130,
+      cachetH = (cachet.height / cachet.width) * cachetW;
+    const blockH = Math.max(sigH, cachetH);
+    gap(12);
+    ensure(blockH);
+    const top = y;
+    page.drawImage(sig, { x: margin, y: top - sigH, width: sigW, height: sigH });
+    page.drawImage(cachet, { x: margin + sigW + 24, y: top - cachetH, width: cachetW, height: cachetH });
+    y = top - blockH;
+  } catch {
+    // pas d'images embarquées → lettre sans cachet
+  }
 
   return pdf.save();
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { tagConversation } from "@/lib/front";
-import { getOdrByPartner, isOdrPartnerKey, renderOdrPdf, fillOdrLetterText, frenchDate, partnerLabel } from "@/lib/odr";
+import { getOdrByPartner, isOdrPartnerKey, renderOdrPdf, frenchDate, partnerLabel, letterDossiers } from "@/lib/odr";
 
 const FRONT_API_URL = "https://api2.frontapp.com";
 const FRONT_TOKEN = process.env.FRONT_API_TOKEN;
@@ -20,12 +20,13 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const partner: string = body.partner || "";
   const to: string = (body.to || "").trim();
+  const includeFlagged: boolean = body.includeFlagged === true;
   if (!isOdrPartnerKey(partner)) return NextResponse.json({ error: "partner invalide" }, { status: 400 });
   if (!to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return NextResponse.json({ error: "Destinataire (email) invalide" }, { status: 400 });
 
-  // Source de vérité serveur : on renvoie les ODR prêts de l'assureur (jamais la liste du client).
+  // Source de vérité serveur : on recompose la liste des ODR de l'assureur (jamais celle du client).
   const bucket = (await getOdrByPartner()).find((b) => b.key === partner)!;
-  const dossiers = bucket.ready;
+  const dossiers = letterDossiers(bucket, includeFlagged);
   if (dossiers.length === 0) return NextResponse.json({ error: "Aucun dossier prêt à envoyer pour cet assureur" }, { status: 400 });
 
   const dateStr = frenchDate(new Date());
