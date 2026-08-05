@@ -344,7 +344,18 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
   // "contrat_signe" = deal gagné (compté dans "gagnés") → exclu des "actifs"
   // même si son bucket est urgent/autre, sinon il serait compté deux fois.
   const actifsCount = filtered.filter(p => { const b = bucketOf(p); return (b === "urgent" || b === "autre" || b === "odr") && p.statut !== "contrat_signe"; }).length;
-  const urgent = filtered.filter(p => bucketOf(p) === "urgent").length;
+  // « Échéance < 6 mois » : TOUS les dossiers à traiter dont l'échéance est ≤ 180 j,
+  // ODR INCLUS (un ODR se traite en parallèle → il reste "à traiter"). On garde le
+  // périmètre "actifs" (exclut clos / perdus / signés, qui ne sont plus à traiter).
+  // Sans l'inclusion ODR, aiguiller un dossier bientôt échu vers l'ODR le faisait
+  // sortir du compteur (bucket odr testé avant urgent) → le chiffre chutait pendant
+  // le batch alors que la date d'échéance n'avait pas bougé.
+  const echeanceProche = filtered.filter(p => {
+    const b = bucketOf(p);
+    const actif = (b === "urgent" || b === "autre" || b === "odr") && p.statut !== "contrat_signe";
+    const d = getDaysUntilEcheance(p.copro.dateEcheance);
+    return actif && d !== null && d <= 180;
+  }).length;
   // "Deals gagnés" : dossiers clos (clients MRI hors Wakam inclus) + contrat signé en cours.
   const dealsGagnes = filtered.filter(p => bucketOf(p) === "clos" || p.statut === "contrat_signe").length;
 
@@ -502,7 +513,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
         {[
           { label: "Dossiers actifs", value: actifsCount, color: undefined },
-          { label: "Échéance < 6 mois", value: urgent, color: urgent > 0 ? "#CA1E12" : undefined },
+          { label: "Échéance < 6 mois", value: echeanceProche, color: echeanceProche > 0 ? "#CA1E12" : undefined },
           { label: "Deals gagnés", value: dealsGagnes, color: dealsGagnes > 0 ? "#13762C" : undefined },
         ].map(({ label, value, color }) => (
           <div key={label} style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "16px 20px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
