@@ -228,10 +228,24 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
     { key: "accepte", label: "ODR acceptés",         rows: odrAccepteRows, color: "#13762C" },
     { key: "clos",    label: "ODR présents (clos)",  rows: odrClosRows,    color: "#0E5D22" },
   ];
-  const odrByInsurer = ODR_INSURERS.map(ins => ({
-    label: ins.label,
-    count: odrAllRows.filter(p => matchOdrInsurer(p.copro.assureurActuel) === ins.key).length,
-  }));
+  // "ODR gagné" = ODR accepté + ODR présents dans les clos (partenaire).
+  const odrGagneRows = [...odrAccepteRows, ...odrClosRows];
+  const insurerRows = (key: string, rows: Pipeline[]) => rows.filter(p => matchOdrInsurer(p.copro.assureurActuel) === key);
+  const odrByInsurer = ODR_INSURERS.map(ins => {
+    const enCours = insurerRows(ins.key, odrEnCoursRows);
+    const envoye  = insurerRows(ins.key, odrEnvoyeRows);
+    const gagne   = insurerRows(ins.key, odrGagneRows);
+    const all = [...enCours, ...envoye, ...gagne];
+    const montant = sumPrime(all);
+    return {
+      label: ins.label, count: all.length, montant, arr: montant * 0.25,
+      stages: [
+        { label: "ODR en cours", montant: sumPrime(enCours), color: "#955804" },
+        { label: "ODR envoyé",   montant: sumPrime(envoye),  color: "#8A4B04" },
+        { label: "ODR gagné",    montant: sumPrime(gagne),   color: "#13762C" },
+      ],
+    };
+  });
 
   // Regroupement visuel du graphe en 4 zones (contenu identique, juste l'affichage).
   const byStatut = Object.fromEntries(barData.map(b => [b.statut, b] as const));
@@ -458,13 +472,41 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
           <span style={{ color: "#A2A1AF" }}>ℹ️ Les dossiers refusés / perdus ne sont jamais comptés dans ce suivi.</span>
         </div>
 
-        {/* Nb de dossiers ODR (toutes étapes) par assureur */}
+        {/* Par assureur : nb dossiers + montant en jeu + ARR, puis répartition par stade */}
         <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginBottom: 10 }}>Dossiers ODR par assureur — toutes étapes</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12, marginBottom: 24 }}>
           {odrByInsurer.map(ins => (
-            <div key={ins.label} style={{ border: "1px solid #E8E8EC", borderRadius: 8, padding: "12px 16px", background: "#FBFBFB" }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: "#26262C", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{ins.count}</div>
-              <div style={{ fontSize: 12, color: "#656576", marginTop: 3 }}>{ins.label}</div>
+            <div key={ins.label} style={{ border: "1px solid #E8E8EC", borderRadius: 8, padding: "14px 16px", background: "#FBFBFB" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#26262C", marginBottom: 10 }}>{ins.label}</div>
+              {/* Ligne du haut : nb dossiers · montant en jeu · ARR */}
+              <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap", paddingBottom: 12, borderBottom: "1px solid #EEEEF1" }}>
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: "#26262C", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{ins.count}</div>
+                  <div style={{ fontSize: 11, color: "#656576", marginTop: 2 }}>Dossiers</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#26262C", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{ins.montant > 0 ? fmtEurC(ins.montant) : "—"}</div>
+                  <div style={{ fontSize: 11, color: "#656576", marginTop: 2 }}>Montant en jeu</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#13762C", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{ins.arr > 0 ? fmtEurC(ins.arr) : "—"}</div>
+                  <div style={{ fontSize: 11, color: "#656576", marginTop: 2 }}>ARR associé</div>
+                </div>
+              </div>
+              {/* Répartition des montants par stade */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 10 }}>
+                {ins.stages.map(st => (
+                  <div key={st.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#656576" }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: st.color }} />
+                      {st.label}
+                    </span>
+                    <span style={{ fontWeight: 600, color: st.montant > 0 ? "#26262C" : "#C0C0C9", fontVariantNumeric: "tabular-nums" }}>
+                      {st.montant > 0 ? fmtEurC(st.montant) : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
