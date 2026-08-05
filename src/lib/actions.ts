@@ -648,6 +648,21 @@ export async function updatePipelineNotes(pipelineId: string, notes: string) {
   return { success: true };
 }
 
+// Marqueur ODR persistant : partenaire chez qui l'ordre de remplacement est engagé
+// ("AXA"/"GENERALI"/"SADA"/"MILA"), ou null pour retirer. Indépendant du statut →
+// permet d'extraire tous les ODR d'un partenaire (ex. "pas encore envoyés à AXA").
+export async function setOdrPartenaire(pipelineId: string, partenaire: string | null) {
+  await getSession();
+
+  await prisma.insurancePipeline.update({
+    where: { id: pipelineId },
+    data: { odrPartenaire: partenaire },
+  });
+
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
 export async function addDevisRecu(
   pipelineId: string,
   data: {
