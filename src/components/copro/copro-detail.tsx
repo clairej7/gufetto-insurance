@@ -663,13 +663,15 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
               <Badge className="border" style={{ backgroundColor: "#FFF1DC", color: "#8A4B04", borderColor: "#E8943A" }}>Ordre de remplacement envoyé</Badge>
             ) : pipeline.statut === "odr_accepte" ? (
               <Badge style={{ backgroundColor: "#13762C", color: "#ffffff" }}>Deal gagné — ODR accepté 🎉</Badge>
+            ) : pipeline.statut === "odr_en_vigueur" ? (
+              <Badge style={{ backgroundColor: "#0E5D22", color: "#ffffff" }}>ODR en vigueur — deal gagné ✓</Badge>
             ) : (
               <Badge variant="secondary">{currentStep?.label} — étape {currentStepIndex + 1}/{PIPELINE_STEPS.length - 1}</Badge>
             )}
           </div>
         </div>
 
-        {((!isTerminal && pipeline.statut !== "odr_en_cours" && pipeline.statut !== "odr_envoye" && pipeline.statut !== "odr_accepte") || isLost || pipeline.statut === "termine") && (
+        {((!isTerminal && pipeline.statut !== "odr_en_cours" && pipeline.statut !== "odr_envoye" && pipeline.statut !== "odr_accepte" && pipeline.statut !== "odr_en_vigueur") || isLost || pipeline.statut === "termine") && (
           <div className="mt-4">
             <StepProgressBar
               steps={PIPELINE_STEPS.filter((s) => s.statut !== "termine" && s.statut !== "abandonne")}
@@ -844,10 +846,11 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                   { statut: "odr_en_cours", label: "En cours", active: { bg: "#F5A623", bd: "#F5A623", fg: "#FFFFFF" } },
                   { statut: "odr_envoye",   label: "Envoyé",   active: { bg: "#E8943A", bd: "#E8943A", fg: "#FFFFFF" } },
                   { statut: "odr_accepte",  label: "Accepté",  active: { bg: "#13762C", bd: "#13762C", fg: "#FFFFFF" } },
+                  { statut: "odr_en_vigueur", label: "En vigueur", active: { bg: "#0E5D22", bd: "#0E5D22", fg: "#FFFFFF" } },
                 ] as const).map((opt) => {
                   const isCurrent =
                     opt.statut === "identifie"
-                      ? pipeline.statut !== "odr_en_cours" && pipeline.statut !== "odr_envoye" && pipeline.statut !== "odr_accepte"
+                      ? pipeline.statut !== "odr_en_cours" && pipeline.statut !== "odr_envoye" && pipeline.statut !== "odr_accepte" && pipeline.statut !== "odr_en_vigueur"
                       : pipeline.statut === opt.statut;
                   return (
                     <button
@@ -861,6 +864,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                             if (opt.statut === "odr_en_cours") toast.success("Passée en ODR en cours");
                             else if (opt.statut === "odr_envoye") toast.success("ODR envoyé à l'assureur");
                             else if (opt.statut === "odr_accepte") toast.success("ODR accepté — deal gagné 🎉");
+                            else if (opt.statut === "odr_en_vigueur") toast.success("ODR en vigueur ✓");
                           } catch {
                             toast.error("Erreur");
                           }

@@ -59,6 +59,7 @@ const STATUT_LABEL: Record<string, string> = {
   odr_en_cours: "ODR en cours",
   odr_envoye: "ODR envoyée",
   odr_accepte: "ODR accepté",
+  odr_en_vigueur: "ODR en vigueur",
   rs_en_cours: "RS en cours",
   devis_demandes: "Devis demandés",
   devis_recus: "Devis reçus",

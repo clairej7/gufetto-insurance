@@ -8,7 +8,7 @@ export const ECHEANCE_THRESHOLD_MONTHS = 6;
 
 // odr_en_cours / odr_accepte sont hors cycle linéaire (dossier en ODR, ou ODR gagné
 // en attente d'échéance) → aucune tâche générée.
-type ActiveStatut = Exclude<PipelineStatut, "termine" | "abandonne" | "refuse" | "non_assurable" | "odr_en_cours" | "odr_envoye" | "odr_accepte">;
+type ActiveStatut = Exclude<PipelineStatut, "termine" | "abandonne" | "refuse" | "non_assurable" | "odr_en_cours" | "odr_envoye" | "odr_accepte" | "odr_en_vigueur">;
 
 type StageTaskSpec = { suffix: string; dueDays: number };
 

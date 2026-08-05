@@ -120,6 +120,7 @@ enum PipelineStatut {
   odr_en_cours
   odr_envoye
   odr_accepte
+  odr_en_vigueur
   rs_en_cours
   rs_recu
   devis_demandes
@@ -149,6 +150,12 @@ model InsurancePipeline {
   nouveauNumeroContrat    String?
   nouveauDateEffet        DateTime?
   nouveauPrimeTTC         Float?
+
+  // Marqueur ODR persistant : partenaire chez qui un Ordre de Remplacement a été
+  // engagé ("AXA" / "GENERALI" / "SADA" / "MILA"). Indépendant du statut → permet
+  // de suivre les ODR à travers toutes les étapes (y compris une fois clos), là où
+  // l'assureur seul ne suffit pas (un clos AXA n'est pas forcément un ODR).
+  odrPartenaire           String?
 
   // Dernière tentative d'autofill (automatisation 1). Sert de curseur persistant :
   // le batch exclut les dossiers tentés récemment → il avance dans le stock au

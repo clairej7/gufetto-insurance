@@ -78,6 +78,7 @@ const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
   odr_en_cours:   { label: "ODR en cours",         variant: "warning" },
   odr_envoye:     { label: "ODR envoyée",          variant: "warning" },
   odr_accepte:    { label: "ODR accepté",          variant: "success" },
+  odr_en_vigueur: { label: "ODR en vigueur",       variant: "success-filled" },
   rs_en_cours:    { label: "Récupération du RS",   variant: "primary" },
   devis_demandes: { label: "Demande des devis",    variant: "primary" },
   devis_recus:    { label: "Comparaison des devis", variant: "primary" },
