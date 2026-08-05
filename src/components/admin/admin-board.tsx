@@ -48,6 +48,7 @@ const STAGE_COLS: { statut: string; label: string; shortLabel: string; bg: strin
   { statut: "devis_demandes",     label: "Demande des devis",   shortLabel: "Demande des devis",    bg: "#F5F5FF", fg: "#4E49FC", bar: "#9B97FC" },
   { statut: "devis_recus",        label: "Comparaison des devis", shortLabel: "Comparaison des devis", bg: "#EBEBFF", fg: "#3C38C7", bar: "#7C79F8" },
   { statut: "envoye_cs",          label: "Validation du CS",    shortLabel: "Validation du CS",     bg: "#FFF7EB", fg: "#955804", bar: "#F5A623" },
+  { statut: "odr_accepte",        label: "ODR acceptés",        shortLabel: "ODR acceptés",         bg: "#EAFBEF", fg: "#13762C", bar: "#6FCF97" },
   { statut: "contrat_signe",      label: "Signé",               shortLabel: "Signé",                bg: "#EFFBF2", fg: "#13762C", bar: "#34C759" },
   { statut: "_clos",              label: "Clos",             shortLabel: "Clos",        bg: "#CFF2D8", fg: "#0E5D22", bar: "#0E5D22" },
   { statut: "_perdu",             label: "Perdus",           shortLabel: "Perdus",      bg: "#FFF5F5", fg: "#CA1E12", bar: "#F26D6D" },
@@ -71,6 +72,7 @@ const TAG_FG: Record<TagVariant, string> = {
 const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
   identifie:      { label: "Identification",       variant: "neutral" },
   odr_en_cours:   { label: "ODR en cours",         variant: "warning" },
+  odr_accepte:    { label: "ODR accepté",          variant: "success" },
   rs_en_cours:    { label: "Récupération du RS",   variant: "primary" },
   devis_demandes: { label: "Demande des devis",    variant: "primary" },
   devis_recus:    { label: "Comparaison des devis", variant: "primary" },
@@ -84,6 +86,17 @@ const STATUT_TAG: Record<string, { label: string; variant: TagVariant }> = {
 
 const FONT_SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
 const FONT_MONO = "ui-monospace, Menlo, Consolas, monospace";
+
+// Les 4 assureurs partenaires ODR. Motifs tolérants (accent/faute) — mêmes règles
+// que l'autofill (ex. Generali mal orthographié). Sert au suivi ODR par assureur.
+const ODR_INSURERS: { key: string; label: string; re: RegExp }[] = [
+  { key: "axa",      label: "AXA",      re: /\baxa\b/i },
+  { key: "generali", label: "Generali", re: /g[eé]n[eé]?rali/i },
+  { key: "sada",     label: "SADA",     re: /\bsada\b/i },
+  { key: "mila",     label: "Mila",     re: /\bmila\b/i },
+];
+const matchOdrInsurer = (assureur: string | null): string | null =>
+  ODR_INSURERS.find((i) => assureur && i.re.test(assureur))?.key ?? null;
 
 // Filtre échéance (même modèle que la page Pipeline).
 const selectStyle: React.CSSProperties = {
@@ -149,8 +162,9 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
   // deal gagné (compté dans "gagnés"), sinon double-comptage actifs+gagnés.
   const isActif = (p: Pipeline) => { const b = bucketOf(p); return (b === "urgent" || b === "autre" || b === "odr") && p.statut !== "contrat_signe"; };
 
-  // "Deals gagnés" = clos (clients MRI hors Wakam inclus) + contrat signé.
-  const wonPipelines     = fp.filter(p => bucketOf(p) === "clos" || p.statut === "contrat_signe");
+  // "Deals gagnés" = clos (clients MRI hors Wakam inclus) + contrat signé + ODR accepté
+  // (ordre validé par l'assureur ; deal gagné même si le mandat démarre à l'échéance).
+  const wonPipelines     = fp.filter(p => bucketOf(p) === "clos" || p.statut === "contrat_signe" || p.statut === "odr_accepte");
   const activePipelines  = fp.filter(isActif);
 
   // Taux calculés sur le VRAI total (actifs + gagnés + perdus).
@@ -173,6 +187,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
     if (statut === "_perdu") return flost;
     if (statut === "_clos") return fp.filter(p => bucketOf(p) === "clos");
     if (statut === "odr_en_cours") return fp.filter(p => bucketOf(p) === "odr");
+    // ODR accepté = deal gagné dédié (bucket odr_accepte).
+    if (statut === "odr_accepte") return fp.filter(p => bucketOf(p) === "odr_accepte");
     // Signé = deal gagné à part (hors "actifs", hors "clos").
     if (statut === "contrat_signe") return fp.filter(p => p.statut === "contrat_signe" && bucketOf(p) !== "clos");
     return fp.filter(p => p.statut === statut && isActif(p));
@@ -193,12 +209,30 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
   const fmtEur = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
   const fmtEurC = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} M€` : n >= 1e3 ? `${Math.round(n / 1e3)} k€` : `${Math.round(n)} €`;
 
+  // ── Suivi des ODR (maquette) ──────────────────────────────────────────────
+  // Mini-pipeline ODR : en cours → acceptés → présents dans les clos. Les "clos
+  // issus d'un ODR" sont approchés par heuristique (dossier clos dont l'assureur
+  // est un des 4 partenaires) — pas de marqueur dédié pour l'instant.
+  const odrEnCoursRows  = fp.filter(p => bucketOf(p) === "odr");
+  const odrAccepteRows  = fp.filter(p => bucketOf(p) === "odr_accepte");
+  const odrClosRows     = fp.filter(p => bucketOf(p) === "clos" && matchOdrInsurer(p.copro.assureurActuel) !== null);
+  const odrAllRows      = [...odrEnCoursRows, ...odrAccepteRows, ...odrClosRows];
+  const odrStages = [
+    { key: "odr",     label: "ODR en cours",         rows: odrEnCoursRows, color: "#955804" },
+    { key: "accepte", label: "ODR acceptés",         rows: odrAccepteRows, color: "#13762C" },
+    { key: "clos",    label: "ODR présents (clos)",  rows: odrClosRows,    color: "#0E5D22" },
+  ];
+  const odrByInsurer = ODR_INSURERS.map(ins => ({
+    label: ins.label,
+    count: odrAllRows.filter(p => matchOdrInsurer(p.copro.assureurActuel) === ins.key).length,
+  }));
+
   // Regroupement visuel du graphe en 4 zones (contenu identique, juste l'affichage).
   const byStatut = Object.fromEntries(barData.map(b => [b.statut, b] as const));
   const grp = (statuts: string[]) => statuts.map(s => byStatut[s]).filter(Boolean);
   const G_FUNNEL = grp(["identifie", "rs_en_cours", "devis_demandes", "devis_recus", "envoye_cs"]);
   const G_ODR    = grp(["odr_en_cours"]);
-  const G_GAGNE  = grp(["contrat_signe", "_clos"]);
+  const G_GAGNE  = grp(["odr_accepte", "contrat_signe", "_clos"]);
   const G_PERDU  = grp(["_perdu"]);
 
   const renderBar = (bar: (typeof barData)[number]) => {
@@ -325,8 +359,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
 
           <div style={dividerFull} />
 
-          {/* Zone 3 : Gagnés (signé + clos) */}
-          <div style={{ flex: 2, display: "flex", flexDirection: "column" }}>
+          {/* Zone 3 : Gagnés (ODR acceptés + signé + clos) */}
+          <div style={{ flex: 3, display: "flex", flexDirection: "column" }}>
             <div style={{ ...sectionTitle, color: "#13762C" }}>{wonPipelines.length} deals gagnés · signature {tauxSignature}%</div>
             <div style={barsRow}>
               {G_GAGNE.map(renderBar)}
@@ -366,7 +400,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
             </div>
           </div>
           <div style={dividerFull} />
-          <div style={{ flex: 2, display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: 3, display: "flex", flexDirection: "column" }}>
             <div style={{ ...sectionTitle, color: "#13762C" }}>{fmtEur(primeGagnes)} · gagnés</div>
             <div style={barsRow}>{G_GAGNE.map(renderRevenueBar)}</div>
           </div>
@@ -399,6 +433,59 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* ── Suivi des ODR (maquette) ── */}
+      <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Suivi des ODR</span>
+          <span style={{ fontSize: 11, fontWeight: 600, fontFamily: FONT_MONO, color: "#955804", background: "#FFF7EB", border: "1px solid #F5E0B0", borderRadius: 10, padding: "1px 8px" }}>
+            MAQUETTE
+          </span>
+        </div>
+        <div style={{ fontSize: 12, color: "#656576", marginBottom: 18 }}>
+          Vue à déployer : avancement des ordres de remplacement chez nos 4 partenaires.
+          « ODR acceptés » se remplira avec les listes AXA / Generali / SADA / Mila. Les « ODR
+          présents dans les clos » sont approchés (dossier clos assuré chez un partenaire) — chiffres indicatifs.
+        </div>
+
+        {/* Nb de dossiers ODR (toutes étapes) par assureur */}
+        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginBottom: 10 }}>Dossiers ODR par assureur — toutes étapes</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
+          {odrByInsurer.map(ins => (
+            <div key={ins.label} style={{ border: "1px solid #E8E8EC", borderRadius: 8, padding: "12px 16px", background: "#FBFBFB" }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: "#26262C", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{ins.count}</div>
+              <div style={{ fontSize: 12, color: "#656576", marginTop: 3 }}>{ins.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Mini-pipeline ODR : en cours → acceptés → clos, avec Nb / montant / ARR */}
+        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginBottom: 10 }}>Pipeline ODR — nombre · montant en jeu · ARR potentiel (×0,25)</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+          {odrStages.map(st => {
+            const prime = sumPrime(st.rows);
+            return (
+              <div key={st.key} style={{ border: "1px solid #E8E8EC", borderRadius: 8, padding: "14px 16px", background: "#FBFBFB" }}>
+                <div style={{ fontSize: 12, fontWeight: 600, fontFamily: FONT_MONO, textTransform: "uppercase", letterSpacing: "0.04em", color: st.color, marginBottom: 12 }}>{st.label}</div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 16, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: "#26262C", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{st.rows.length}</div>
+                    <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>Dossiers</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 17, fontWeight: 700, color: "#26262C", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{prime > 0 ? fmtEur(prime) : "—"}</div>
+                    <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>Montant en jeu</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 17, fontWeight: 700, color: st.color, fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{prime > 0 ? fmtEur(prime * 0.25) : "—"}</div>
+                    <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>ARR potentiel</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

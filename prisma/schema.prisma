@@ -118,6 +118,7 @@ model Copro {
 enum PipelineStatut {
   identifie
   odr_en_cours
+  odr_accepte
   rs_en_cours
   rs_recu
   devis_demandes

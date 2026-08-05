@@ -6,8 +6,9 @@ import { TERMINAL_STATUTS, isCloturePourClient } from "@/lib/pipeline";
 // "Lancer process assurance" pour un deal encore non démarré (identifie).
 export const ECHEANCE_THRESHOLD_MONTHS = 6;
 
-// odr_en_cours est hors cycle (dossier clos, rien à faire) → aucune tâche générée.
-type ActiveStatut = Exclude<PipelineStatut, "termine" | "abandonne" | "refuse" | "non_assurable" | "odr_en_cours">;
+// odr_en_cours / odr_accepte sont hors cycle linéaire (dossier en ODR, ou ODR gagné
+// en attente d'échéance) → aucune tâche générée.
+type ActiveStatut = Exclude<PipelineStatut, "termine" | "abandonne" | "refuse" | "non_assurable" | "odr_en_cours" | "odr_accepte">;
 
 type StageTaskSpec = { suffix: string; dueDays: number };
 
