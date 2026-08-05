@@ -461,7 +461,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
       return b === "urgent" || b === "autre";
     });
     return (
-      <div key={step.statut} style={{ minWidth: 200, flexShrink: 0 }}>
+      <div key={step.statut} style={{ width: 264, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#656576" }}>
             {step.shortLabel}
@@ -699,7 +699,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                 <>
                   {/* Zone 2 : ODR */}
                   <div style={dotSepStyle} />
-                  <div style={{ minWidth: 200, flexShrink: 0 }}>
+                  <div style={{ width: 264, flexShrink: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#955804" }}>
                         ODR en cours
@@ -738,7 +738,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                     </div>
                   </div>
                   {/* Zone 2 (suite) : ODR envoyées — toujours actif */}
-                  <div style={{ minWidth: 200, flexShrink: 0 }}>
+                  <div style={{ width: 264, flexShrink: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#8A4B04" }}>
                         ODR envoyées
@@ -778,7 +778,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                   </div>
                   {/* Zone 3 : Gagnés — ODR acceptés + Signé + Clos */}
                   <div style={dotSepStyle} />
-                  <div style={{ minWidth: 200, flexShrink: 0 }}>
+                  <div style={{ width: 264, flexShrink: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#13762C" }}>
                         ODR acceptés
@@ -817,7 +817,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                     </div>
                   </div>
                   {renderStepColumn(signeStep)}
-                  <div style={{ minWidth: 200, flexShrink: 0 }}>
+                  <div style={{ width: 264, flexShrink: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#13762C" }}>
                         Clos
@@ -857,7 +857,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                   </div>
                   {/* Zone 4 : Perdus */}
                   <div style={dotSepStyle} />
-                  <div style={{ minWidth: 200, flexShrink: 0 }}>
+                  <div style={{ width: 264, flexShrink: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "#CA1E12" }}>
                         Perdus
