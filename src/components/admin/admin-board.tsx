@@ -454,6 +454,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
           Vue à déployer : avancement des ordres de remplacement chez nos 4 partenaires.
           « ODR acceptés » se remplira avec les listes AXA / Generali / SADA / Mila. Les « ODR
           présents dans les clos » sont approchés (dossier clos assuré chez un partenaire) — chiffres indicatifs.
+          <br />
+          <span style={{ color: "#A2A1AF" }}>ℹ️ Les dossiers refusés / perdus ne sont jamais comptés dans ce suivi.</span>
         </div>
 
         {/* Nb de dossiers ODR (toutes étapes) par assureur */}
