@@ -45,7 +45,7 @@ import { DevisRequestAction } from "@/components/copro/steps/devis-request-actio
 import { DevisRecusAction } from "@/components/copro/steps/devis-recus-action";
 import { ContratSigneAction } from "@/components/copro/steps/contrat-signe-action";
 import { ResiliationAction } from "@/components/copro/steps/resiliation-action";
-import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl, saveSignedPdfUrl, toggleTermineTask, completeTask, reopenTask, setOdrPartenaire } from "@/lib/actions";
+import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl, saveSignedPdfUrl, toggleTermineTask, completeTask, reopenTask, setOdrPartenaire, updateEcheance } from "@/lib/actions";
 import { DueDatePicker } from "@/components/ui/due-date-picker";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -456,6 +456,10 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
   const [isSigning, setIsSigning] = useState(false);
   const [signedPdfPath, setSignedPdfPath] = useState<string | null>(null);
   const [editingContrat, setEditingContrat] = useState(false);
+  const [editingEcheance, setEditingEcheance] = useState(false);
+  const [echeanceInput, setEcheanceInput] = useState(
+    pipeline.copro.dateEcheance ? new Date(pipeline.copro.dateEcheance).toISOString().slice(0, 10) : ""
+  );
   const [contratForm, setContratForm] = useState({
     assureurActuel: pipeline.copro.assureurActuel ?? "",
     courtierActuel: pipeline.copro.courtierActuel ?? "",
@@ -1522,21 +1526,62 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
             </div>
           )}
 
-          {/* Échéance */}
+          {/* Échéance (éditable à la main — pose le cliquet anti-Omni) */}
           <Card className={cn("p-4", echeanceBg.className)} style={echeanceBg.style}>
-            <h3 className="text-sm font-semibold mb-2 flex items-center gap-2" style={{ color: "#26262C" }}>
-              <Calendar className="h-4 w-4" />
-              Échéance
-            </h3>
-            <div className={cn("text-lg font-bold", getEcheanceColor(days))}>
-              {pipeline.copro.dateEcheance
-                ? new Date(pipeline.copro.dateEcheance).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })
-                : "Non renseignée"}
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C" }}>
+                <Calendar className="h-4 w-4" />
+                Échéance
+              </h3>
+              {editingEcheance ? (
+                <div className="flex gap-1">
+                  <button
+                    disabled={isPending}
+                    onClick={() => startTransition(async () => {
+                      try {
+                        const r = await updateEcheance(pipeline.id, echeanceInput || null);
+                        if (r.success) { toast.success("Échéance mise à jour"); setEditingEcheance(false); }
+                        else toast.error(r.error || "Erreur");
+                      } catch { toast.error("Erreur"); }
+                    })}
+                    className="transition-colors" style={{ color: "#4E49FC" }}
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={() => setEditingEcheance(false)} className="transition-colors" style={{ color: "#A2A1AF" }}>
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setEcheanceInput(pipeline.copro.dateEcheance ? new Date(pipeline.copro.dateEcheance).toISOString().slice(0, 10) : ""); setEditingEcheance(true); }}
+                  className="transition-colors" style={{ color: "#A2A1AF" }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
-            {days !== null && (
-              <div className={cn("text-sm font-medium mt-1", getEcheanceColor(days))}>
-                {days < 0 ? `Échue il y a ${Math.abs(days)} jours` : `Dans ${days} jours`}
-              </div>
+            {editingEcheance ? (
+              <input
+                type="date"
+                value={echeanceInput}
+                onChange={(e) => setEcheanceInput(e.target.value)}
+                className="w-full rounded-md border px-2 py-1 text-sm"
+                style={{ borderColor: "#E4E4EB", color: "#26262C", background: "#fff" }}
+              />
+            ) : (
+              <>
+                <div className={cn("text-lg font-bold", getEcheanceColor(days))}>
+                  {pipeline.copro.dateEcheance
+                    ? new Date(pipeline.copro.dateEcheance).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })
+                    : "Non renseignée"}
+                </div>
+                {days !== null && (
+                  <div className={cn("text-sm font-medium mt-1", getEcheanceColor(days))}>
+                    {days < 0 ? `Échue il y a ${Math.abs(days)} jours` : `Dans ${days} jours`}
+                  </div>
+                )}
+              </>
             )}
           </Card>
 

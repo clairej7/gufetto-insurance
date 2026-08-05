@@ -155,6 +155,9 @@ export async function syncCopros(
         // Cliquet contrat : copro éditée par un gestionnaire → Omni ne touche
         // plus aux champs contrat (l'échéance et les faits immeuble restent rafraîchis).
         const data = existing.contratVerrouilleLe ? facts : { ...facts, ...contractFacts };
+        // Cliquet échéance : si le gestionnaire a saisi l'échéance à la main, Omni
+        // ne la réécrit pas (fait immeuble normalement rafraîchi).
+        if (existing.echeanceVerrouilleLe) delete (data as Record<string, unknown>).dateEcheance;
         await prisma.copro.update({ where: { buildingId: rec.buildingId }, data });
 
         if (existing.pipelines.length === 0) {
@@ -165,7 +168,7 @@ export async function syncCopros(
         } else {
           for (const p of existing.pipelines) {
             // Rafraîchir l'année d'échéance (fait immeuble) sans toucher au statut.
-            if (echeance && p.anneeEcheance !== anneeEcheance) {
+            if (echeance && !existing.echeanceVerrouilleLe && p.anneeEcheance !== anneeEcheance) {
               await prisma.insurancePipeline.update({
                 where: { id: p.id },
                 data: { anneeEcheance },

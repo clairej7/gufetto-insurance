@@ -648,6 +648,20 @@ export async function updatePipelineNotes(pipelineId: string, notes: string) {
   return { success: true };
 }
 
+// Édition manuelle de l'échéance du contrat. Pose le cliquet echeanceVerrouilleLe
+// pour que la synchro Omni ne réécrase plus cette date. Met aussi à jour anneeEcheance.
+export async function updateEcheance(pipelineId: string, dateISO: string | null) {
+  await getSession();
+  const d = dateISO ? new Date(dateISO) : null;
+  if (dateISO && (!d || isNaN(d.getTime()))) return { success: false, error: "Date invalide" };
+  const p = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, select: { coproId: true } });
+  if (!p) return { success: false, error: "Dossier introuvable" };
+  await prisma.copro.update({ where: { id: p.coproId }, data: { dateEcheance: d, echeanceVerrouilleLe: new Date() } });
+  if (d) await prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { anneeEcheance: d.getFullYear() } });
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
 // Marqueur ODR persistant : partenaire chez qui l'ordre de remplacement est engagé
 // ("AXA"/"GENERALI"/"SADA"/"MILA"), ou null pour retirer. Indépendant du statut →
 // permet d'extraire tous les ODR d'un partenaire (ex. "pas encore envoyés à AXA").
