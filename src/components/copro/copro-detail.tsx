@@ -45,7 +45,7 @@ import { DevisRequestAction } from "@/components/copro/steps/devis-request-actio
 import { DevisRecusAction } from "@/components/copro/steps/devis-recus-action";
 import { ContratSigneAction } from "@/components/copro/steps/contrat-signe-action";
 import { ResiliationAction } from "@/components/copro/steps/resiliation-action";
-import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl, saveSignedPdfUrl, toggleTermineTask, completeTask, reopenTask } from "@/lib/actions";
+import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl, saveSignedPdfUrl, toggleTermineTask, completeTask, reopenTask, setOdrPartenaire } from "@/lib/actions";
 import { DueDatePicker } from "@/components/ui/due-date-picker";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,7 @@ type Pipeline = {
   id: string;
   coproId: string;
   statut: string;
+  odrPartenaire: string | null;
   anneeEcheance: number;
   notes: string | null;
   copro: {
@@ -834,52 +835,80 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
 
           {/* ODR (dispo sur toutes les étapes) */}
           <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C" }}>
-                <Building2 className="h-4 w-4" />
-                ODR
-              </h3>
-              {/* Cycle ODR : Non → En cours → Accepté (deal gagné, mandat à l'échéance). */}
-              <div className="flex gap-1.5">
-                {([
-                  { statut: "identifie",    label: "Non",      active: { bg: "#FFFFFF", bd: "#E4E4EB", fg: "#26262C" } },
-                  { statut: "odr_en_cours", label: "En cours", active: { bg: "#F5A623", bd: "#F5A623", fg: "#FFFFFF" } },
-                  { statut: "odr_envoye",   label: "Envoyé",   active: { bg: "#E8943A", bd: "#E8943A", fg: "#FFFFFF" } },
-                  { statut: "odr_accepte",  label: "Accepté",  active: { bg: "#13762C", bd: "#13762C", fg: "#FFFFFF" } },
-                  { statut: "odr_en_vigueur", label: "En vigueur", active: { bg: "#0E5D22", bd: "#0E5D22", fg: "#FFFFFF" } },
-                ] as const).map((opt) => {
-                  const isCurrent =
-                    opt.statut === "identifie"
-                      ? pipeline.statut !== "odr_en_cours" && pipeline.statut !== "odr_envoye" && pipeline.statut !== "odr_accepte" && pipeline.statut !== "odr_en_vigueur"
-                      : pipeline.statut === opt.statut;
-                  return (
-                    <button
-                      key={opt.statut}
-                      disabled={isPending || isCurrent}
-                      onClick={() => {
-                        if (isCurrent) return;
-                        startTransition(async () => {
-                          try {
-                            await goToStatut(pipeline.id, opt.statut);
-                            if (opt.statut === "odr_en_cours") toast.success("Passée en ODR en cours");
-                            else if (opt.statut === "odr_envoye") toast.success("ODR envoyé à l'assureur");
-                            else if (opt.statut === "odr_accepte") toast.success("ODR accepté — deal gagné 🎉");
-                            else if (opt.statut === "odr_en_vigueur") toast.success("ODR en vigueur ✓");
-                          } catch {
-                            toast.error("Erreur");
-                          }
-                        });
-                      }}
-                      className="text-xs font-medium px-3 py-1 rounded-full border transition-colors disabled:opacity-60"
-                      style={isCurrent
-                        ? { backgroundColor: opt.active.bg, borderColor: opt.active.bd, color: opt.active.fg }
-                        : { backgroundColor: "#FFFFFF", borderColor: "#E4E4EB", color: "#26262C" }}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
+            <h3 className="text-sm font-semibold flex items-center gap-2 mb-3" style={{ color: "#26262C" }}>
+              <Building2 className="h-4 w-4" />
+              ODR
+            </h3>
+
+            {/* Étape ODR : Non → En cours → Envoyé → Accepté → En vigueur */}
+            <div className="text-[10px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "#A2A1AF", fontFamily: "ui-monospace, Menlo, monospace" }}>Étape</div>
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                { statut: "identifie",      label: "Non",        active: { bg: "#FFFFFF", bd: "#E4E4EB", fg: "#26262C" } },
+                { statut: "odr_en_cours",   label: "En cours",   active: { bg: "#F5A623", bd: "#F5A623", fg: "#FFFFFF" } },
+                { statut: "odr_envoye",     label: "Envoyé",     active: { bg: "#E8943A", bd: "#E8943A", fg: "#FFFFFF" } },
+                { statut: "odr_accepte",    label: "Accepté",    active: { bg: "#13762C", bd: "#13762C", fg: "#FFFFFF" } },
+                { statut: "odr_en_vigueur", label: "En vigueur", active: { bg: "#0E5D22", bd: "#0E5D22", fg: "#FFFFFF" } },
+              ] as const).map((opt) => {
+                const isCurrent =
+                  opt.statut === "identifie"
+                    ? pipeline.statut !== "odr_en_cours" && pipeline.statut !== "odr_envoye" && pipeline.statut !== "odr_accepte" && pipeline.statut !== "odr_en_vigueur"
+                    : pipeline.statut === opt.statut;
+                return (
+                  <button
+                    key={opt.statut}
+                    disabled={isPending || isCurrent}
+                    onClick={() => {
+                      if (isCurrent) return;
+                      startTransition(async () => {
+                        try {
+                          await goToStatut(pipeline.id, opt.statut);
+                          if (opt.statut === "odr_en_cours") toast.success("Passée en ODR en cours");
+                          else if (opt.statut === "odr_envoye") toast.success("ODR envoyé à l'assureur");
+                          else if (opt.statut === "odr_accepte") toast.success("ODR accepté — deal gagné 🎉");
+                          else if (opt.statut === "odr_en_vigueur") toast.success("ODR en vigueur ✓");
+                        } catch {
+                          toast.error("Erreur");
+                        }
+                      });
+                    }}
+                    className="text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors disabled:opacity-60 whitespace-nowrap"
+                    style={isCurrent
+                      ? { backgroundColor: opt.active.bg, borderColor: opt.active.bd, color: opt.active.fg }
+                      : { backgroundColor: "#FFFFFF", borderColor: "#E4E4EB", color: "#26262C" }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Partenaire ODR : marqueur persistant (sert à extraire les ODR par assureur) */}
+            <div className="text-[10px] font-semibold uppercase tracking-wide mt-3 mb-1.5" style={{ color: "#A2A1AF", fontFamily: "ui-monospace, Menlo, monospace" }}>Partenaire</div>
+            <div className="flex flex-wrap gap-1.5">
+              {(["AXA", "GENERALI", "SADA", "MILA"] as const).map((part) => {
+                const isCurrent = (pipeline.odrPartenaire ?? "").toUpperCase() === part;
+                return (
+                  <button
+                    key={part}
+                    disabled={isPending}
+                    onClick={() => {
+                      startTransition(async () => {
+                        try {
+                          await setOdrPartenaire(pipeline.id, isCurrent ? null : part);
+                          toast.success(isCurrent ? "Partenaire ODR retiré" : `Partenaire ODR : ${part}`);
+                        } catch { toast.error("Erreur"); }
+                      });
+                    }}
+                    className="text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors disabled:opacity-60 whitespace-nowrap"
+                    style={isCurrent
+                      ? { backgroundColor: "#4E49FC", borderColor: "#4E49FC", color: "#FFFFFF" }
+                      : { backgroundColor: "#FFFFFF", borderColor: "#E4E4EB", color: "#26262C" }}
+                  >
+                    {part === "GENERALI" ? "Generali" : part === "SADA" ? "SADA" : part === "MILA" ? "Mila" : "AXA"}
+                  </button>
+                );
+              })}
             </div>
           </Card>
         </div>
