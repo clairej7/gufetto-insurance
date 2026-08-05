@@ -72,7 +72,7 @@ export type InsuranceInfo = {
 // Les 4 assureurs partenaires ODR + leurs variantes de nom/domaine.
 const PARTNERS: { key: InsuranceInfo["partnerKey"]; patterns: RegExp }[] = [
   { key: "axa", patterns: /\baxa\b/i },
-  { key: "generali", patterns: /\bgenerali\b/i },
+  { key: "generali", patterns: /g[eé]n[eé]?rali/i }, // tolère accent (Générali) + faute (GENRALI)
   { key: "sada", patterns: /\bsada\b|d[ée]fense\s+et\s+d.?assurances?/i },
   { key: "mila", patterns: /\bmila\b/i },
 ];
@@ -85,7 +85,7 @@ const PARTNERS: { key: InsuranceInfo["partnerKey"]; patterns: RegExp }[] = [
 const INSURER_HINTS: { label: string; kind: "carrier" | "courtier"; test: RegExp }[] = [
   // Compagnies (porteurs)
   { label: "AXA", kind: "carrier", test: /axa\.fr|\baxa\b/i },
-  { label: "Generali", kind: "carrier", test: /generali/i },
+  { label: "Generali", kind: "carrier", test: /g[eé]n[eé]?rali/i }, // accent + faute "genrali"
   { label: "SADA", kind: "carrier", test: /\bsada\b|d[ée]fense\s+et\s+d.?assurances?/i },
   { label: "Mila", kind: "carrier", test: /\bmila\b/i },
   { label: "GAN", kind: "carrier", test: /\bgan\b|gan\.fr/i },
