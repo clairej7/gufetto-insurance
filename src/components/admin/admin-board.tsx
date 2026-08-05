@@ -276,7 +276,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
         </span>
         <div style={{ width: "100%", height: barH, background: bar.count > 0 ? bar.bar : "#F3F3F5", borderRadius: "4px 4px 0 0", transition: "height 300ms ease", opacity: bar.count > 0 ? 1 : 0.4 }} />
         <div style={{ width: "100%", height: 1, background: "#E8E8EC" }} />
-        <span style={{ fontSize: 11, color: "#656576", textAlign: "center", marginTop: 6, lineHeight: "13px", fontWeight: 500, maxWidth: "100%", whiteSpace: "normal", wordBreak: "break-word" }}>
+        <span style={{ fontSize: 11, color: "#656576", textAlign: "center", marginTop: 6, lineHeight: "13px", fontWeight: 500, width: "100%", whiteSpace: "normal", wordBreak: "break-word", height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
           {bar.shortLabel}
         </span>
       </div>
@@ -292,7 +292,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
         </span>
         <div style={{ width: "100%", height: barH, background: bar.prime > 0 ? bar.bar : "#F3F3F5", borderRadius: "4px 4px 0 0", transition: "height 300ms ease", opacity: bar.prime > 0 ? 1 : 0.4 }} />
         <div style={{ width: "100%", height: 1, background: "#E8E8EC" }} />
-        <span style={{ fontSize: 11, color: "#656576", textAlign: "center", marginTop: 6, lineHeight: "13px", fontWeight: 500, maxWidth: "100%", whiteSpace: "normal", wordBreak: "break-word" }}>
+        <span style={{ fontSize: 11, color: "#656576", textAlign: "center", marginTop: 6, lineHeight: "13px", fontWeight: 500, width: "100%", whiteSpace: "normal", wordBreak: "break-word", height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
           {bar.shortLabel}
         </span>
       </div>
@@ -301,7 +301,9 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
 
   const dividerFull: React.CSSProperties = { alignSelf: "stretch", borderLeft: "1px dashed #C0C0C9", margin: "0 10px" };
   const dividerBars: React.CSSProperties = { alignSelf: "stretch", borderLeft: "1px dashed #DADAE0", margin: "0 6px" };
-  const sectionTitle: React.CSSProperties = { fontSize: 12, fontFamily: FONT_MONO, fontWeight: 600, textAlign: "center", marginBottom: 14, whiteSpace: "nowrap" };
+  // Titre de zone : autorisé à passer sur 2 lignes (sinon "73 deals perdus · perte 3%"
+  // forçait la largeur de la zone Perdus → barre trop large). Hauteur fixe = alignement.
+  const sectionTitle: React.CSSProperties = { fontSize: 12, fontFamily: FONT_MONO, fontWeight: 600, textAlign: "center", marginBottom: 14, whiteSpace: "normal", minHeight: 32, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: "15px" };
   const barsRow: React.CSSProperties = { display: "flex", alignItems: "flex-end", gap: 8, height: CHART_H + 40 };
 
   return (
@@ -380,7 +382,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
         <div style={{ display: "flex", alignItems: "stretch" }}>
 
           {/* Zones 1 + 2 : Actifs (funnel + ODR) */}
-          <div style={{ flex: 6, display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: 7, display: "flex", flexDirection: "column" }}>
             <div style={{ ...sectionTitle, color: "#656576" }}>{activePipelines.length} dossiers actifs</div>
             <div style={barsRow}>
               {G_FUNNEL.map(renderBar)}
@@ -423,7 +425,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
 
         {/* Sous-partie 1 : montant (somme des primes) par étape, mêmes 4 zones */}
         <div style={{ display: "flex", alignItems: "stretch" }}>
-          <div style={{ flex: 6, display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: 7, display: "flex", flexDirection: "column" }}>
             <div style={{ ...sectionTitle, color: "#656576" }}>{fmtEur(primeActifs)} · actifs</div>
             <div style={barsRow}>
               {G_FUNNEL.map(renderRevenueBar)}
