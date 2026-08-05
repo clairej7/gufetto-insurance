@@ -69,7 +69,11 @@ export async function POST(req: NextRequest) {
 
   for (const p of pipelines) {
     try {
-      const r = await applyAutofill(p.id, actor, "sync_auto");
+      // "action_manuelle" (et non "sync_auto") : l'aiguillage du batch est une
+      // décision délibérée qui doit TENIR. Un event non-sync_auto par un acteur
+      // marque le pipeline "touché" → la synchro Omni nocturne ne réécrase plus
+      // son statut (sinon elle le renvoyait en "Identification" chaque nuit).
+      const r = await applyAutofill(p.id, actor, "action_manuelle");
       stats.traites++;
       if (r.moved && r.targetStatut === "rs_en_cours") stats.versRs++;
       else if (r.moved && r.targetStatut === "odr_en_cours") stats.versOdr++;
