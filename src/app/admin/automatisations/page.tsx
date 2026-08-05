@@ -71,7 +71,7 @@ export default async function AutomatisationsPage() {
     {
       n: 2,
       nom: "ODR — Ordre de Remplacement",
-      etat: "encours",
+      etat: "deploye",
       description: [
         "Lorsqu'une copropriété est déjà assurée chez l'un des 4 partenaires (AXA, Generali, SADA, Mila), Matera peut devenir directement le nouveau courtier via un Ordre de Remplacement — sans passer par la demande de RS ni par les devis. C'est un raccourci majeur du pipeline.",
         "L'identification et le rangement des dossiers dans l'étape « ODR en cours » sont déjà assurés par l'automatisation 1 (les deux sont fusionnées sur la partie routage).",
