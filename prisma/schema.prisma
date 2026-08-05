@@ -87,6 +87,10 @@ model Copro {
   // "Contrat actuel" / "Infos copropriété" → les syncs Omni ne touchent plus
   // jamais aux champs contrat de cette copro (l'échéance reste rafraîchie).
   contratVerrouilleLe DateTime?
+  // Cliquet échéance : posé quand un gestionnaire édite l'échéance à la main.
+  // La synchro Omni ne réécrit alors plus dateEcheance (fait immeuble normalement
+  // rafraîchi à chaque sync).
+  echeanceVerrouilleLe DateTime?
 
   // Contact Conseil Syndical
   contactCsEmail String?

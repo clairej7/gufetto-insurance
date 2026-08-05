@@ -1,0 +1,1 @@
+ALTER TABLE "Copro" ADD COLUMN IF NOT EXISTS "echeanceVerrouilleLe" TIMESTAMP(3);
