@@ -224,28 +224,39 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
   const fmtEurC = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} M€` : n >= 1e3 ? `${Math.round(n / 1e3)} k€` : `${Math.round(n)} €`;
 
   // ── Suivi des ODR ─────────────────────────────────────────────────────────
-  // Dossiers ODR = ceux portant le marqueur `odrPartenaire`. Mini-pipeline :
-  // en cours → envoyé → accepté → clos (odr_en_vigueur + ODR devenu client-clos).
-  // Les perdus/refusés sont dans lostPipelines (hors `fp`) → exclus d'office.
+  // DEUX vues (cf. Quentin) :
+  //  • Pipeline ODR (bas) = agrégat par STATUT sur TOUS les dossiers → aligné sur
+  //    le Kanban « Répartition par étape ». odr_en_cours/envoye/accepte ne servent
+  //    QU'à l'ODR → tout dossier dans ce statut est un ODR (même sans assureur connu).
+  //    « ODR clos » = ODR devenus clos/en vigueur (marqueur requis, car le clos
+  //    générique est majoritairement non-ODR).
+  //  • Par assureur (haut) = par MARQUEUR `odrPartenaire`. La somme des 4 assureurs
+  //    est normalement INFÉRIEURE au total (assureur pas toujours renseigné).
+  //  Les perdus/refusés sont dans lostPipelines (hors `fp`) → exclus d'office.
   const odrRows         = fp.filter(p => !!p.odrPartenaire);
-  const odrEnCoursRows  = odrRows.filter(p => p.statut === "odr_en_cours");
-  const odrEnvoyeRows   = odrRows.filter(p => p.statut === "odr_envoye");
-  const odrAccepteRows  = odrRows.filter(p => p.statut === "odr_accepte");
-  const odrClosRows     = odrRows.filter(p => bucketOf(p) === "clos");
-  const odrAllRows      = [...odrEnCoursRows, ...odrEnvoyeRows, ...odrAccepteRows, ...odrClosRows];
+  // Agrégat pipeline (statut) — bloc du bas :
+  const aggEnCours = fp.filter(p => p.statut === "odr_en_cours");
+  const aggEnvoye  = fp.filter(p => p.statut === "odr_envoye");
+  const aggAccepte = fp.filter(p => p.statut === "odr_accepte");
+  const aggClos    = odrRows.filter(p => bucketOf(p) === "clos"); // ODR-clos = marqués
   const odrStages = [
-    { key: "odr",     label: "ODR en cours",  rows: odrEnCoursRows, color: "#955804" },
-    { key: "envoye",  label: "ODR envoyées",  rows: odrEnvoyeRows,  color: "#8A4B04" },
-    { key: "accepte", label: "ODR acceptés",  rows: odrAccepteRows, color: "#13762C" },
-    { key: "clos",    label: "ODR clos",      rows: odrClosRows,    color: "#0E5D22" },
+    { key: "odr",     label: "ODR en cours",  rows: aggEnCours, color: "#955804" },
+    { key: "envoye",  label: "ODR envoyées",  rows: aggEnvoye,  color: "#8A4B04" },
+    { key: "accepte", label: "ODR acceptés",  rows: aggAccepte, color: "#13762C" },
+    { key: "clos",    label: "ODR clos",      rows: aggClos,    color: "#0E5D22" },
   ];
+  // Par assureur (marqueur) — bloc du haut :
+  const mkEnCours = odrRows.filter(p => p.statut === "odr_en_cours");
+  const mkEnvoye  = odrRows.filter(p => p.statut === "odr_envoye");
+  const mkAccepte = odrRows.filter(p => p.statut === "odr_accepte");
+  const mkClos    = aggClos;
   const insurerRows = (key: string, rows: Pipeline[]) => rows.filter(p => odrPartenaireKey(p.odrPartenaire) === key);
   const stageMt = (rows: Pipeline[], label: string, color: string) => { const mt = sumPrime(rows); return { label, count: rows.length, montant: mt, arr: mt * 0.25, color }; };
   const odrByInsurer = ODR_INSURERS.map(ins => {
-    const enCours = insurerRows(ins.key, odrEnCoursRows);
-    const envoye  = insurerRows(ins.key, odrEnvoyeRows);
-    const accepte = insurerRows(ins.key, odrAccepteRows);
-    const clos    = insurerRows(ins.key, odrClosRows);
+    const enCours = insurerRows(ins.key, mkEnCours);
+    const envoye  = insurerRows(ins.key, mkEnvoye);
+    const accepte = insurerRows(ins.key, mkAccepte);
+    const clos    = insurerRows(ins.key, mkClos);
     const all = [...enCours, ...envoye, ...accepte, ...clos];
     const montant = sumPrime(all);
     return {
@@ -470,23 +481,19 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
         </div>
       </div>
 
-      {/* ── Suivi des ODR (maquette) ── */}
+      {/* ── Suivi des ODR ── */}
       <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Suivi des ODR</span>
-          <span style={{ fontSize: 11, fontWeight: 600, fontFamily: FONT_MONO, color: "#955804", background: "#FFF7EB", border: "1px solid #F5E0B0", borderRadius: 10, padding: "1px 8px" }}>
-            MAQUETTE
-          </span>
         </div>
         <div style={{ fontSize: 12, color: "#656576", marginBottom: 18 }}>
-          Avancement des ordres de remplacement chez nos 4 partenaires, à partir du marqueur ODR
-          posé sur chaque dossier au traitement des listes (AXA / Generali / SADA / Mila).
+          Avancement des ordres de remplacement chez nos 4 partenaires.
           <br />
-          <span style={{ color: "#A2A1AF" }}>ℹ️ « ODR clos » = ODR accepté et en vigueur (récupération passée) ou devenu client. Les refusés / perdus ne sont jamais comptés.</span>
+          <span style={{ color: "#A2A1AF" }}>ℹ️ Le <b>pipeline ODR</b> (en bas) compte tous les dossiers par étape (aligné sur la Répartition). La vue <b>par assureur</b> s&apos;appuie sur le marqueur ODR posé sur chaque dossier — comme l&apos;assureur n&apos;est pas toujours renseigné, la somme des 4 assureurs est normalement inférieure au total. « ODR clos » = ODR accepté et en vigueur (récupération passée) ou devenu client. Refusés / perdus jamais comptés.</span>
         </div>
 
         {/* Par assureur : nb dossiers + montant en jeu + ARR, puis répartition par stade */}
-        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginBottom: 10 }}>Dossiers ODR par assureur — toutes étapes</div>
+        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginBottom: 10 }}>Dossiers ODR par assureur — toutes étapes (par marqueur)</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12, marginBottom: 24 }}>
           {odrByInsurer.map(ins => (
             <div key={ins.label} style={{ border: "1px solid #E8E8EC", borderRadius: 8, padding: "14px 16px", background: "#FBFBFB" }}>
