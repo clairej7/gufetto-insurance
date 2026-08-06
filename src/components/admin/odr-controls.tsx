@@ -93,6 +93,13 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
     }
   }
 
+  const dedupBtnStyle =
+    dedup === "ok"
+      ? { background: "#EFFBF2", borderColor: "#9BE0AF", color: "#13762C" }
+      : dedup === "dups"
+        ? { background: "#FFF5F5", borderColor: "#F3C2BE", color: "#CA1E12" }
+        : {};
+
   return (
     <div style={{ border: "1px solid #E8E8EC", borderRadius: 10, padding: "12px 14px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -119,11 +126,37 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
               </Button>
             </a>
           )}
+          {/* Vérification anti-doublon — entre CSV et Prévisualiser */}
+          <Button variant="outline" size="sm" className="gap-1.5" disabled={noReady || dedup === "checking" || sending} onClick={verify} style={dedupBtnStyle}>
+            {dedup === "ok" ? <ShieldCheck className="h-3.5 w-3.5" /> : dedup === "dups" ? <ShieldAlert className="h-3.5 w-3.5" /> : dedup === "checking" ? <RefreshCw className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+            {dedup === "checking" ? "Vérification…" : dedup === "idle" ? "Vérifier les doublons" : "Régénérer la vérification"}
+          </Button>
           <Button size="sm" className="gap-1.5" disabled={noReady} onClick={() => setOpen((v) => !v)}>
             <Send className="h-3.5 w-3.5" /> {open ? "Fermer" : "Prévisualiser & envoyer"}
           </Button>
         </div>
       </div>
+
+      {/* Statut de la vérification + liste des doublons */}
+      {dedup === "ok" && (
+        <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#13762C" }}>
+          <ShieldCheck className="h-4 w-4" /> Aucun doublon — {count} contrat{count > 1 ? "s" : ""} prêt{count > 1 ? "s" : ""} à envoyer.
+        </div>
+      )}
+      {dedup === "dups" && dups.length > 0 && (
+        <div style={{ marginTop: 10, border: "1px solid #F3C2BE", background: "#FFF5F5", borderRadius: 8, padding: "10px 12px", maxHeight: 220, overflowY: "auto" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#CA1E12", marginBottom: 6 }}>
+            <ShieldAlert className="h-4 w-4" /> {dups.length} doublon{dups.length > 1 ? "s" : ""} avec des ODR déjà envoyés — envoi bloqué, à retirer puis régénérer :
+          </div>
+          {dups.map((d) => (
+            <div key={d.pipelineId} style={{ fontSize: 12.5, color: "#4E4E58", padding: "2px 0" }}>
+              <a href={`/pipeline/${d.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "underline" }}>{d.nom}</a>
+              {" ↔ "}<span style={{ color: "#8A8A99" }}>{d.against}</span>
+              <span style={{ marginLeft: 6, fontSize: 11, color: "#A2A1AF" }}>({d.by === "numero" ? "n° contrat" : "adresse"})</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {open && !noReady && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #E8E8EC", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -147,41 +180,8 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
           <iframe key={pdfUrl} src={pdfUrl} title={`Aperçu ODR ${p.label}`}
             style={{ width: "100%", height: 380, border: "1px solid #E8E8EC", borderRadius: 8, background: "#fff" }} />
 
-          {/* Contrôle anti-doublon — obligatoire avant l'envoi */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <Button size="sm" variant="outline" className="gap-1.5" disabled={dedup === "checking" || sending} onClick={verify}>
-              {dedup === "dups" || dedup === "ok" ? <RefreshCw className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-              {dedup === "checking" ? "Vérification…" : dedup === "idle" ? "Vérifier l'absence de doublon" : "Régénérer la vérification"}
-            </Button>
-            {dedup === "ok" && (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#13762C" }}>
-                <ShieldCheck className="h-4 w-4" /> Aucun doublon — {count} à envoyer
-              </span>
-            )}
-            {dedup === "dups" && (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#CA1E12" }}>
-                <ShieldAlert className="h-4 w-4" /> {dups.length} doublon{dups.length > 1 ? "s" : ""} — envoi bloqué
-              </span>
-            )}
-          </div>
-
-          {dedup === "dups" && dups.length > 0 && (
-            <div style={{ border: "1px solid #F3C2BE", background: "#FFF5F5", borderRadius: 8, padding: "10px 12px", maxHeight: 200, overflowY: "auto" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#CA1E12", marginBottom: 6 }}>
-                Doublons avec des ODR déjà envoyés (à retirer avant d&apos;envoyer) :
-              </div>
-              {dups.map((d) => (
-                <div key={d.pipelineId} style={{ fontSize: 12.5, color: "#4E4E58", padding: "2px 0" }}>
-                  <a href={`/pipeline/${d.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "underline" }}>{d.nom}</a>
-                  {" ↔ "}<span style={{ color: "#8A8A99" }}>{d.against}</span>
-                  <span style={{ marginLeft: 6, fontSize: 11, color: "#A2A1AF" }}>({d.by === "numero" ? "n° contrat" : "adresse"})</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Envoi — vert si vérif OK, rouge/bloqué si doublons, gris tant que non vérifié */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {/* Envoi — actif/vert seulement si la vérif anti-doublon est passée */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             {dedup === "ok" ? (
               <Button size="sm" onClick={send} disabled={sending} className="gap-1.5"
                 style={{ background: "#16A34A", borderColor: "#16A34A", color: "#fff" }}>
@@ -195,7 +195,9 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
                 {dedup === "dups" ? "Envoi bloqué (doublons)" : "Vérifie les doublons d'abord"}
               </Button>
             )}
-            <span style={{ fontSize: 12, color: "#A2A1AF" }}>→ passage en « ODR envoyées »</span>
+            <span style={{ fontSize: 12, color: "#A2A1AF" }}>
+              {dedup === "ok" ? "→ passage en « ODR envoyées »" : "Lance « Vérifier les doublons » pour débloquer l'envoi"}
+            </span>
           </div>
         </div>
       )}
