@@ -172,6 +172,54 @@ export async function getOdrSent(partner: OdrPartnerKey): Promise<OdrSentRecord[
   return kept;
 }
 
+// ---- Historique des envois ODR ----
+
+export type OdrSendHistoryRow = {
+  date: string; // ISO
+  partner: string;
+  label: string;
+  count: number;
+  montant: number; // somme des primes des dossiers envoyés
+  arr: number; // ARR Matera = montant × 0,25
+  to: string | null;
+};
+
+// Un envoi = un lot de dossiers passés en « ODR envoyées » via /api/odr/send
+// (events statut_change → odr_envoye, metadata.odr=true). Tous les dossiers d'un
+// même envoi partagent le conversationId (ou, en repli mailto, l'horodatage).
+export async function getOdrSendHistory(): Promise<OdrSendHistoryRow[]> {
+  const events = await prisma.pipelineEvent.findMany({
+    where: { type: "statut_change", nouveauStatut: "odr_envoye" },
+    select: { createdAt: true, metadata: true, pipeline: { select: { copro: { select: { primeActuelle: true } } } } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const groups = new Map<string, { date: Date; partner: string; to: string | null; count: number; montant: number }>();
+  for (const e of events) {
+    const m = (e.metadata ?? {}) as Record<string, unknown>;
+    if (m.odr !== true) continue; // seulement les envois via l'app
+    const partner = String(m.partner ?? "");
+    const conv = (m.conversationId as string) || `${partner}|${e.createdAt.toISOString().slice(0, 16)}`;
+    const g = groups.get(conv) ?? { date: e.createdAt, partner, to: (m.to as string) ?? null, count: 0, montant: 0 };
+    g.count += 1;
+    g.montant += e.pipeline?.copro?.primeActuelle ?? 0;
+    if (e.createdAt < g.date) g.date = e.createdAt;
+    groups.set(conv, g);
+  }
+
+  return [...groups.values()]
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .map((g) => ({
+      date: g.date.toISOString(),
+      partner: g.partner,
+      label: isOdrPartnerKey(g.partner) ? partnerLabel(g.partner) : g.partner,
+      count: g.count,
+      montant: g.montant,
+      arr: g.montant * 0.25,
+      to: g.to,
+    }));
+}
+
 export type OdrDuplicate = {
   pipelineId: string;
   nom: string;

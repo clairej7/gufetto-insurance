@@ -19,6 +19,7 @@ export type OdrPartnerSummary = {
   flaggedReady: number;
 };
 type SentRow = { adresse: string; numeroContrat: string };
+type HistoryRow = { date: string; partner: string; label: string; count: number; montant: number; arr: number; to: string | null };
 type Dup = { pipelineId: string; nom: string; numeroContrat: string | null; against: string; by: "numero" | "adresse" };
 type Issue = { pipelineId: string; nom: string; numeroContrat: string | null; assureur: string | null; issues: string[] };
 type DedupState = "idle" | "checking" | "ok" | "dups";
@@ -424,9 +425,12 @@ function SentTable({ label, rows }: { label: string; rows: SentRow[] }) {
   );
 }
 
-export function OdrControls({ template, partners, sent }: { template: string; partners: OdrPartnerSummary[]; sent: Record<string, SentRow[]> }) {
+const eur = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
+
+export function OdrControls({ template, partners, sent, history }: { template: string; partners: OdrPartnerSummary[]; sent: Record<string, SentRow[]>; history: HistoryRow[] }) {
   const [showTpl, setShowTpl] = useState(false);
   const [showSent, setShowSent] = useState(false);
+  const [showHist, setShowHist] = useState(false);
   const totalReady = partners.reduce((s, p) => s + p.ready, 0);
   const totalMissing = partners.reduce((s, p) => s + p.missing, 0);
 
@@ -464,6 +468,47 @@ export function OdrControls({ template, partners, sent }: { template: string; pa
             {partners.map((p) => (
               <SentTable key={p.key} label={p.label} rows={sent[p.key] || []} />
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Historique des envois */}
+      <div style={{ border: "1px solid #E8E8EC", borderRadius: 10, overflow: "hidden" }}>
+        <button onClick={() => setShowHist((v) => !v)}
+          style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#FAFAFC", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "#26262C" }}>
+          <ChevronDown className="h-4 w-4" style={{ transform: showHist ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform .15s" }} />
+          Historique des envois{history.length ? ` (${history.length})` : ""}
+        </button>
+        {showHist && (
+          <div style={{ borderTop: "1px solid #E8E8EC" }}>
+            {history.length === 0 ? (
+              <div style={{ padding: "12px 14px", fontSize: 12.5, color: "#A2A1AF" }}>Aucun envoi ODR pour l&apos;instant.</div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                  <thead>
+                    <tr style={{ color: "#A2A1AF", textAlign: "left" }}>
+                      <th style={{ padding: "8px 14px", fontWeight: 600 }}>Date</th>
+                      <th style={{ padding: "8px 14px", fontWeight: 600 }}>Assureur</th>
+                      <th style={{ padding: "8px 14px", fontWeight: 600, textAlign: "right" }}>Dossiers</th>
+                      <th style={{ padding: "8px 14px", fontWeight: 600, textAlign: "right" }}>Montant</th>
+                      <th style={{ padding: "8px 14px", fontWeight: 600, textAlign: "right" }}>ARR (25 %)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((h, i) => (
+                      <tr key={i} style={{ borderTop: "1px solid #F1F1F4" }}>
+                        <td style={{ padding: "7px 14px", color: "#4E4E58" }}>{new Date(h.date).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
+                        <td style={{ padding: "7px 14px", color: "#26262C", fontWeight: 600 }}>{h.label}</td>
+                        <td style={{ padding: "7px 14px", color: "#4E4E58", textAlign: "right" }}>{h.count}</td>
+                        <td style={{ padding: "7px 14px", color: "#4E4E58", textAlign: "right" }}>{eur(h.montant)}</td>
+                        <td style={{ padding: "7px 14px", color: "#13762C", fontWeight: 600, textAlign: "right" }}>{eur(h.arr)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
