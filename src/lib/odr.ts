@@ -270,6 +270,9 @@ export async function verifyOdrDossiers(
   let unflagged = 0;
   for (const r of slice) {
     const num = (r.copro.numeroContrat || "").trim();
+    // Override : dossier confirmé manuellement (bouton « Garder ») → on ne le
+    // re-signale plus, quels que soient Front et la cohérence data.
+    if (r.events.some((e) => /confirm[ée]\s*manuellement/i.test(e.description || ""))) continue;
     const ass = (r.copro.assureurActuel || "").trim();
     const iss = coherenceIssues(partner, ass, num);
 
