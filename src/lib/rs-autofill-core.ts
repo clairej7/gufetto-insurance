@@ -59,6 +59,8 @@ export type AutofillResult = {
   info: InsuranceInfo | null;
   targetStatut: "identifie" | "odr_en_cours" | "rs_en_cours";
   moved: boolean;
+  // A écrit au moins un champ contrat (assureur/courtier/n°/mail) trouvé dans Front.
+  wroteFields: boolean;
   // Décision EFFECTIVE (extraction Front + fallback champs Omni existants).
   reliable: boolean;
   assureur: string | null;
@@ -78,7 +80,7 @@ export async function applyAutofill(
     include: { copro: true },
   });
   if (!pipeline) {
-    return { pipelineId, buildingId: null, info: null, targetStatut: "identifie", moved: false, reliable: false, assureur: null, numeroContrat: null, mailCourtier: null, usedOmni: false, skippedReason: "pipeline introuvable" };
+    return { pipelineId, buildingId: null, info: null, targetStatut: "identifie", moved: false, wroteFields: false, reliable: false, assureur: null, numeroContrat: null, mailCourtier: null, usedOmni: false, skippedReason: "pipeline introuvable" };
   }
 
   const copro = pipeline.copro;
@@ -213,7 +215,7 @@ export async function applyAutofill(
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${pipelineId}`);
   return {
-    pipelineId, buildingId: copro.buildingId, info, targetStatut, moved,
+    pipelineId, buildingId: copro.buildingId, info, targetStatut, moved, wroteFields,
     reliable: effReliable, assureur: effAssureur, numeroContrat: effNumero, mailCourtier: effMail, usedOmni,
   };
 }

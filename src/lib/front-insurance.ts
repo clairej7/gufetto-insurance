@@ -536,16 +536,38 @@ export type PrimeDocResult = {
   confidence: "clear" | "unsure" | null;
   source: string;
   conversationId: string | null;
+  // Prochaine date d'échéance lue dans le même avis (si présente/fiable). Sert à
+  // « dé-périmer » un dossier à échéance ancienne. null si absente ou peu sûre.
+  echeance: Date | null;
 };
 
-// Cotisation annuelle TTC lue dans un PDF (avis d'échéance / quittance / relance) via Claude.
-async function extractPrimeFromPdf(pdf: Buffer): Promise<{ montant: number | null; type: string; certain: boolean }> {
-  if (!process.env.ANTHROPIC_API_KEY) return { montant: null, type: "autre", certain: false };
+// Convertit une date renvoyée par le modèle (ISO ou jj/mm/aaaa) en Date valide,
+// bornée à une fenêtre plausible pour une PROCHAINE échéance (récent → +18 mois).
+function parseEcheanceCandidate(v: unknown): Date | null {
+  if (typeof v !== "string" || !v.trim()) return null;
+  let d: Date | null = null;
+  const iso = v.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const fr = v.trim().match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
+  if (iso) d = new Date(Date.UTC(+iso[1], +iso[2] - 1, +iso[3]));
+  else if (fr) d = new Date(Date.UTC(+fr[3], +fr[2] - 1, +fr[1]));
+  if (!d || isNaN(d.getTime())) return null;
+  const now = Date.now();
+  const day = 86400000;
+  // Une prochaine échéance crédible : pas plus de ~13 mois dans le passé, ni > 18 mois futur.
+  if (d.getTime() < now - 400 * day || d.getTime() > now + 550 * day) return null;
+  return d;
+}
+
+// Cotisation annuelle TTC + prochaine échéance lues dans un PDF (avis d'échéance /
+// quittance / relance) via Claude.
+async function extractPrimeFromPdf(pdf: Buffer): Promise<{ montant: number | null; type: string; certain: boolean; echeance: Date | null }> {
+  if (!process.env.ANTHROPIC_API_KEY) return { montant: null, type: "autre", certain: false, echeance: null };
   const PROMPT = `Tu lis un document d'assurance multirisque immeuble : avis d'échéance, échéancier, quittance, appel de cotisation, ou relance pour impayé.
-Retourne UNIQUEMENT un JSON sans markdown : {"montantAnnuelTTC": number|null, "type": "avis_echeance"|"relance_impaye"|"autre", "certain": boolean}
+Retourne UNIQUEMENT un JSON sans markdown : {"montantAnnuelTTC": number|null, "type": "avis_echeance"|"relance_impaye"|"autre", "certain": boolean, "prochaineEcheance": "YYYY-MM-DD"|null}
 - montantAnnuelTTC = la COTISATION / PRIME ANNUELLE TTC (montant pour UNE année entière), en euros (nombre pur, sans symbole ni séparateur de milliers).
 - Si le document ne donne qu'un montant partiel (un trimestre, une fraction, un solde impayé) sans permettre de déduire l'annuel avec certitude → renvoie ce montant si c'est le mieux disponible et certain=false.
-- certain=true UNIQUEMENT si tu es sûr que le montant est la prime annuelle TTC complète.`;
+- certain=true UNIQUEMENT si tu es sûr que le montant est la prime annuelle TTC complète.
+- prochaineEcheance = la date de PROCHAINE échéance / date d'effet de la période à venir (format YYYY-MM-DD), UNIQUEMENT si elle est explicite et sûre ; sinon null.`;
   try {
     const resp = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
@@ -556,12 +578,17 @@ Retourne UNIQUEMENT un JSON sans markdown : {"montantAnnuelTTC": number|null, "t
       ] }],
     });
     const c = resp.content[0];
-    if (c.type !== "text") return { montant: null, type: "autre", certain: false };
+    if (c.type !== "text") return { montant: null, type: "autre", certain: false, echeance: null };
     const raw = c.text.trim().replace(/^```json?\s*/i, "").replace(/\s*```$/i, "");
-    const j = JSON.parse(raw) as { montantAnnuelTTC?: number | null; type?: string; certain?: boolean };
-    return { montant: typeof j.montantAnnuelTTC === "number" ? j.montantAnnuelTTC : null, type: j.type ?? "autre", certain: !!j.certain };
+    const j = JSON.parse(raw) as { montantAnnuelTTC?: number | null; type?: string; certain?: boolean; prochaineEcheance?: string | null };
+    return {
+      montant: typeof j.montantAnnuelTTC === "number" ? j.montantAnnuelTTC : null,
+      type: j.type ?? "autre",
+      certain: !!j.certain,
+      echeance: parseEcheanceCandidate(j.prochaineEcheance),
+    };
   } catch {
-    return { montant: null, type: "autre", certain: false };
+    return { montant: null, type: "autre", certain: false, echeance: null };
   }
 }
 
@@ -578,7 +605,8 @@ export async function getPrimeFromFrontDocs(
   buildingId: string,
   hints: (string | null | undefined)[] = [],
 ): Promise<PrimeDocResult> {
-  const none = (source: string): PrimeDocResult => ({ montant: null, confidence: null, source, conversationId: null });
+  let foundEcheance: Date | null = null; // meilleure prochaine échéance croisée
+  const none = (source: string): PrimeDocResult => ({ montant: null, confidence: null, source, conversationId: null, echeance: foundEcheance });
   const terms = [...new Set(hints.map((t) => t?.trim()).filter((t): t is string => !!t))];
   const convLists = await Promise.all([
     buildingId ? searchByBuildingId(buildingId) : Promise.resolve([] as FrontConversation[]),
@@ -611,6 +639,7 @@ export async function getPrimeFromFrontDocs(
         const pdf = await downloadAttachment(pdfAtt.url);
         if (pdf) {
           const ex = await extractPrimeFromPdf(pdf);
+          if (ex.echeance && !foundEcheance) foundEcheance = ex.echeance;
           if (ex.montant && isPlausiblePrime(ex.montant)) {
             const relance = ex.type === "relance_impaye" || isRelance;
             const clear = ex.certain && ex.type === "avis_echeance" && !isRelance;
@@ -619,6 +648,7 @@ export async function getPrimeFromFrontDocs(
               confidence: clear ? "clear" : "unsure",
               source: `${relance ? "relance impayé" : "avis d'échéance"} (PDF)`,
               conversationId: c.id,
+              echeance: ex.echeance ?? foundEcheance,
             };
             if (clear) return res;
             unsureHit = unsureHit ?? res;
@@ -631,10 +661,11 @@ export async function getPrimeFromFrontDocs(
         const mm = `${m.subject ?? ""}\n${body}`.match(PRIME_TEXT_RE);
         const montant = mm ? parseEuroAmount(mm[1]) : null;
         if (montant && isPlausiblePrime(montant)) {
-          unsureHit = { montant: Math.round(montant), confidence: "unsure", source: isRelance ? "corps relance impayé" : "corps mail avis", conversationId: c.id };
+          unsureHit = { montant: Math.round(montant), confidence: "unsure", source: isRelance ? "corps relance impayé" : "corps mail avis", conversationId: c.id, echeance: foundEcheance };
         }
       }
     }
   }
-  return unsureHit ?? none("prime introuvable dans les avis d'échéance / relances Front");
+  if (unsureHit) { unsureHit.echeance = unsureHit.echeance ?? foundEcheance; return unsureHit; }
+  return none("prime introuvable dans les avis d'échéance / relances Front");
 }

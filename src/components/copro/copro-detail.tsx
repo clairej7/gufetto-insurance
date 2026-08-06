@@ -67,6 +67,7 @@ type Pipeline = {
     courtierActuel: string | null;
     primeActuelle: number | null;
     primeAVerifier: boolean;
+    donneePerimee: boolean;
     dateEcheance: Date | null;
     dateDebutContrat: Date | null;
     contactCsEmail: string | null;
@@ -460,7 +461,37 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
   const router = useRouter();
   const [editingContrat, setEditingContrat] = useState(false);
   const [verifPrime, setVerifPrime] = useState(false);
+  const [verifPerime, setVerifPerime] = useState(false);
   const [editingEcheance, setEditingEcheance] = useState(false);
+
+  // Automatisation 8 « clean avis d'échéance » : cherche dans Front une donnée plus
+  // récente (assureur / courtier / prime / échéance) pour ce dossier à donnée périmée.
+  async function handleVerifPerime() {
+    setVerifPerime(true);
+    try {
+      const res = await fetch("/api/perime/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pipelineId: pipeline.id }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || `Erreur ${res.status}`);
+      if (j.resolved) {
+        const bits: string[] = [];
+        if (j.moved) bits.push(`aiguillé → ${j.targetStatut}`);
+        if (j.primeMontant) bits.push(`prime ${j.primeMontant} €`);
+        if (j.echeanceRefreshed) bits.push("échéance mise à jour");
+        toast.success(`Donnée récente retrouvée${bits.length ? ` : ${bits.join(" · ")}` : ""}.`);
+        router.refresh();
+      } else {
+        toast.info("Rien de plus récent trouvé dans Front — la mention reste (stand-by).");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur lors de la vérification");
+    } finally {
+      setVerifPerime(false);
+    }
+  }
 
   // Automatisation 8 « clean prime » : cherche la prime dans Front (avis d'échéance
   // / relance impayé) pour ce dossier sans prime.
@@ -676,7 +707,24 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
         </Link>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold" style={{ color: "#26262C" }}>{pipeline.copro.nom}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold" style={{ color: "#26262C" }}>{pipeline.copro.nom}</h1>
+              {pipeline.copro.donneePerimee && (
+                <>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full border" style={{ color: "#CA1E12", background: "#FDECEA", borderColor: "#F4C7C2" }}>
+                    Donnée périmée
+                  </span>
+                  <button
+                    onClick={handleVerifPerime}
+                    disabled={verifPerime}
+                    className="text-xs font-semibold underline underline-offset-2 disabled:opacity-50"
+                    style={{ color: "#4E49FC" }}
+                  >
+                    {verifPerime ? "Recherche…" : "Vérifier la donnée"}
+                  </button>
+                </>
+              )}
+            </div>
             {pipeline.copro.adresse && (
               <p className="text-sm mt-0.5" style={{ color: "#656576" }}>{pipeline.copro.adresse}</p>
             )}
