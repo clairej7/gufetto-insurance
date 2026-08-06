@@ -63,6 +63,10 @@ export default async function AutomatisationsPage() {
   const eligibleAuto8 = await prisma.insurancePipeline.count({
     where: { copro: { archivedAt: null, primeActuelle: null } },
   });
+  // Non encore tentés (ce que le batch va réellement traiter).
+  const eligibleAuto8Untried = await prisma.insurancePipeline.count({
+    where: { copro: { archivedAt: null, primeActuelle: null, primeVerifTenteLe: null } },
+  });
   const primeHistory = await getPrimeCleanHistory();
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
 
@@ -257,9 +261,10 @@ export default async function AutomatisationsPage() {
                       Contrôles admin
                     </div>
                     <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
-                      {eligibleAuto8} dossier{eligibleAuto8 > 1 ? "s" : ""} sans prime renseignée (copro active).
+                      {eligibleAuto8} dossier{eligibleAuto8 > 1 ? "s" : ""} sans prime renseignée (copro active) — dont{" "}
+                      <strong>{eligibleAuto8Untried}</strong> jamais tenté{eligibleAuto8Untried > 1 ? "s" : ""} (les runs ne traitent que ceux-là).
                     </p>
-                    <PrimeBatchButton stock={eligibleAuto8} />
+                    <PrimeBatchButton stock={eligibleAuto8Untried} />
 
                     {/* Historique clean prime */}
                     {primeHistory.length > 0 && (
