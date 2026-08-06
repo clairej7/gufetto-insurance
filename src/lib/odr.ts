@@ -151,7 +151,15 @@ export async function getOdrSent(partner: OdrPartnerKey): Promise<OdrSentRecord[
     adresse: d.copro.nom,
     numeroContrat: (d.copro.numeroContrat || "").trim(),
   }));
-  return [...ODR_SENT_DOCS[partner], ...fromDb];
+  // Dédup entre docs et base : la base ODR provient en grande partie du traitement
+  // de ces mêmes docs → sans ça, l'overlap est double-compté. On garde les docs
+  // (adresses complètes) en priorité, puis les dossiers base absents des docs.
+  const kept: OdrSentRecord[] = [];
+  for (const r of [...ODR_SENT_DOCS[partner], ...fromDb]) {
+    const dup = kept.some((k) => numMatch(r.numeroContrat, k.numeroContrat) || addrMatch(r.adresse, k.adresse));
+    if (!dup) kept.push(r);
+  }
+  return kept;
 }
 
 export type OdrDuplicate = {
