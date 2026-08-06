@@ -76,6 +76,10 @@ model Copro {
   numeroContrat     String?
   courtierActuel    String?
   primeActuelle     Float?
+  // Automatisation 8 « clean prime » : true quand la prime a été récupérée
+  // automatiquement (Front) mais sans certitude → l'UI affiche « montant récupéré
+  // automatiquement, vérifier ». Repassé à false dès qu'un gestionnaire édite la prime.
+  primeAVerifier    Boolean @default(false)
   dateEcheance      DateTime?
   dateDebutContrat  DateTime?
 

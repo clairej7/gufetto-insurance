@@ -482,6 +482,8 @@ export async function updateCoproCaracteristiques(
     ...data,
     surfaceDeveloppee: typeof data.surfaceDeveloppee === "number" && isNaN(data.surfaceDeveloppee) ? null : data.surfaceDeveloppee,
     primeActuelle: typeof data.primeActuelle === "number" && isNaN(data.primeActuelle) ? null : data.primeActuelle,
+    // Édition humaine du bloc contrat → la prime n'est plus « à vérifier » (auto 8).
+    primeAVerifier: false,
     // Cliquet : édition humaine → les syncs Omni ne toucheront plus aux champs contrat.
     contratVerrouilleLe: new Date(),
   };
