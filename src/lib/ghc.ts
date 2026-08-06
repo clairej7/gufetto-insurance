@@ -29,19 +29,38 @@ export type GhcApplyResult = {
 
 const parseFields = (s: string | null): string[] => { try { return s ? (JSON.parse(s) as string[]) : []; } catch { return []; } };
 
-export async function applyGhcImport(actorEmail: string, label: string, fileName: string | null): Promise<GhcApplyResult> {
+export type GhcChunkResult = GhcApplyResult & { runId: string; total: number; processed: number; done: boolean };
+
+const GHC_DEFAULT_FILE = "[Matera x GHC] Cleaning contrats assurance.xlsx";
+
+// Applique UNE tranche de copros [offset, offset+limit). Au 1er appel (runId null),
+// crée le run (label auto vN) et remet à zéro le rapport de revues. Chaque tranche
+// incrémente les compteurs du run → l'UI affiche une barre de progression.
+export async function applyGhcChunk(actorEmail: string, offset: number, limit: number, runId: string | null): Promise<GhcChunkResult> {
   const now = new Date();
-  const ghc = await prisma.ghcContract.findMany();
-  const map = new Map(ghc.map((g) => [g.buildingId, g]));
+  const total = await prisma.copro.count({ where: { archivedAt: null } });
+
+  let rid = runId;
+  if (!rid) {
+    await prisma.ghcReview.deleteMany({});
+    const n = await prisma.ghcImportRun.count();
+    const run = await prisma.ghcImportRun.create({ data: { label: `v${n + 1}`, fileName: GHC_DEFAULT_FILE, createdBy: actorEmail } });
+    rid = run.id;
+  }
 
   const copros = await prisma.copro.findMany({
     where: { archivedAt: null },
+    orderBy: { id: "asc" },
+    skip: offset,
+    take: limit,
     select: {
       id: true, nom: true, buildingId: true, assureurActuel: true, courtierActuel: true,
       numeroContrat: true, primeActuelle: true, dateEcheance: true, donneePerimee: true, ghcFields: true,
       pipelines: { select: { id: true, statut: true, odrPartenaire: true } },
     },
   });
+  const ghc = await prisma.ghcContract.findMany({ where: { buildingId: { in: copros.map((c) => c.buildingId) } } });
+  const map = new Map(ghc.map((g) => [g.buildingId, g]));
 
   const r: GhcApplyResult = { dossiersClean: 0, assureursMaj: 0, primesMaj: 0, courtiersMaj: 0, numerosMaj: 0, echeancesMaj: 0, versOdr: 0, versRs: 0, divergences: 0, casParticuliers: 0 };
   const reviews: { buildingId: string; coproNom: string; kind: string; message: string }[] = [];
@@ -122,12 +141,21 @@ export async function applyGhcImport(actorEmail: string, label: string, fileName
     }
   }
 
-  const run = await prisma.ghcImportRun.create({ data: { label, fileName, createdBy: actorEmail, ...r } });
-  // Le rapport reflète le dernier import : on remplace les revues précédentes.
-  await prisma.ghcReview.deleteMany({});
-  if (reviews.length) await prisma.ghcReview.createMany({ data: reviews.map((rv) => ({ ...rv, importRunId: run.id })) });
+  // Incrémente les compteurs du run + ajoute les revues de cette tranche.
+  await prisma.ghcImportRun.update({
+    where: { id: rid },
+    data: {
+      dossiersClean: { increment: r.dossiersClean }, assureursMaj: { increment: r.assureursMaj },
+      primesMaj: { increment: r.primesMaj }, courtiersMaj: { increment: r.courtiersMaj },
+      numerosMaj: { increment: r.numerosMaj }, echeancesMaj: { increment: r.echeancesMaj },
+      versOdr: { increment: r.versOdr }, versRs: { increment: r.versRs },
+      divergences: { increment: r.divergences }, casParticuliers: { increment: r.casParticuliers },
+    },
+  });
+  if (reviews.length) await prisma.ghcReview.createMany({ data: reviews.map((rv) => ({ ...rv, importRunId: rid })) });
 
-  return r;
+  const processed = copros.length;
+  return { ...r, runId: rid, total, processed, done: offset + processed >= total };
 }
 
 export type GhcImportRow = GhcApplyResult & { id: string; date: string; label: string; fileName: string | null };
