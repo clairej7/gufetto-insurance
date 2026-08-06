@@ -12,6 +12,18 @@
 
 export type OdrSentRecord = { adresse: string; numeroContrat: string };
 
+// Envois ODR HISTORIQUES (faits à la main avant l'app, depuis les docs PDF). Ajoutés
+// à titre indicatif dans « Historique des envois ». count = nb d'ODR dans le doc ;
+// montant = somme des primes des dossiers retrouvés dans Gufetto (partiel → indicatif).
+export type OdrManualSend = { date: string; partner: "AXA" | "GENERALI" | "SADA" | "MILA"; count: number; montant: number };
+export const ODR_MANUAL_SENDS: OdrManualSend[] = [
+  { date: "2026-06-30", partner: "SADA", count: 93, montant: 629908 }, // ODR SADA LOLA
+  { date: "2026-07-24", partner: "SADA", count: 4, montant: 4743 },
+  { date: "2026-08-03", partner: "SADA", count: 25, montant: 83380 },
+  { date: "2026-07-24", partner: "AXA", count: 7, montant: 43918 },
+  { date: "2026-08-03", partner: "AXA", count: 7, montant: 21231 },
+];
+
 export const ODR_SENT_DOCS: Record<"AXA" | "GENERALI" | "SADA" | "MILA", OdrSentRecord[]> = {
   AXA: [
   {
