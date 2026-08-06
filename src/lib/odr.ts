@@ -9,6 +9,7 @@ import path from "path";
 import { PDFDocument, StandardFonts, PDFFont, PDFPage } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
 import { matchPartner } from "@/lib/front-insurance";
+import { ODR_SENT_DOCS, OdrSentRecord } from "@/lib/odr-sent-data";
 
 export const ODR_PARTNERS = [
   { key: "AXA", label: "AXA" },
@@ -86,6 +87,98 @@ export async function getOdrByPartner(): Promise<OdrPartnerBucket[]> {
 export function letterDossiers(bucket: OdrPartnerBucket, includeFlagged: boolean): OdrDossier[] {
   const extra = includeFlagged ? bucket.flagged.filter((d) => d.numeroContrat) : [];
   return [...bucket.ready, ...extra];
+}
+
+// ---- Contrôle anti-doublon (ODR à envoyer vs ODR déjà envoyés) ----
+
+export type { OdrSentRecord } from "@/lib/odr-sent-data";
+
+const STREET_GENERIC = new Set([
+  "rue", "avenue", "av", "bd", "boulevard", "allee", "allees", "impasse", "place", "chemin",
+  "cours", "quai", "route", "passage", "villa", "square", "sente", "sentier", "voie", "ter",
+  "bis", "chaussee", "residence", "sdc", "asl", "copropriete", "immeuble", "batiment", "bat",
+]);
+
+function deburr(s: string): string {
+  return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+// n° de contrat : parts normalisées (gère les multi-n° "A / B / C"), longueur ≥ 5.
+function contractParts(num: string | null): string[] {
+  if (!num) return [];
+  return num
+    .split(/[\/,;·]+/)
+    .map((p) => p.replace(/[^a-z0-9]/gi, "").toUpperCase())
+    .filter((p) => p.length >= 5);
+}
+function numMatch(a: string | null, b: string | null): boolean {
+  const pa = contractParts(a);
+  const pb = new Set(contractParts(b));
+  return pa.some((p) => pb.has(p));
+}
+
+// adresse : n° de voie (1–4 chiffres, hors code postal) + mots significatifs.
+function addrTokens(s: string): { nums: Set<string>; words: Set<string> } {
+  const d = deburr(s).replace(/[^a-z0-9]+/g, " ");
+  const nums = new Set((d.match(/\b\d{1,4}\b/g) ?? []));
+  const words = new Set(
+    d.split(" ").filter((w) => w.length >= 4 && !STREET_GENERIC.has(w) && !/^\d+$/.test(w)),
+  );
+  return { nums, words };
+}
+function addrMatch(a: string, b: string): boolean {
+  const ta = addrTokens(a);
+  const tb = addrTokens(b);
+  const numHit = [...ta.nums].some((n) => tb.nums.has(n));
+  const wordHit = [...ta.words].some((w) => tb.words.has(w));
+  return numHit && wordHit;
+}
+
+// Ensemble « déjà envoyé » d'un assureur = docs fournis + dossiers déjà passés en
+// ODR envoyé/accepté/en vigueur dans Gufetto (union, dédupliquée grossièrement).
+export async function getOdrSent(partner: OdrPartnerKey): Promise<OdrSentRecord[]> {
+  const dbSent = await prisma.insurancePipeline.findMany({
+    where: { statut: { in: ["odr_envoye", "odr_accepte", "odr_en_vigueur"] }, odrPartenaire: partner },
+    select: { copro: { select: { nom: true, numeroContrat: true } } },
+  });
+  const fromDb: OdrSentRecord[] = dbSent.map((d) => ({
+    adresse: d.copro.nom,
+    numeroContrat: (d.copro.numeroContrat || "").trim(),
+  }));
+  return [...ODR_SENT_DOCS[partner], ...fromDb];
+}
+
+export type OdrDuplicate = {
+  pipelineId: string;
+  nom: string;
+  numeroContrat: string | null;
+  against: string; // l'ODR déjà envoyé qui matche
+  by: "numero" | "adresse";
+};
+
+// Compare les ODR à envoyer (en cours, prêts [+ flaggés si demandé]) aux déjà-envoyés.
+export async function findOdrDuplicates(
+  partner: OdrPartnerKey,
+  includeFlagged: boolean,
+): Promise<{ candidates: number; sentCount: number; duplicates: OdrDuplicate[] }> {
+  const bucket = (await getOdrByPartner()).find((b) => b.key === partner)!;
+  const candidates = letterDossiers(bucket, includeFlagged);
+  const sent = await getOdrSent(partner);
+
+  const duplicates: OdrDuplicate[] = [];
+  for (const c of candidates) {
+    for (const s of sent) {
+      if (numMatch(c.numeroContrat, s.numeroContrat)) {
+        duplicates.push({ pipelineId: c.pipelineId, nom: c.nom, numeroContrat: c.numeroContrat, against: s.adresse || s.numeroContrat, by: "numero" });
+        break;
+      }
+      if (c.nom && s.adresse && addrMatch(c.nom, s.adresse)) {
+        duplicates.push({ pipelineId: c.pipelineId, nom: c.nom, numeroContrat: c.numeroContrat, against: s.adresse, by: "adresse" });
+        break;
+      }
+    }
+  }
+  return { candidates: candidates.length, sentCount: sent.length, duplicates };
 }
 
 // ---- Template ODR (texte affiché dans l'admin + corps du mail de repli) ----
