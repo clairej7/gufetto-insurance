@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { tagConversation } from "@/lib/front";
-import { getOdrByPartner, isOdrPartnerKey, renderOdrPdf, frenchDate, partnerLabel, letterDossiers } from "@/lib/odr";
+import { getOdrByPartner, isOdrPartnerKey, renderOdrPdf, frenchDate, partnerLabel, letterDossiers, findOdrDuplicates } from "@/lib/odr";
 
 const FRONT_API_URL = "https://api2.frontapp.com";
 const FRONT_TOKEN = process.env.FRONT_API_TOKEN;
@@ -28,6 +28,16 @@ export async function POST(req: NextRequest) {
   const bucket = (await getOdrByPartner()).find((b) => b.key === partner)!;
   const dossiers = letterDossiers(bucket, includeFlagged);
   if (dossiers.length === 0) return NextResponse.json({ error: "Aucun dossier prêt à envoyer pour cet assureur" }, { status: 400 });
+
+  // Garde-fou serveur : jamais d'envoi si des doublons subsistent (défense en
+  // profondeur, indépendamment du contrôle côté UI).
+  const dedup = await findOdrDuplicates(partner, includeFlagged);
+  if (dedup.duplicates.length > 0) {
+    return NextResponse.json(
+      { error: "Doublons détectés — envoi bloqué. Retire-les puis re-vérifie.", duplicates: dedup.duplicates },
+      { status: 409 },
+    );
+  }
 
   const dateStr = frenchDate(new Date());
   const count = dossiers.length;
