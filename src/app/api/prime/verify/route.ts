@@ -24,11 +24,13 @@ export async function POST(req: NextRequest) {
 
   const res = await getPrimeFromFrontDocs(copro.buildingId ?? "", [copro.adresse, copro.nom]);
 
+  const now = new Date();
   if (res.montant && res.confidence) {
     const aVerifier = res.confidence === "unsure";
     await prisma.copro.update({
       where: { id: copro.id },
-      data: { primeActuelle: res.montant, primeAVerifier: aVerifier },
+      // Verrou contrat → la synchro Omni ne réécrira pas la prime récupérée.
+      data: { primeActuelle: res.montant, primeAVerifier: aVerifier, primeVerifTenteLe: now, contratVerrouilleLe: now },
     });
     await prisma.pipelineEvent.create({
       data: {
@@ -42,5 +44,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, found: true, montant: res.montant, confidence: res.confidence, source: res.source });
   }
 
+  // Rien trouvé → marqué comme tenté (exclu du batch ; la fiche permet un retry manuel).
+  await prisma.copro.update({ where: { id: copro.id }, data: { primeVerifTenteLe: now } });
   return NextResponse.json({ success: true, found: false, reason: res.source });
 }

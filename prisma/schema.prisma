@@ -80,6 +80,10 @@ model Copro {
   // automatiquement (Front) mais sans certitude → l'UI affiche « montant récupéré
   // automatiquement, vérifier ». Repassé à false dès qu'un gestionnaire édite la prime.
   primeAVerifier    Boolean @default(false)
+  // Auto 8 : horodatage de la dernière tentative de récupération de prime (batch).
+  // Curseur persistant → le batch ne retente pas les dossiers déjà vus (trouvés ou
+  // non) : les « 10 suivants » sont toujours de nouveaux dossiers.
+  primeVerifTenteLe DateTime?
   dateEcheance      DateTime?
   dateDebutContrat  DateTime?
 
