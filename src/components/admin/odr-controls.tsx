@@ -117,6 +117,34 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
     }
   }
 
+  // Résolution des doublons : passer en « ODR accepté » (accept) ou ignorer le
+  // doublon et garder pour envoi (keepdup). Résout le blocage → dedup repasse OK.
+  async function resolveDups(action: "accept" | "keepdup") {
+    const ids = dups.map((d) => d.pipelineId);
+    if (!ids.length) return;
+    const msg = action === "accept"
+      ? `Passer ${ids.length} dossier(s) en « ODR accepté » (doublon reconnu, sortent du lot) ?`
+      : `Garder ${ids.length} dossier(s) et ignorer le doublon (envoi malgré tout) ?`;
+    if (!window.confirm(msg)) return;
+    try {
+      const res = await fetch("/api/odr/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pipelineIds: ids, action }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || `Erreur ${res.status}`);
+      toast.success(action === "accept"
+        ? `${j.count} dossier(s) passé(s) en « ODR accepté ».`
+        : `${j.count} dossier(s) gardé(s) — doublon ignoré.`);
+      setDups([]);
+      setDedup("ok"); // le blocage doublon est résolu
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur de résolution");
+    }
+  }
+
   async function verify() {
     setDedup("checking");
     try {
@@ -282,17 +310,31 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
         </div>
       )}
       {dedup === "dups" && dups.length > 0 && (
-        <div style={{ marginTop: 10, border: "1px solid #F3C2BE", background: "#FFF5F5", borderRadius: 8, padding: "10px 12px", maxHeight: 220, overflowY: "auto" }}>
+        <div style={{ marginTop: 10, border: "1px solid #F3C2BE", background: "#FFF5F5", borderRadius: 8, padding: "10px 12px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#CA1E12", marginBottom: 6 }}>
-            <ShieldAlert className="h-4 w-4" /> {dups.length} doublon{dups.length > 1 ? "s" : ""} avec des ODR déjà envoyés — envoi bloqué, à retirer puis régénérer :
+            <ShieldAlert className="h-4 w-4" /> {dups.length} doublon{dups.length > 1 ? "s" : ""} avec des ODR déjà envoyés — envoi bloqué, choisis :
           </div>
-          {dups.map((d) => (
-            <div key={d.pipelineId} style={{ fontSize: 12.5, color: "#4E4E58", padding: "2px 0" }}>
-              <a href={`/pipeline/${d.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "underline" }}>{d.nom}</a>
-              {" ↔ "}<span style={{ color: "#8A8A99" }}>{d.against}</span>
-              <span style={{ marginLeft: 6, fontSize: 11, color: "#A2A1AF" }}>({d.by === "numero" ? "n° contrat" : "adresse"})</span>
-            </div>
-          ))}
+          <div style={{ maxHeight: 200, overflowY: "auto" }}>
+            {dups.map((d) => (
+              <div key={d.pipelineId} style={{ fontSize: 12.5, color: "#4E4E58", padding: "2px 0" }}>
+                <a href={`/pipeline/${d.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "underline" }}>{d.nom}</a>
+                {" ↔ "}<span style={{ color: "#8A8A99" }}>{d.against}</span>
+                <span style={{ marginLeft: 6, fontSize: 11, color: "#A2A1AF" }}>({d.by === "numero" ? "n° contrat" : "adresse"})</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            <Button size="sm" className="gap-1.5" disabled={sending} onClick={() => resolveDups("accept")}
+              style={{ background: "#16A34A", borderColor: "#16A34A", color: "#fff" }}>
+              Passer en ODR accepté
+            </Button>
+            <Button size="sm" variant="outline" className="gap-1.5" disabled={sending} onClick={() => resolveDups("keepdup")}>
+              Garder les dossiers
+            </Button>
+            <span style={{ fontSize: 11.5, color: "#A2A1AF", alignSelf: "center" }}>
+              « Passer en ODR accepté » = doublon reconnu, sortis du lot (gagné) · « Garder » = doublon ignoré, envoi malgré tout
+            </span>
+          </div>
         </div>
       )}
 

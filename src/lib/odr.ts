@@ -186,8 +186,19 @@ export async function findOdrDuplicates(
   const candidates = letterDossiers(bucket, includeFlagged);
   const sent = await getOdrSent(partner);
 
+  // Dossiers dont le doublon a été ignoré manuellement (bouton « Garder ») → exclus.
+  const overridden = new Set(
+    (
+      await prisma.pipelineEvent.findMany({
+        where: { pipelineId: { in: candidates.map((c) => c.pipelineId) }, type: "note_ajoutee", description: { contains: "Doublon ignoré manuellement" } },
+        select: { pipelineId: true },
+      })
+    ).map((e) => e.pipelineId),
+  );
+
   const duplicates: OdrDuplicate[] = [];
   for (const c of candidates) {
+    if (overridden.has(c.pipelineId)) continue;
     for (const s of sent) {
       if (numMatch(c.numeroContrat, s.numeroContrat)) {
         duplicates.push({ pipelineId: c.pipelineId, nom: c.nom, numeroContrat: c.numeroContrat, against: s.adresse || s.numeroContrat, by: "numero" });
