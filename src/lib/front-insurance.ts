@@ -558,48 +558,56 @@ function parseEcheanceCandidate(v: unknown): Date | null {
   return d;
 }
 
-// Cotisation annuelle TTC + prochaine échéance lues dans un PDF (avis d'échéance /
-// quittance / rappel / relance) via Claude. `annuelComplet` = le montant couvre bien
-// UNE année entière (≠ trimestre, fraction, solde impayé, frais de courtage…).
-async function extractPrimeFromPdf(pdf: Buffer): Promise<{ montant: number | null; type: string; certain: boolean; annuelComplet: boolean; echeance: Date | null }> {
-  if (!process.env.ANTHROPIC_API_KEY) return { montant: null, type: "autre", certain: false, annuelComplet: false, echeance: null };
-  const PROMPT = `Tu lis un document d'assurance multirisque immeuble (MRI) : avis d'échéance, échéancier, quittance, appel de cotisation, rappel ou relance pour impayé.
-Retourne UNIQUEMENT un JSON sans markdown : {"montantAnnuelTTC": number|null, "type": "avis_echeance"|"relance_impaye"|"autre", "annuelComplet": boolean, "certain": boolean, "prochaineEcheance": "YYYY-MM-DD"|null}
-- montantAnnuelTTC = la COTISATION / PRIME ANNUELLE TTC de l'assurance MRI (montant pour UNE année entière, typiquement une période du type 01/01→31/12 ou de date à date sur ~12 mois), en euros (nombre pur, sans symbole ni séparateur de milliers).
-- annuelComplet = true SEULEMENT si ce montant couvre une année ENTIÈRE. false si c'est un trimestre, une fraction, un acompte, un SOLDE partiel impayé, ou des FRAIS (courtage, honoraires, gestion, pénalités) — dans ces cas ne renvoie PAS ce montant comme prime.
-- ⚠️ Ne confonds JAMAIS la prime d'assurance avec des FRAIS DE COURTAGE / honoraires / frais de gestion / une commission : si le document ne concerne QUE des frais, renvoie montantAnnuelTTC=null et annuelComplet=false.
-- Un rappel/relance peut indiquer la prime annuelle complète (ex. « prime de X € pour la période du 01/01 au 31/12 ») : dans ce cas renvoie X avec annuelComplet=true. S'il n'indique qu'un solde partiel dû → annuelComplet=false.
+// Lecture d'un PDF joint (via Claude). Le doc N'EST PAS forcément une assurance :
+// beaucoup de fils Front sont des relances de charges de copro / factures de
+// prestataires / appels de fonds. On demande donc à Claude de JUGER d'abord si c'est
+// une cotisation d'assurance MRI (`estAssuranceMRI`), puis si le montant est bien la
+// cotisation ANNUELLE complète (`annuelComplet`, ≠ trimestre / solde / frais).
+async function extractPrimeFromPdf(pdf: Buffer): Promise<{ montant: number | null; type: string; certain: boolean; estAssuranceMRI: boolean; annuelComplet: boolean; echeance: Date | null }> {
+  const fail = { montant: null, type: "autre", certain: false, estAssuranceMRI: false, annuelComplet: false, echeance: null };
+  if (!process.env.ANTHROPIC_API_KEY) return fail;
+  const PROMPT = `Tu examines un PDF joint à un e-mail. Il PEUT être un document d'assurance multirisque immeuble (MRI) — avis d'échéance, échéancier, quittance, appel de cotisation, rappel de prime d'assurance — OU tout autre chose : relance de CHARGES de copropriété, facture d'un prestataire, appel de fonds, mise en demeure de charges, courrier de recouvrement, etc. Ne présuppose PAS que c'est une assurance.
+Retourne UNIQUEMENT un JSON sans markdown : {"estAssuranceMRI": boolean, "montantAnnuelTTC": number|null, "type": "avis_echeance"|"relance_impaye"|"autre", "annuelComplet": boolean, "certain": boolean, "prochaineEcheance": "YYYY-MM-DD"|null}
+- estAssuranceMRI = true UNIQUEMENT si le document est bien un document de COTISATION d'assurance multirisque immeuble émis par un ASSUREUR ou un COURTIER. false pour une relance de charges de copropriété, une facture de prestataire, un appel de fonds, une mise en demeure de charges, du recouvrement, etc.
+- Si estAssuranceMRI=false → montantAnnuelTTC=null, annuelComplet=false.
+- montantAnnuelTTC = la COTISATION / PRIME ANNUELLE TTC de l'assurance MRI (montant pour UNE année entière, typiquement une période 01/01→31/12 ou de date à date sur ~12 mois), en euros (nombre pur, sans symbole ni séparateur de milliers).
+- annuelComplet = true SEULEMENT si ce montant couvre une année ENTIÈRE. false si c'est un trimestre, une fraction, un acompte, un SOLDE partiel impayé, ou des FRAIS (courtage, honoraires, gestion, pénalités).
+- ⚠️ Ne confonds JAMAIS la prime d'assurance avec des FRAIS DE COURTAGE / honoraires / frais de gestion / une commission.
+- Un rappel/relance d'assurance peut indiquer la prime annuelle complète (ex. « prime de X € pour la période du 01/01 au 31/12 ») → renvoie X avec annuelComplet=true. S'il n'indique qu'un solde partiel dû → annuelComplet=false.
 - certain=true UNIQUEMENT si tu es sûr d'avoir lu le bon montant annuel TTC complet.
-- prochaineEcheance = la date de PROCHAINE échéance / date d'effet de la période à venir (format YYYY-MM-DD), UNIQUEMENT si explicite et sûre ; sinon null.`;
+- prochaineEcheance = date de PROCHAINE échéance / date d'effet de la période à venir (YYYY-MM-DD), UNIQUEMENT si explicite et sûre ; sinon null.`;
   try {
     const resp = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 200,
+      max_tokens: 220,
       messages: [{ role: "user", content: [
         { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdf.toString("base64") } },
         { type: "text", text: PROMPT },
       ] }],
     });
     const c = resp.content[0];
-    if (c.type !== "text") return { montant: null, type: "autre", certain: false, annuelComplet: false, echeance: null };
+    if (c.type !== "text") return fail;
     const raw = c.text.trim().replace(/^```json?\s*/i, "").replace(/\s*```$/i, "");
-    const j = JSON.parse(raw) as { montantAnnuelTTC?: number | null; type?: string; annuelComplet?: boolean; certain?: boolean; prochaineEcheance?: string | null };
+    const j = JSON.parse(raw) as { estAssuranceMRI?: boolean; montantAnnuelTTC?: number | null; type?: string; annuelComplet?: boolean; certain?: boolean; prochaineEcheance?: string | null };
     return {
       montant: typeof j.montantAnnuelTTC === "number" ? j.montantAnnuelTTC : null,
       type: j.type ?? "autre",
       certain: !!j.certain,
+      estAssuranceMRI: !!j.estAssuranceMRI,
       annuelComplet: !!j.annuelComplet,
       echeance: parseEcheanceCandidate(j.prochaineEcheance),
     };
   } catch {
-    return { montant: null, type: "autre", certain: false, annuelComplet: false, echeance: null };
+    return fail;
   }
 }
 
 const PRIME_DOC_SUBJECT = /avis d'?[ée]ch[ée]ance|[ée]ch[ée]ance|cotisation|quittance|appel de (?:prime|cotisation)|impay|relance|rappel|prime/i;
-// Garde-fou : une prime MRI d'immeuble dépasse rarement ~150 k€ → au-delà de 300 k€
-// c'est presque sûrement un montant de GARANTIE (millions), pas la cotisation.
-const isPlausiblePrime = (n: number) => n > 0 && n < 300000;
+// Garde-fous de plausibilité pour une cotisation MRI d'immeuble :
+// - plancher 300 € : en-dessous c'est presque sûrement des frais / un montant partiel
+//   (ex. relance de charges de copro, frais de courtage), pas la prime annuelle.
+// - plafond 300 k€ : au-delà c'est un montant de GARANTIE (millions), pas la cotisation.
+const isPlausiblePrime = (n: number) => n >= 300 && n < 300000;
 
 // Cherche la prime pour un dossier SANS prime : avis d'échéance / quittance / rappel
 // dans Front (par building_id + nom/adresse), lus par Claude. On n'écrit QUE des
@@ -646,8 +654,10 @@ export async function getPrimeFromFrontDocs(
       if (!pdf) continue;
       const ex = await extractPrimeFromPdf(pdf);
       if (ex.echeance && !foundEcheance) foundEcheance = ex.echeance;
-      // Garde-fou clé : jamais un montant partiel / des frais → doit être annuel complet.
-      if (!ex.montant || !ex.annuelComplet || !isPlausiblePrime(ex.montant)) continue;
+      // Garde-fous clés : (1) le doc doit être une VRAIE assurance MRI (≠ relance de
+      // charges de copro / facture prestataire), (2) montant annuel COMPLET (≠ solde /
+      // frais), (3) montant plausible (plancher 300 € → exclut frais type 175 €).
+      if (!ex.estAssuranceMRI || !ex.montant || !ex.annuelComplet || !isPlausiblePrime(ex.montant)) continue;
       const relance = ex.type === "relance_impaye" || isRelance;
       const clear = ex.certain && ex.type === "avis_echeance" && !relance;
       const res: PrimeDocResult = {
