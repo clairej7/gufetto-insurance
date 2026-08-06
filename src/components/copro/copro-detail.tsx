@@ -68,6 +68,7 @@ type Pipeline = {
     primeActuelle: number | null;
     primeAVerifier: boolean;
     donneePerimee: boolean;
+    ghcFields: string | null;
     dateEcheance: Date | null;
     dateDebutContrat: Date | null;
     contactCsEmail: string | null;
@@ -462,6 +463,8 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
   const [editingContrat, setEditingContrat] = useState(false);
   const [verifPrime, setVerifPrime] = useState(false);
   const [verifPerime, setVerifPerime] = useState(false);
+  // Champs corrigés depuis l'excel GHC (volet 3 auto 8) → check vert « GHC ».
+  const ghcSet = new Set<string>((() => { try { return pipeline.copro.ghcFields ? (JSON.parse(pipeline.copro.ghcFields) as string[]) : []; } catch { return []; } })());
   const [editingEcheance, setEditingEcheance] = useState(false);
 
   // Automatisation 8 « clean avis d'échéance » : cherche dans Front une donnée plus
@@ -855,12 +858,12 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
               </div>
             ) : (
               <dl className="space-y-2">
-                <InfoRow label="Assureur" value={pipeline.copro.assureurActuel} />
-                <InfoRow label="N° de contrat" value={pipeline.copro.numeroContrat} />
-                <InfoRow label="Courtier" value={pipeline.copro.courtierActuel} />
+                <InfoRow label="Assureur" value={pipeline.copro.assureurActuel} badge={ghcSet.has("assureur") ? <GhcCheck /> : undefined} />
+                <InfoRow label="N° de contrat" value={pipeline.copro.numeroContrat} badge={ghcSet.has("numero") ? <GhcCheck /> : undefined} />
+                <InfoRow label="Courtier" value={pipeline.copro.courtierActuel} badge={ghcSet.has("courtier") ? <GhcCheck /> : undefined} />
                 {pipeline.copro.primeActuelle ? (
                   <div>
-                    <InfoRow label="Prime annuelle" value={`${pipeline.copro.primeActuelle.toLocaleString("fr-FR")} €`} />
+                    <InfoRow label="Prime annuelle" value={`${pipeline.copro.primeActuelle.toLocaleString("fr-FR")} €`} badge={ghcSet.has("prime") ? <GhcCheck /> : undefined} />
                     {pipeline.copro.primeAVerifier && (
                       <p className="text-xs mt-0.5" style={{ color: "#955804" }}>Montant récupéré automatiquement, vérifier</p>
                     )}
@@ -1684,6 +1687,9 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                     {days < 0 ? `Échue il y a ${Math.abs(days)} jours` : `Dans ${days} jours`}
                   </div>
                 )}
+                {ghcSet.has("echeance") && pipeline.copro.dateEcheance && (
+                  <div className="mt-1"><GhcCheck /></div>
+                )}
               </>
             )}
           </Card>
@@ -2118,12 +2124,24 @@ function CaracEditForm({ caracForm, setCaracForm, activitesChecked, setActivites
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
+function InfoRow({ label, value, badge }: { label: string; value: string | null | undefined; badge?: React.ReactNode }) {
   return (
     <div>
       <dt className="text-xs" style={{ color: "#656576" }}>{label}</dt>
-      <dd className={cn("text-sm")} style={{ color: value ? "#26262C" : "#A2A1AF", fontStyle: value ? undefined : "italic" }}>{value || "Non renseigné"}</dd>
+      <dd className={cn("text-sm flex items-center gap-1.5")} style={{ color: value ? "#26262C" : "#A2A1AF", fontStyle: value ? undefined : "italic" }}>
+        <span>{value || "Non renseigné"}</span>
+        {value ? badge : null}
+      </dd>
     </div>
+  );
+}
+
+// Petit badge « GHC » (donnée nettoyée par Get Human Call, volet 3 de l'auto 8).
+function GhcCheck() {
+  return (
+    <span title="Donnée corrigée depuis l'excel GetHumanCall" className="inline-flex items-center gap-0.5 text-[10px] font-semibold" style={{ color: "#13762C" }}>
+      <Check className="h-3 w-3" /> GHC
+    </span>
   );
 }
 

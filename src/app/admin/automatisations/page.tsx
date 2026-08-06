@@ -11,6 +11,8 @@ import { PrimeBatchButton } from "@/components/admin/prime-batch-button";
 import { PerimeBatchButton } from "@/components/admin/perime-batch-button";
 import { getPrimeCleanHistory, getPrimeByStage } from "@/lib/prime";
 import { computePerimeState, getPerimeCleanHistory, ensurePerimeBaseline } from "@/lib/perime";
+import { GhcApplyButton } from "@/components/admin/ghc-apply-button";
+import { computeGhcState, getGhcImportHistory, getGhcReviews } from "@/lib/ghc";
 import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 
 type Etat = "deploye" | "encours" | "attente";
@@ -75,6 +77,11 @@ export default async function AutomatisationsPage() {
   await ensurePerimeBaseline();
   const perime = await computePerimeState();
   const perimeHistory = await getPerimeCleanHistory();
+  // Volet 3 « correction GetHumanCall » : état source + historique imports + rapport.
+  const ghcState = await computeGhcState();
+  const ghcHistory = await getGhcImportHistory();
+  const ghcReviews = await getGhcReviews();
+  const ghcReviewLabel: Record<string, string> = { prime_divergente: "Prime divergente", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
   const fmtEurC = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} M€` : n >= 1e3 ? `${Math.round(n / 1e3)} k€` : `${Math.round(n)} €`);
   // Vert (peu d'inconnu) → rouge (bcp d'inconnu) selon le taux de primes connues.
@@ -160,10 +167,11 @@ export default async function AutomatisationsPage() {
       nom: "Agent de nettoyage de la data & remontée des cas étranges",
       etat: "encours",
       description: [
-        "Agent de nettoyage de la donnée — un seul des composants de l'automatisation finale. Deux volets sont en ligne ci-dessous : « clean prime » et « clean avis d'échéance (données périmées) ».",
+        "Agent de nettoyage de la donnée — un seul des composants de l'automatisation finale. Trois volets sont en ligne ci-dessous : « clean prime », « clean avis d'échéance (données périmées) » et « correction GetHumanCall ».",
         "Volet 1 — « clean prime » : beaucoup de dossiers n'ont pas de prime renseignée, ce qui fausse les montants (historique ODR, dashboards Tracking). Sur chaque fiche copro sans prime : mention rouge « aucune prime renseignée » + bouton « Vérifier la prime » (cherche dans Front un avis d'échéance / relance impayé). Trouvé clairement → prime écrite ; incertain → prime écrite + « à vérifier » ; rien → inchangé. Aucun changement d'étape.",
         "Volet 2 — « clean avis d'échéance » : les dossiers dont l'échéance est dépassée depuis plusieurs mois/années trahissent une donnée périmée (import Omni ancien). Chaque fiche concernée porte une mention rouge « Donnée périmée » + un bouton « Vérifier la donnée » qui cherche dans Front une info plus récente (assureur / courtier / prime / échéance) ; si trouvée → remplit, aiguille le statut (Identification → RS / ODR) et retire la mention ; sinon → stand-by. Au fur et à mesure que la donnée est nettoyée sur Matera, les dossiers sont récupérés automatiquement.",
-        "Contrôles admin ci-dessous pour chaque volet (identification + vérification en masse, compteurs en direct). Les données récupérées sont protégées de la synchro Omni du lendemain (cliquets contrat / échéance + statut). Les dashboards du Tracking se mettent à jour automatiquement.",
+        "Volet 3 — « correction GetHumanCall » : import des données nettoyées par les agents Get Human Call (appels aux assureurs). GHC est la source prioritaire : assureur / courtier / n° / prime / échéance sont écrasés (fill + correction), les dossiers en « Identification » sont aiguillés (ODR si assureur partenaire, RS si non-partenaire) ; les autres gardent leur étape et les incohérences sont remontées dans un rapport. Chaque info corrigée porte un check vert « GHC » sur la fiche. À chaque nouvelle version de l'excel : un nouvel import (ligne d'historique).",
+        "Contrôles admin ci-dessous pour chaque volet (identification + vérification en masse, compteurs en direct). Les données récupérées / corrigées sont protégées de la synchro Omni du lendemain (cliquets contrat / échéance + statut). Les dashboards du Tracking se mettent à jour automatiquement.",
       ],
     },
   ];
@@ -376,6 +384,88 @@ export default async function AutomatisationsPage() {
                                     <td style={{ padding: "6px 12px", color: "#26262C", textAlign: "right" }}>{h.concerned}</td>
                                     <td style={{ padding: "6px 12px", color: "#26262C", textAlign: "right" }}>{h.resolvedTotal}</td>
                                     <td style={{ padding: "6px 12px", color: "#13762C", fontWeight: 600, textAlign: "right" }}>{h.resolved > 0 ? `+${h.resolved}` : "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Volet 3 — Correction GetHumanCall (GHC) */}
+                    <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C", marginBottom: 4 }}>Volet 3 — Correction GetHumanCall (GHC)</div>
+                      <p style={{ fontSize: 13, color: "#656576", margin: "0 0 10px" }}>
+                        Import des données nettoyées par les agents Get Human Call (appels aux assureurs). GHC = source prioritaire :
+                        assureur / courtier / n° / prime / échéance sont écrasés (fill + correction), les dossiers en « Identification »
+                        sont aiguillés (ODR / RS), les données récupérées sont protégées d&apos;Omni. Une nouvelle version de l&apos;excel = un
+                        nouvel import (ligne d&apos;historique ci-dessous).
+                      </p>
+                      <p style={{ fontSize: 12.5, color: "#656576", margin: "0 0 12px" }}>
+                        Source : <a href="/ghc/GHC-cleaning-contrats-assurance-v1.xlsx" download style={{ color: "#4E49FC", fontWeight: 600 }}>excel GHC v1 ({ghcState.sourceRows} contrats)</a>
+                        {" · "}<strong>{ghcState.dossiersAvecGhc}</strong> dossier{ghcState.dossiersAvecGhc > 1 ? "s" : ""} portent une donnée GHC.
+                      </p>
+                      <GhcApplyButton sourceRows={ghcState.sourceRows} />
+
+                      {/* Historique des imports GHC */}
+                      {ghcHistory.length > 0 && (
+                        <div style={{ marginTop: 16 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6 }}>Historique des imports</div>
+                          <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 190, border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                              <thead>
+                                <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                                  {["Version", "Date", "Dossiers", "Assureurs", "Primes", "Courtiers", "Échéances", "→ ODR", "→ RS", "Diverg.", "Cas part."].map((h, i) => (
+                                    <th key={i} style={{ padding: "7px 10px", fontWeight: 600, textAlign: i <= 1 ? "left" : "right", position: "sticky", top: 0, background: "#FAFAFC", whiteSpace: "nowrap" }}>{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {ghcHistory.map((h) => (
+                                  <tr key={h.id} style={{ borderTop: "1px solid #F1F1F4" }}>
+                                    <td style={{ padding: "6px 10px", color: "#26262C", fontWeight: 600 }}>{h.label}</td>
+                                    <td style={{ padding: "6px 10px", color: "#4E4E58", whiteSpace: "nowrap" }}>{new Date(h.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
+                                    <td style={{ padding: "6px 10px", color: "#26262C", textAlign: "right" }}>{h.dossiersClean}</td>
+                                    <td style={{ padding: "6px 10px", textAlign: "right" }}>{h.assureursMaj}</td>
+                                    <td style={{ padding: "6px 10px", textAlign: "right" }}>{h.primesMaj}</td>
+                                    <td style={{ padding: "6px 10px", textAlign: "right" }}>{h.courtiersMaj}</td>
+                                    <td style={{ padding: "6px 10px", textAlign: "right" }}>{h.echeancesMaj}</td>
+                                    <td style={{ padding: "6px 10px", textAlign: "right", color: "#955804", fontWeight: 600 }}>{h.versOdr || "—"}</td>
+                                    <td style={{ padding: "6px 10px", textAlign: "right", color: "#13762C", fontWeight: 600 }}>{h.versRs || "—"}</td>
+                                    <td style={{ padding: "6px 10px", textAlign: "right", color: h.divergences ? "#CA1E12" : "#A2A1AF" }}>{h.divergences || "—"}</td>
+                                    <td style={{ padding: "6px 10px", textAlign: "right", color: h.casParticuliers ? "#CA1E12" : "#A2A1AF" }}>{h.casParticuliers || "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Rapport : divergences + cas particuliers à contrôler */}
+                      {ghcReviews.length > 0 && (
+                        <div style={{ marginTop: 16 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6 }}>À contrôler — divergences & cas particuliers ({ghcReviews.length})</div>
+                          <div style={{ overflowY: "auto", maxHeight: 220, border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                              <thead>
+                                <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                                  <th style={{ padding: "7px 12px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>Type</th>
+                                  <th style={{ padding: "7px 12px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>Copropriété</th>
+                                  <th style={{ padding: "7px 12px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>Détail</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {ghcReviews.map((rv) => (
+                                  <tr key={rv.id} style={{ borderTop: "1px solid #F1F1F4" }}>
+                                    <td style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
+                                      <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 999, background: rv.kind === "prime_divergente" ? "#FEF3C7" : "#FDECEA", color: rv.kind === "prime_divergente" ? "#955804" : "#CA1E12" }}>
+                                        {ghcReviewLabel[rv.kind] ?? rv.kind}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: "6px 12px", color: "#26262C" }}>{rv.coproNom}</td>
+                                    <td style={{ padding: "6px 12px", color: "#4E4E58" }}>{rv.message}</td>
                                   </tr>
                                 ))}
                               </tbody>
