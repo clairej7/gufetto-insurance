@@ -9,7 +9,8 @@ import path from "path";
 import { PDFDocument, StandardFonts, PDFFont, PDFPage } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
 import { matchPartner, extractInsuranceInfoFromFront } from "@/lib/front-insurance";
-import { ODR_SENT_DOCS, OdrSentRecord, ODR_MANUAL_SENDS } from "@/lib/odr-sent-data";
+import { ODR_SENT_DOCS, OdrSentRecord } from "@/lib/odr-sent-data";
+import { ODR_MANUAL_SENDS_DOCS } from "@/lib/odr-manual-sends-data";
 
 export const ODR_PARTNERS = [
   { key: "AXA", label: "AXA" },
@@ -219,17 +220,35 @@ export async function getOdrSendHistory(): Promise<OdrSendHistoryRow[]> {
     source: "app" as const,
   }));
 
-  // Envois historiques (docs PDF, avant l'app) — indicatifs.
-  const docRows: OdrSendHistoryRow[] = ODR_MANUAL_SENDS.map((m) => ({
-    date: new Date(m.date).toISOString(),
-    partner: m.partner,
-    label: partnerLabel(m.partner),
-    count: m.count,
-    montant: m.montant,
-    arr: m.montant * 0.25,
-    to: null,
-    source: "doc" as const,
-  }));
+  // Envois historiques (docs PDF, avant l'app) — montant recalculé EN LIVE : on
+  // re-matche les entrées du doc aux dossiers du partenaire et on somme leurs primes
+  // actuelles (→ suit les primes récupérées par « clean prime »).
+  const docPartners = [...new Set(ODR_MANUAL_SENDS_DOCS.map((m) => m.partner))] as OdrPartnerKey[];
+  const docPool = await prisma.insurancePipeline.findMany({
+    where: { odrPartenaire: { in: docPartners } },
+    select: { odrPartenaire: true, copro: { select: { nom: true, numeroContrat: true, primeActuelle: true } } },
+  });
+  const docRows: OdrSendHistoryRow[] = ODR_MANUAL_SENDS_DOCS.map((m) => {
+    const cand = docPool.filter((p) => p.odrPartenaire === m.partner);
+    const used = new Set<number>();
+    let montant = 0;
+    for (const e of m.entries) {
+      const idx = cand.findIndex(
+        (p, i) => !used.has(i) && ((p.copro.numeroContrat && numMatch(p.copro.numeroContrat, e.numeroContrat)) || addrMatch(p.copro.nom, e.adresse)),
+      );
+      if (idx >= 0) { used.add(idx); montant += cand[idx].copro.primeActuelle ?? 0; }
+    }
+    return {
+      date: new Date(m.date).toISOString(),
+      partner: m.partner,
+      label: partnerLabel(m.partner),
+      count: m.entries.length,
+      montant,
+      arr: montant * 0.25,
+      to: null,
+      source: "doc" as const,
+    };
+  });
 
   return [...appRows, ...docRows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
