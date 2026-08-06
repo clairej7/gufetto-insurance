@@ -2,21 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// POST /api/odr/resolve  { pipelineIds: string[], action: "cancel" | "keep" }
-// Traite les dossiers en incohérence après vérification :
-//  - cancel : repassent en « Identification » + note « ODR annulé, vérification
-//    manuelle nécessaire » (sortent du lot ODR).
-//  - keep   : note d'override « ODR confirmé manuellement (Front ignoré) » → la
-//    re-vérification ne les signale plus (assureur inchangé, gardés dans le lot).
+// POST /api/odr/resolve  { pipelineIds: string[], action }
+// Résolution des dossiers signalés après vérification.
+// Incohérence (vérif dossiers) :
+//  - cancel  : → « Identification » + note « ODR annulé, vérification manuelle nécessaire ».
+//  - keep    : note override « ODR confirmé manuellement (Front ignoré) ».
+// Doublon (anti-doublon) :
+//  - accept  : → « ODR accepté » (doublon reconnu = ODR déjà envoyé/accepté).
+//  - keepdup : note override « doublon ignoré » → envoi autorisé malgré tout.
+const ACTIONS = ["cancel", "keep", "accept", "keepdup"] as const;
+type Action = (typeof ACTIONS)[number];
+
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.isAdmin) return NextResponse.json({ error: "Réservé aux admins" }, { status: 403 });
   const actor = session.user.email!;
 
   const body = await req.json().catch(() => ({}));
-  const action: string = body.action;
+  const action = body.action as Action;
   const ids: string[] = Array.isArray(body.pipelineIds) ? body.pipelineIds.filter((x: unknown) => typeof x === "string") : [];
-  if (action !== "cancel" && action !== "keep") return NextResponse.json({ error: "action invalide" }, { status: 400 });
+  if (!ACTIONS.includes(action)) return NextResponse.json({ error: "action invalide" }, { status: 400 });
   if (ids.length === 0) return NextResponse.json({ error: "aucun dossier" }, { status: 400 });
 
   if (action === "cancel") {
@@ -35,17 +40,31 @@ export async function POST(req: NextRequest) {
         }),
       ]),
     );
-  } else {
+  } else if (action === "accept") {
     await prisma.$transaction(
-      ids.map((id) =>
+      ids.flatMap((id) => [
+        prisma.insurancePipeline.update({ where: { id }, data: { statut: "odr_accepte" } }),
         prisma.pipelineEvent.create({
           data: {
             pipelineId: id,
-            type: "note_ajoutee",
-            description: "ODR confirmé manuellement (Front ignoré) — validé pour envoi",
+            type: "statut_change",
+            ancienStatut: "odr_en_cours",
+            nouveauStatut: "odr_accepte",
+            description: "Doublon reconnu (ODR déjà envoyé/accepté) — passé en « ODR accepté »",
             createdBy: actor,
           },
         }),
+      ]),
+    );
+  } else {
+    // keep (incohérence) / keepdup (doublon) : simple note d'override
+    const desc =
+      action === "keep"
+        ? "ODR confirmé manuellement (Front ignoré) — validé pour envoi"
+        : "Doublon ignoré manuellement — envoi confirmé malgré tout";
+    await prisma.$transaction(
+      ids.map((id) =>
+        prisma.pipelineEvent.create({ data: { pipelineId: id, type: "note_ajoutee", description: desc, createdBy: actor } }),
       ),
     );
   }
