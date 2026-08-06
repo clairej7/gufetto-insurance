@@ -70,9 +70,13 @@ export function PerimeBatchButton({ stock }: { stock: number }) {
           if (j.done || j.processed === 0) break;
         }
       }
+      if (total.processed > 0) {
+        try { await fetch("/api/perime/snapshot", { method: "POST" }); } catch { /* non bloquant */ }
+      }
       toast.success(`Vérif terminée : ${total.resolved} dossier(s) résolu(s) sur ${total.processed} traité(s).`);
       router.refresh();
     } catch (e) {
+      if (total.processed > 0) { try { await fetch("/api/perime/snapshot", { method: "POST" }); } catch { /* */ } }
       toast.error(e instanceof Error ? e.message : "Erreur batch données périmées");
       router.refresh();
     } finally {

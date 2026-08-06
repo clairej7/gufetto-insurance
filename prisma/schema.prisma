@@ -318,3 +318,16 @@ model PrimeCleanRun {
 
   @@index([createdAt])
 }
+
+// Historique du volet « clean avis d'échéance » (données périmées) : un instantané
+// par run de vérification. `resolved` = delta de dossiers dé-périmés par CE run.
+model PerimeCleanRun {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  concerned     Int      // dossiers flagués « donnée périmée » à cette date
+  resolvedTotal Int      // cumul des dossiers résolus (perimeeResolvedAt != null)
+  resolved      Int      @default(0) // dossiers résolus par CE run (delta)
+  createdBy     String?
+
+  @@index([createdAt])
+}

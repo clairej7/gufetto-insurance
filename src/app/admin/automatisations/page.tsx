@@ -10,7 +10,7 @@ import { OdrControls } from "@/components/admin/odr-controls";
 import { PrimeBatchButton } from "@/components/admin/prime-batch-button";
 import { PerimeBatchButton } from "@/components/admin/perime-batch-button";
 import { getPrimeCleanHistory, getPrimeByStage } from "@/lib/prime";
-import { computePerimeState } from "@/lib/perime";
+import { computePerimeState, getPerimeCleanHistory, ensurePerimeBaseline } from "@/lib/perime";
 import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 
 type Etat = "deploye" | "encours" | "attente";
@@ -71,8 +71,10 @@ export default async function AutomatisationsPage() {
   });
   const primeHistory = await getPrimeCleanHistory();
   const primeStages = await getPrimeByStage();
-  // Composant « clean avis d'échéance » : compteurs live (concernés / résolus).
+  // Composant « clean avis d'échéance » : compteurs live (concernés / résolus) + historique.
+  await ensurePerimeBaseline();
   const perime = await computePerimeState();
+  const perimeHistory = await getPerimeCleanHistory();
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
   const fmtEurC = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} M€` : n >= 1e3 ? `${Math.round(n / 1e3)} k€` : `${Math.round(n)} €`);
   // Vert (peu d'inconnu) → rouge (bcp d'inconnu) selon le taux de primes connues.
@@ -298,16 +300,16 @@ export default async function AutomatisationsPage() {
                     {primeHistory.length > 0 && (
                       <div style={{ marginTop: 16 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6 }}>Historique</div>
-                        <div style={{ overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                        <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 190, border: "1px solid #E8E8EC", borderRadius: 8 }}>
                           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                             <thead>
                               <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-                                <th style={{ padding: "7px 12px", fontWeight: 600 }}>Date</th>
-                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right" }}>Sans prime / total</th>
-                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right" }}>Taux</th>
-                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right" }}>Primes connues</th>
-                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right" }}>Résolus (run)</th>
-                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right" }}>Montant ajouté</th>
+                                <th style={{ padding: "7px 12px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>Date</th>
+                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right", position: "sticky", top: 0, background: "#FAFAFC" }}>Sans prime / total</th>
+                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right", position: "sticky", top: 0, background: "#FAFAFC" }}>Taux</th>
+                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right", position: "sticky", top: 0, background: "#FAFAFC" }}>Primes connues</th>
+                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right", position: "sticky", top: 0, background: "#FAFAFC" }}>Résolus (run)</th>
+                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right", position: "sticky", top: 0, background: "#FAFAFC" }}>Montant ajouté</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -349,6 +351,38 @@ export default async function AutomatisationsPage() {
                         </div>
                       </div>
                       <PerimeBatchButton stock={perime.untried} />
+
+                      {/* Historique clean avis d'échéance */}
+                      {perimeHistory.length > 0 && (
+                        <div style={{ marginTop: 16 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6 }}>Historique</div>
+                          <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 190, border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                              <thead>
+                                <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                                  <th style={{ padding: "7px 12px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>Date</th>
+                                  <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right", position: "sticky", top: 0, background: "#FAFAFC" }}>Concernés</th>
+                                  <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right", position: "sticky", top: 0, background: "#FAFAFC" }}>Résolus (cumul)</th>
+                                  <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right", position: "sticky", top: 0, background: "#FAFAFC" }}>Résolus (run)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {perimeHistory.map((h, i) => (
+                                  <tr key={i} style={{ borderTop: "1px solid #F1F1F4" }}>
+                                    <td style={{ padding: "6px 12px", color: "#4E4E58", whiteSpace: "nowrap" }}>
+                                      {new Date(h.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                      {i === perimeHistory.length - 1 && <span style={{ marginLeft: 6, fontSize: 10.5, padding: "1px 6px", borderRadius: 999, background: "#F1F1F4", color: "#8A8A99" }}>baseline</span>}
+                                    </td>
+                                    <td style={{ padding: "6px 12px", color: "#26262C", textAlign: "right" }}>{h.concerned}</td>
+                                    <td style={{ padding: "6px 12px", color: "#26262C", textAlign: "right" }}>{h.resolvedTotal}</td>
+                                    <td style={{ padding: "6px 12px", color: "#13762C", fontWeight: 600, textAlign: "right" }}>{h.resolved > 0 ? `+${h.resolved}` : "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
