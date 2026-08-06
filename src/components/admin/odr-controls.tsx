@@ -272,7 +272,8 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
       {coh === "ok" && (
         <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#13762C" }}>
           <FileText className="h-4 w-4" /> Dossiers vérifiés — assureur &amp; n° cohérents avec {p.label}
-          {unflagged > 0 ? ` · ${unflagged} ex-flaggé${unflagged > 1 ? "s" : ""} confirmé${unflagged > 1 ? "s" : ""} et déflaggé${unflagged > 1 ? "s" : ""}` : ""}. « Prévisualiser &amp; envoyer » débloqué.
+          {unflagged > 0 ? ` · ${unflagged} ex-flaggé${unflagged > 1 ? "s" : ""} confirmé${unflagged > 1 ? "s" : ""} et déflaggé${unflagged > 1 ? "s" : ""}` : ""}.
+          {bothOk ? " Les 2 vérifications sont OK → « Prévisualiser & envoyer » débloqué." : " Étape suivante : « Vérifier les doublons »."}
         </div>
       )}
       {coh === "issues" && issues.length > 0 && (
@@ -306,7 +307,8 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
       {/* Statut de la vérification + liste des doublons */}
       {dedup === "ok" && (
         <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#13762C" }}>
-          <ShieldCheck className="h-4 w-4" /> Aucun doublon — {count} contrat{count > 1 ? "s" : ""} prêt{count > 1 ? "s" : ""} à envoyer.
+          <ShieldCheck className="h-4 w-4" /> Aucun doublon — {count} contrat{count > 1 ? "s" : ""}.
+          {bothOk ? " Les 2 vérifications sont OK → « Prévisualiser & envoyer » débloqué." : " Étape suivante : « Vérifier les dossiers »."}
         </div>
       )}
       {dedup === "dups" && dups.length > 0 && (
