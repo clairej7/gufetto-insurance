@@ -20,7 +20,9 @@ export type OdrPartnerSummary = {
 };
 type SentRow = { adresse: string; numeroContrat: string };
 type Dup = { pipelineId: string; nom: string; numeroContrat: string | null; against: string; by: "numero" | "adresse" };
+type Issue = { pipelineId: string; nom: string; numeroContrat: string | null; assureur: string | null; issues: string[] };
 type DedupState = "idle" | "checking" | "ok" | "dups";
+type CohState = "idle" | "checking" | "ok" | "issues";
 
 function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number }) {
   const router = useRouter();
@@ -32,16 +34,46 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
 
   const [dedup, setDedup] = useState<DedupState>("idle");
   const [dups, setDups] = useState<Dup[]>([]);
+  const [coh, setCoh] = useState<CohState>("idle");
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [unflagged, setUnflagged] = useState(0);
 
   const count = p.ready + (includeFlagged ? p.flaggedReady : 0);
   const pdfUrl = `/api/odr/pdf?partner=${p.key}${includeFlagged ? "&includeFlagged=1" : ""}`;
   const noReady = count === 0;
 
-  // Toute modif du périmètre (flaggés) ré-arme la vérification.
+  // Toute modif du périmètre (flaggés) ré-arme les deux vérifications.
   function setFlagged(v: boolean) {
     setIncludeFlagged(v);
     setDedup("idle");
     setDups([]);
+    setCoh("idle");
+    setIssues([]);
+  }
+
+  // Vérification de cohérence des dossiers (assureur ↔ partenaire, n°) → débloque
+  // le bouton « Prévisualiser & envoyer ».
+  async function verifyDossiers() {
+    setCoh("checking");
+    try {
+      const res = await fetch("/api/odr/coherence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ partner: p.key }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || `Erreur ${res.status}`);
+      setIssues(j.issues || []);
+      setUnflagged(j.unflagged || 0);
+      setCoh(j.ok ? "ok" : "issues");
+      if (j.unflagged > 0) {
+        toast.success(`${j.unflagged} dossier(s) confirmé(s) — retiré(s) des flaggés.`);
+        router.refresh();
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur de vérification");
+      setCoh("idle");
+    }
   }
 
   async function verify() {
@@ -99,6 +131,12 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
       : dedup === "dups"
         ? { background: "#FFF5F5", borderColor: "#F3C2BE", color: "#CA1E12" }
         : {};
+  const cohBtnStyle =
+    coh === "ok"
+      ? { background: "#EFFBF2", borderColor: "#9BE0AF", color: "#13762C" }
+      : coh === "issues"
+        ? { background: "#FFF7EB", borderColor: "#F5D9A8", color: "#955804" }
+        : {};
 
   return (
     <div style={{ border: "1px solid #E8E8EC", borderRadius: 10, padding: "12px 14px" }}>
@@ -126,16 +164,44 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
               </Button>
             </a>
           )}
-          {/* Vérification anti-doublon — entre CSV et Prévisualiser */}
+          {/* Vérification des dossiers (cohérence) — entre CSV et Vérifier les doublons */}
+          <Button variant="outline" size="sm" className="gap-1.5" disabled={noReady || coh === "checking" || sending} onClick={verifyDossiers} style={cohBtnStyle}>
+            {coh === "checking" ? <RefreshCw className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+            {coh === "checking" ? "Vérification…" : coh === "idle" ? "Vérifier les dossiers" : "Revérifier les dossiers"}
+          </Button>
+          {/* Vérification anti-doublon */}
           <Button variant="outline" size="sm" className="gap-1.5" disabled={noReady || dedup === "checking" || sending} onClick={verify} style={dedupBtnStyle}>
             {dedup === "ok" ? <ShieldCheck className="h-3.5 w-3.5" /> : dedup === "dups" ? <ShieldAlert className="h-3.5 w-3.5" /> : dedup === "checking" ? <RefreshCw className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
             {dedup === "checking" ? "Vérification…" : dedup === "idle" ? "Vérifier les doublons" : "Régénérer la vérification"}
           </Button>
-          <Button size="sm" className="gap-1.5" disabled={noReady} onClick={() => setOpen((v) => !v)}>
+          {/* Prévisualiser & envoyer — vert/cliquable seulement après la vérif des dossiers */}
+          <Button size="sm" className="gap-1.5" disabled={noReady || coh !== "ok"} onClick={() => setOpen((v) => !v)}
+            style={coh === "ok" ? { background: "#16A34A", borderColor: "#16A34A", color: "#fff" } : {}}>
             <Send className="h-3.5 w-3.5" /> {open ? "Fermer" : "Prévisualiser & envoyer"}
           </Button>
         </div>
       </div>
+
+      {/* Statut de la vérification des dossiers (cohérence) */}
+      {coh === "ok" && (
+        <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#13762C" }}>
+          <FileText className="h-4 w-4" /> Dossiers vérifiés — assureur &amp; n° cohérents avec {p.label}
+          {unflagged > 0 ? ` · ${unflagged} ex-flaggé${unflagged > 1 ? "s" : ""} confirmé${unflagged > 1 ? "s" : ""} et déflaggé${unflagged > 1 ? "s" : ""}` : ""}. « Prévisualiser &amp; envoyer » débloqué.
+        </div>
+      )}
+      {coh === "issues" && issues.length > 0 && (
+        <div style={{ marginTop: 10, border: "1px solid #F5D9A8", background: "#FFF7EB", borderRadius: 8, padding: "10px 12px", maxHeight: 220, overflowY: "auto" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#955804", marginBottom: 6 }}>
+            <AlertTriangle className="h-4 w-4" /> {issues.length} dossier{issues.length > 1 ? "s" : ""} avec incohérence — à corriger puis revérifier :
+          </div>
+          {issues.map((it) => (
+            <div key={it.pipelineId} style={{ fontSize: 12.5, color: "#4E4E58", padding: "2px 0" }}>
+              <a href={`/pipeline/${it.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "underline" }}>{it.nom}</a>
+              <span style={{ marginLeft: 6, color: "#955804" }}>{it.issues.join(" ; ")}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Statut de la vérification + liste des doublons */}
       {dedup === "ok" && (

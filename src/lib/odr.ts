@@ -46,6 +46,13 @@ function normPartner(marker: string | null, assureur: string | null): OdrPartner
   return fb ? (fb.toUpperCase() as OdrPartnerKey) : null;
 }
 
+// Flaggé = note « faux ODR » / « Wakam » (auto 1) NON encore levée. La vérif des
+// dossiers peut poser une note « flag levé » qui neutralise le marqueur.
+function isFlagged(events: { description: string | null }[]): boolean {
+  const notes = events.map((e) => e.description || "");
+  return notes.some((d) => /faux\s*odr|wakam/i.test(d)) && !notes.some((d) => /flag lev|odr confirm/i.test(d));
+}
+
 // Source de vérité serveur : les ODR « pas encore envoyés » = statut odr_en_cours,
 // copro active, groupés par assureur, et scindés prêts / sans-n° / flaggés.
 export async function getOdrByPartner(): Promise<OdrPartnerBucket[]> {
@@ -72,7 +79,7 @@ export async function getOdrByPartner(): Promise<OdrPartnerBucket[]> {
       nom: r.copro.nom,
       numeroContrat: (r.copro.numeroContrat || "").trim() || null,
     };
-    const flagged = r.events.some((e) => /faux\s*odr|wakam/i.test(e.description || ""));
+    const flagged = isFlagged(r.events);
     if (flagged) b.flagged.push(d);
     else if (d.numeroContrat) b.ready.push(d);
     else b.missingNum.push(d);
@@ -193,6 +200,90 @@ export async function findOdrDuplicates(
     }
   }
   return { candidates: candidates.length, sentCount: sent.length, duplicates };
+}
+
+// ---- Contrôle de cohérence des dossiers (avant preview/envoi) ----
+
+// Partenaire évoqué par le PRÉFIXE du n° de contrat (signal fort). null = ambigu
+// (numérique → AXA/SwissLife/… non tranchable ici, donc on ne conclut pas).
+function impliedPartnerFromNum(num: string | null): OdrPartnerKey | null {
+  const C = (num || "").toUpperCase().replace(/\s+/g, "");
+  if (/^1[HP]/.test(C)) return "SADA";
+  if (/^A[RMTUN]/.test(C) || C.includes("2264AA")) return "GENERALI";
+  return null;
+}
+
+export type OdrIssue = {
+  pipelineId: string;
+  nom: string;
+  numeroContrat: string | null;
+  assureur: string | null;
+  issues: string[];
+};
+
+// Règles de cohérence d'UN dossier : assureur cohérent avec le partenaire et
+// préfixe de n° non contradictoire.
+function coherenceIssues(partner: OdrPartnerKey, assureur: string, num: string): string[] {
+  const iss: string[] = [];
+  const ass = (assureur || "").trim();
+  if (!ass) {
+    iss.push("assureur non renseigné");
+  } else {
+    const ap = matchPartner(ass); // "axa" | "generali" | "sada" | "mila" | null
+    if (ap && ap.toUpperCase() !== partner) iss.push(`assureur « ${ass} » correspond à ${ap.toUpperCase()}, pas ${partner}`);
+    else if (!ap) iss.push(`assureur « ${ass} » non reconnu comme ${partner} (courtier ?)`);
+  }
+  const ip = impliedPartnerFromNum(num);
+  if (ip && ip !== partner) iss.push(`n° « ${num} » évoque ${ip}`);
+  return iss;
+}
+
+// Repasse de vérification des dossiers d'un assureur (données déjà fiabilisées via
+// Matera) : contrôle la cohérence de chaque dossier avec n°, et pour les FLAGGÉS
+// confirmés cohérents, LÈVE le flag (note « flag levé ») → ils repassent en dossiers
+// normaux. Renvoie le nb vérifié, le nb de flaggés confirmés/déflaggés, et les
+// incohérences restantes (bloquantes pour l'envoi).
+export async function verifyOdrDossiers(
+  partner: OdrPartnerKey,
+  actorEmail: string,
+): Promise<{ checked: number; unflagged: number; issues: OdrIssue[] }> {
+  const rows = await prisma.insurancePipeline.findMany({
+    where: { statut: "odr_en_cours", odrPartenaire: partner, copro: { archivedAt: null } },
+    select: {
+      id: true,
+      copro: { select: { nom: true, numeroContrat: true, assureurActuel: true } },
+      events: { where: { type: "note_ajoutee" }, select: { description: true } },
+    },
+    orderBy: { copro: { nom: "asc" } },
+  });
+
+  const issues: OdrIssue[] = [];
+  let checked = 0;
+  let unflagged = 0;
+  for (const r of rows) {
+    const num = (r.copro.numeroContrat || "").trim();
+    if (!num) continue; // sans n° → déjà isolé, hors envoi
+    checked++;
+    const ass = (r.copro.assureurActuel || "").trim();
+    const iss = coherenceIssues(partner, ass, num);
+    if (iss.length) {
+      issues.push({ pipelineId: r.id, nom: r.copro.nom, numeroContrat: num, assureur: ass || null, issues: iss });
+      continue; // incohérent → on ne lève PAS le flag
+    }
+    // Cohérent : si encore flaggé, on lève le flag (data confirmée = vrai ODR).
+    if (isFlagged(r.events)) {
+      await prisma.pipelineEvent.create({
+        data: {
+          pipelineId: r.id,
+          type: "note_ajoutee",
+          description: "ODR confirmé (re-vérifié) — flag « faux ODR / Wakam » levé",
+          createdBy: actorEmail,
+        },
+      });
+      unflagged++;
+    }
+  }
+  return { checked, unflagged, issues };
 }
 
 // ---- Template ODR (texte affiché dans l'admin + corps du mail de repli) ----
