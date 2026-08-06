@@ -14,8 +14,11 @@ import { matchPartner } from "@/lib/front-insurance";
 import { isEcheancePerimee } from "@/lib/perime";
 import type { PipelineStatut } from "@/generated/prisma/client";
 
-const PRIME_FLOOR = 300;
+const PRIME_FLOOR = 300;       // < 300 € = frais/partiel → ignoré
+const PRIME_CEIL = 50000;      // > 50 k€ = quasi sûrement une erreur GHC → non écrit, signalé
 const DIVERGENCE_PCT = 0.15;
+// Comparaison souple (casse/espaces) → n'écrase pas « AXA » par « axa » (churn inutile).
+const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
 // Statuts « voie ODR » (un conflit d'assureur partenaire = ODR potentiellement erroné).
 const ODR_STATUTS = ["odr_en_cours", "odr_envoye", "odr_accepte"];
 // Statuts « voie RS/devis » (si GHC dit partenaire → aurait dû partir en ODR).
@@ -72,27 +75,35 @@ export async function applyGhcChunk(actorEmail: string, offset: number, limit: n
     const data: Record<string, unknown> = {};
     const fields: string[] = [];
 
+    // Assureur / courtier / n° : GHC-backed (badge) dès qu'une valeur existe ; on
+    // n'ÉCRIT que si elle diffère réellement (casse/espaces ignorés → pas de churn).
     if (g.assureur) {
       fields.push("assureur");
-      if (g.assureur !== c.assureurActuel) { data.assureurActuel = g.assureur; r.assureursMaj++; }
+      if (norm(g.assureur) !== norm(c.assureurActuel)) { data.assureurActuel = g.assureur; r.assureursMaj++; }
     }
     if (g.courtier) {
       fields.push("courtier");
-      if (g.courtier !== c.courtierActuel) { data.courtierActuel = g.courtier; r.courtiersMaj++; }
+      if (norm(g.courtier) !== norm(c.courtierActuel)) { data.courtierActuel = g.courtier; r.courtiersMaj++; }
     }
     if (g.numeroContrat) {
       fields.push("numero");
-      if (g.numeroContrat !== c.numeroContrat) { data.numeroContrat = g.numeroContrat; r.numerosMaj++; }
+      if (norm(g.numeroContrat) !== norm(c.numeroContrat)) { data.numeroContrat = g.numeroContrat; r.numerosMaj++; }
     }
     if (g.montant != null && g.montant >= PRIME_FLOOR) {
       const gm = Math.round(g.montant);
-      fields.push("prime");
-      if (c.primeActuelle != null && Math.abs(c.primeActuelle - gm) / Math.max(c.primeActuelle, gm) > DIVERGENCE_PCT) {
-        reviews.push({ buildingId: c.buildingId, coproNom: c.nom, kind: "prime_divergente", message: `Prime : Gufetto ${c.primeActuelle} € → GHC ${gm} €` });
-        r.divergences++;
+      if (gm > PRIME_CEIL) {
+        // Montant hors bornes (> 50 k€) → quasi sûrement une erreur GHC : on N'ÉCRIT PAS, on signale.
+        reviews.push({ buildingId: c.buildingId, coproNom: c.nom, kind: "prime_suspecte", message: `Prime GHC ${gm} € invraisemblable (> 50 000 €) — non écrite, à saisir manuellement` });
+        r.casParticuliers++;
+      } else {
+        fields.push("prime");
+        if (c.primeActuelle != null && Math.abs(c.primeActuelle - gm) / Math.max(c.primeActuelle, gm) > DIVERGENCE_PCT) {
+          reviews.push({ buildingId: c.buildingId, coproNom: c.nom, kind: "prime_divergente", message: `Prime : Gufetto ${c.primeActuelle} € → GHC ${gm} €` });
+          r.divergences++;
+        }
+        if (gm !== c.primeActuelle) { data.primeActuelle = gm; r.primesMaj++; }
+        data.primeAVerifier = g.aVerifier; // ligne GHC douteuse → reste « à vérifier »
       }
-      if (gm !== c.primeActuelle) { data.primeActuelle = gm; r.primesMaj++; }
-      data.primeAVerifier = g.aVerifier; // ligne GHC douteuse → reste « à vérifier »
     }
     if (g.echeance) {
       fields.push("echeance");
