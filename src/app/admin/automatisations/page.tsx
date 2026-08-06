@@ -81,7 +81,7 @@ export default async function AutomatisationsPage() {
   const ghcState = await computeGhcState();
   const ghcHistory = await getGhcImportHistory();
   const ghcReviews = await getGhcReviews();
-  const ghcReviewLabel: Record<string, string> = { prime_divergente: "Prime divergente", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
+  const ghcReviewLabel: Record<string, string> = { prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
   const fmtEurC = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} M€` : n >= 1e3 ? `${Math.round(n / 1e3)} k€` : `${Math.round(n)} €`);
   // Vert (peu d'inconnu) → rouge (bcp d'inconnu) selon le taux de primes connues.
