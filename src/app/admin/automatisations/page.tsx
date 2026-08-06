@@ -8,7 +8,9 @@ import { AutofillBatchButton } from "@/components/admin/autofill-batch-button";
 import { VerifyPrimesBatchButton } from "@/components/admin/verify-primes-batch-button";
 import { OdrControls } from "@/components/admin/odr-controls";
 import { PrimeBatchButton } from "@/components/admin/prime-batch-button";
+import { PerimeBatchButton } from "@/components/admin/perime-batch-button";
 import { getPrimeCleanHistory, getPrimeByStage } from "@/lib/prime";
+import { computePerimeState } from "@/lib/perime";
 import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 
 type Etat = "deploye" | "encours" | "attente";
@@ -69,6 +71,8 @@ export default async function AutomatisationsPage() {
   });
   const primeHistory = await getPrimeCleanHistory();
   const primeStages = await getPrimeByStage();
+  // Composant « clean avis d'échéance » : compteurs live (concernés / résolus).
+  const perime = await computePerimeState();
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
   const fmtEurC = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} M€` : n >= 1e3 ? `${Math.round(n / 1e3)} k€` : `${Math.round(n)} €`);
   // Vert (peu d'inconnu) → rouge (bcp d'inconnu) selon le taux de primes connues.
@@ -154,9 +158,10 @@ export default async function AutomatisationsPage() {
       nom: "Agent de nettoyage de la data & remontée des cas étranges",
       etat: "encours",
       description: [
-        "Premier volet en ligne : « clean prime ». Beaucoup de dossiers n'ont pas de prime d'assurance renseignée — ce qui fausse les montants (historique ODR, dashboards Tracking). Cette brique récupère les primes manquantes.",
-        "Sur chaque fiche copro sans prime : une mention rouge « aucune prime renseignée » + un bouton « Vérifier la prime » qui cherche dans Front (surtout un avis d'échéance ou une relance pour impayé). Trouvé clairement → prime écrite ; trouvé mais incertain → prime écrite + mention « montant récupéré automatiquement, vérifier » ; rien → inchangé. Aucun changement d'étape.",
-        "Contrôles admin ci-dessous : identifier tous les dossiers sans prime, et lancer la vérification en masse (compteur en direct des primes récupérées + montant). Les dashboards du Tracking se mettent à jour automatiquement à mesure que les primes sont renseignées.",
+        "Agent de nettoyage de la donnée — un seul des composants de l'automatisation finale. Deux volets sont en ligne ci-dessous : « clean prime » et « clean avis d'échéance (données périmées) ».",
+        "Volet 1 — « clean prime » : beaucoup de dossiers n'ont pas de prime renseignée, ce qui fausse les montants (historique ODR, dashboards Tracking). Sur chaque fiche copro sans prime : mention rouge « aucune prime renseignée » + bouton « Vérifier la prime » (cherche dans Front un avis d'échéance / relance impayé). Trouvé clairement → prime écrite ; incertain → prime écrite + « à vérifier » ; rien → inchangé. Aucun changement d'étape.",
+        "Volet 2 — « clean avis d'échéance » : les dossiers dont l'échéance est dépassée depuis plusieurs mois/années trahissent une donnée périmée (import Omni ancien). Chaque fiche concernée porte une mention rouge « Donnée périmée » + un bouton « Vérifier la donnée » qui cherche dans Front une info plus récente (assureur / courtier / prime / échéance) ; si trouvée → remplit, aiguille le statut (Identification → RS / ODR) et retire la mention ; sinon → stand-by. Au fur et à mesure que la donnée est nettoyée sur Matera, les dossiers sont récupérés automatiquement.",
+        "Contrôles admin ci-dessous pour chaque volet (identification + vérification en masse, compteurs en direct). Les données récupérées sont protégées de la synchro Omni du lendemain (cliquets contrat / échéance + statut). Les dashboards du Tracking se mettent à jour automatiquement.",
       ],
     },
   ];
@@ -264,6 +269,7 @@ export default async function AutomatisationsPage() {
                     <div style={{ fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
                       Contrôles admin
                     </div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C", marginBottom: 4 }}>Volet 1 — Clean prime</div>
                     <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
                       {eligibleAuto8} dossier{eligibleAuto8 > 1 ? "s" : ""} sans prime renseignée (copro active) — dont{" "}
                       <strong>{eligibleAuto8Untried}</strong> jamais tenté{eligibleAuto8Untried > 1 ? "s" : ""} (les runs ne traitent que ceux-là).
@@ -323,6 +329,27 @@ export default async function AutomatisationsPage() {
                         </div>
                       </div>
                     )}
+
+                    {/* Volet 2 — Clean avis d'échéance (données périmées) */}
+                    <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C", marginBottom: 4 }}>Volet 2 — Clean avis d'échéance (données périmées)</div>
+                      <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
+                        Dossiers actifs dont l'échéance est dépassée depuis plus de 6 mois → donnée jugée périmée. La fiche affiche
+                        « Donnée périmée » + « Vérifier la donnée » (recherche Front d'une info plus récente ; si trouvée → remplit,
+                        aiguille le statut et retire la mention). Curseur persistant : les runs ne reprennent que de nouveaux dossiers.
+                      </p>
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+                        <div style={{ minWidth: 150, border: "1px solid #E8E8EC", borderRadius: 8, padding: "8px 12px", background: "#fff" }}>
+                          <div style={{ fontSize: 22, fontWeight: 700, color: "#CA1E12" }}>{perime.concerned}</div>
+                          <div style={{ fontSize: 11.5, color: "#656576" }}>dossiers concernés{perime.untried ? ` · ${perime.untried} jamais tentés` : ""}</div>
+                        </div>
+                        <div style={{ minWidth: 150, border: "1px solid #E8E8EC", borderRadius: 8, padding: "8px 12px", background: "#fff" }}>
+                          <div style={{ fontSize: 22, fontWeight: 700, color: "#13762C" }}>{perime.resolved}</div>
+                          <div style={{ fontSize: 11.5, color: "#656576" }}>dossiers résolus</div>
+                        </div>
+                      </div>
+                      <PerimeBatchButton stock={perime.untried} />
+                    </div>
                   </div>
                 )}
               </div>

@@ -100,6 +100,17 @@ model Copro {
   // rafraîchi à chaque sync).
   echeanceVerrouilleLe DateTime?
 
+  // Automatisation 8 « clean avis d'échéance » : dossier dont l'échéance est dépassée
+  // depuis plusieurs mois/années → donnée jugée périmée (import Omni ancien). Flag posé
+  // par « Trouver tous les dossiers aux données périmées » ; retiré dès qu'une donnée
+  // plus récente est retrouvée dans Front (assureur / courtier / prime / échéance).
+  donneePerimee       Boolean @default(false)
+  // Curseur : dernière tentative de récupération d'un dossier périmé (batch) → les
+  // tranches suivantes ne reprennent que de nouveaux dossiers.
+  perimeeVerifTenteLe DateTime?
+  // Horodatage de résolution (donnée plus récente retrouvée) → compteur « résolus ».
+  perimeeResolvedAt   DateTime?
+
   // Contact Conseil Syndical
   contactCsEmail String?
   contactCsNom   String?
