@@ -74,6 +74,34 @@ export async function computePerimeState(): Promise<{ concerned: number; untried
   return { concerned, untried, resolved };
 }
 
+export type PerimeCleanRow = {
+  date: string; // ISO
+  concerned: number;
+  resolvedTotal: number;
+  resolved: number; // dossiers dé-périmés par ce run
+};
+
+// Enregistre un instantané (fin de run). `resolved` calculé en DELTA vs le dernier
+// instantané → robuste à une interruption (refresh). Baseline (1er) = delta nul.
+export async function recordPerimeCleanSnapshot(createdBy: string | null): Promise<void> {
+  const s = await computePerimeState();
+  const last = await prisma.perimeCleanRun.findFirst({ orderBy: { createdAt: "desc" } });
+  const resolved = last ? Math.max(0, s.resolved - last.resolvedTotal) : 0;
+  await prisma.perimeCleanRun.create({
+    data: { concerned: s.concerned, resolvedTotal: s.resolved, resolved, createdBy },
+  });
+}
+
+// Crée la baseline du jour si l'historique est vide.
+export async function ensurePerimeBaseline(): Promise<void> {
+  if ((await prisma.perimeCleanRun.count()) === 0) await recordPerimeCleanSnapshot(null);
+}
+
+export async function getPerimeCleanHistory(): Promise<PerimeCleanRow[]> {
+  const rows = await prisma.perimeCleanRun.findMany({ orderBy: { createdAt: "desc" }, take: 50 });
+  return rows.map((r) => ({ date: r.createdAt.toISOString(), concerned: r.concerned, resolvedTotal: r.resolvedTotal, resolved: r.resolved }));
+}
+
 export type PerimeeRecoveryResult = {
   resolved: boolean;
   moved: boolean;
