@@ -513,6 +513,15 @@ export function OdrControls({ template, partners, sent, history }: { template: s
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: "2px solid #E8E8EC", background: "#FAFAFC", fontWeight: 700 }}>
+                      <td style={{ padding: "8px 14px", color: "#26262C" }}>Total</td>
+                      <td style={{ padding: "8px 14px", color: "#A2A1AF", fontWeight: 400 }}>{history.length} envoi{history.length > 1 ? "s" : ""}</td>
+                      <td style={{ padding: "8px 14px", color: "#26262C", textAlign: "right" }}>{history.reduce((s, h) => s + h.count, 0)}</td>
+                      <td style={{ padding: "8px 14px", color: "#26262C", textAlign: "right" }}>{eur(history.reduce((s, h) => s + h.montant, 0))}</td>
+                      <td style={{ padding: "8px 14px", color: "#13762C", textAlign: "right" }}>{eur(history.reduce((s, h) => s + h.arr, 0))}</td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             )}
