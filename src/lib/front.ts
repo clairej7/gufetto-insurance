@@ -43,6 +43,27 @@ export async function resolveTeammateId(email: string | null | undefined): Promi
   return teammateCache.map.get(email.toLowerCase()) ?? null;
 }
 
+// Signature Front d'un teammate (HTML), best-effort. Renvoie la signature par
+// défaut (ou la 1re) pour l'email donné, ou null. Ne lève jamais.
+export async function getSignatureHtml(email: string | null | undefined): Promise<string | null> {
+  if (!FRONT_TOKEN || !email) return null;
+  try {
+    const id = await resolveTeammateId(email);
+    if (!id) return null;
+    const res = await fetch(`${FRONT_API_URL}/teammates/${id}/signatures`, {
+      headers: { Authorization: `Bearer ${FRONT_TOKEN}` },
+    });
+    if (!res.ok) return null;
+    const data: { _results?: Array<{ body?: string; is_default?: boolean }> } = await res.json();
+    const sigs = data._results ?? [];
+    const chosen = sigs.find((s) => s.is_default) ?? sigs[0];
+    return chosen?.body?.trim() || null;
+  } catch (e) {
+    console.error("[front] getSignatureHtml error:", e);
+    return null;
+  }
+}
+
 // Pose un ou plusieurs tags sur une conversation. Front renvoie 409 ("Tag not
 // allowed in this conversation's inboxes") tant que la conversation fraîchement
 // créée n'est pas encore rattachée à son inbox : on réessaie alors avec un petit

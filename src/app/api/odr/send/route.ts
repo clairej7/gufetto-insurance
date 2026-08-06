@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { tagConversation } from "@/lib/front";
-import { getOdrByPartner, isOdrPartnerKey, renderOdrPdf, frenchDate, partnerLabel, letterDossiers, findOdrDuplicates } from "@/lib/odr";
+import { tagConversation, getSignatureHtml } from "@/lib/front";
+import { getOdrByPartner, isOdrPartnerKey, renderOdrPdf, frenchDate, frenchDateFile, partnerLabel, letterDossiers, findOdrDuplicates } from "@/lib/odr";
+
+// "quentin.lepoutre@matera.eu" → "Quentin Lepoutre" (fallback si pas de nom en session).
+function nameFromEmail(email: string): string {
+  return email.split("@")[0].split(/[._-]/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
 
 const FRONT_API_URL = "https://api2.frontapp.com";
 const FRONT_TOKEN = process.env.FRONT_API_TOKEN;
@@ -39,18 +44,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const dateStr = frenchDate(new Date());
+  const now = new Date();
+  const dateStr = frenchDate(now);
+  const label = partnerLabel(partner);
   const count = dossiers.length;
-  const subject: string = (body.subject || "").trim() || `Ordre de Remplacement — Matera (${count} contrat${count > 1 ? "s" : ""})`;
+  const signerName = (session.user.name && session.user.name.trim()) || nameFromEmail(actor) || "Matera";
+  const subject: string = (body.subject || "").trim() || `Matera - ODR ${dateStr}`;
   const coverText = `Bonjour,
 
 Veuillez trouver ci-joint l'ordre de remplacement de Matera concernant ${count} contrat${count > 1 ? "s" : ""}, à résilier à leur prochaine échéance. Matera est mandaté comme nouveau cabinet de courtage pour l'établissement des nouveaux contrats.
 
 Bien cordialement,
-Matera
-8 cité Paradis, 75010 Paris`;
+${signerName}
+Matera — 8 cité Paradis, 75010 Paris`;
 
   const pdf = await renderOdrPdf(dossiers, dateStr);
+  const pdfName = `ODR ${label} - ${frenchDateFile(now)}.pdf`;
   const refTag = `odr:${partner}`;
 
   let conversationId = "";
@@ -63,12 +72,14 @@ Matera
     mailtoUrl = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(coverText)}`;
   } else {
     const hiddenRef = `<span style="display:none;font-size:0;line-height:0;color:transparent">gufetto-ref:${refTag}</span>`;
+    // Signature Front perso de l'expéditeur (best-effort) ajoutée sous le corps.
+    const sigHtml = await getSignatureHtml(actor);
     const htmlBody =
       coverText
         .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
         .split(/\n\n+/)
         .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
-        .join("") + hiddenRef;
+        .join("") + (sigHtml ? `<br>${sigHtml}` : "") + hiddenRef;
 
     const form = new FormData();
     form.append("author_id", `alt:email:${FRONT_AUTHOR_EMAIL}`);
@@ -76,7 +87,7 @@ Matera
     form.append("subject", subject);
     form.append("body", htmlBody);
     form.append("type", "email");
-    form.append("attachments[]", new Blob([Buffer.from(pdf)], { type: "application/pdf" }), `ODR_${partner}_Matera.pdf`);
+    form.append("attachments[]", new Blob([Buffer.from(pdf)], { type: "application/pdf" }), pdfName);
 
     const res = await fetch(`${FRONT_API_URL}/channels/${FRONT_CHANNEL_ID}/messages`, {
       method: "POST",
@@ -94,7 +105,6 @@ Matera
   }
 
   // Passage en « ODR envoyées » de tous les dossiers de la lettre (+ trace).
-  const label = partnerLabel(partner);
   await prisma.$transaction(
     dossiers.flatMap((d) => [
       prisma.insurancePipeline.update({

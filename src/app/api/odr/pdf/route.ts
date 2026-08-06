@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getOdrByPartner, isOdrPartnerKey, renderOdrPdf, frenchDate, letterDossiers } from "@/lib/odr";
+import { getOdrByPartner, isOdrPartnerKey, renderOdrPdf, frenchDate, frenchDateFile, partnerLabel, letterDossiers } from "@/lib/odr";
 
 // GET /api/odr/pdf?partner=AXA
 // Génère la lettre ODR remplie (PDF) avec les copros ODR non encore envoyées de
@@ -19,11 +19,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Aucun dossier prêt (avec n° de contrat) pour cet assureur" }, { status: 400 });
   }
 
-  const pdf = await renderOdrPdf(dossiers, frenchDate(new Date()));
+  const now = new Date();
+  const pdf = await renderOdrPdf(dossiers, frenchDate(now));
+  const pdfName = `ODR ${partnerLabel(partner)} - ${frenchDateFile(now)}.pdf`;
   return new NextResponse(Buffer.from(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="ODR_${partner}_Matera.pdf"`,
+      "Content-Disposition": `inline; filename="${pdfName}"`,
     },
   });
 }

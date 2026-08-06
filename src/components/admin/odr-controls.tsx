@@ -28,7 +28,10 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState("");
-  const [subject, setSubject] = useState("");
+  // Objet proposé automatiquement (éditable) : « Matera - ODR jj/mm/aaaa ».
+  const [subject, setSubject] = useState(
+    `Matera - ODR ${new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}`,
+  );
   const [includeFlagged, setIncludeFlagged] = useState(true);
   const [sending, setSending] = useState(false);
 
