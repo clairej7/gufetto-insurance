@@ -37,6 +37,7 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
   const [coh, setCoh] = useState<CohState>("idle");
   const [issues, setIssues] = useState<Issue[]>([]);
   const [unflagged, setUnflagged] = useState(0);
+  const [cohProgress, setCohProgress] = useState({ done: 0, total: 0 });
 
   const count = p.ready + (includeFlagged ? p.flaggedReady : 0);
   const pdfUrl = `/api/odr/pdf?partner=${p.key}${includeFlagged ? "&includeFlagged=1" : ""}`;
@@ -53,21 +54,33 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
 
   // Vérification de cohérence des dossiers (assureur ↔ partenaire, n°) → débloque
   // le bouton « Prévisualiser & envoyer ».
+  // Re-lecture Front par dossier → coûteux → on boucle par tranche (chunks) avec progression.
   async function verifyDossiers() {
     setCoh("checking");
+    setCohProgress({ done: 0, total: 0 });
+    const allIssues: Issue[] = [];
+    let totalUnflagged = 0;
+    let offset = 0;
     try {
-      const res = await fetch("/api/odr/coherence", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ partner: p.key }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || `Erreur ${res.status}`);
-      setIssues(j.issues || []);
-      setUnflagged(j.unflagged || 0);
-      setCoh(j.ok ? "ok" : "issues");
-      if (j.unflagged > 0) {
-        toast.success(`${j.unflagged} dossier(s) confirmé(s) — retiré(s) des flaggés.`);
+      for (;;) {
+        const res = await fetch("/api/odr/coherence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ partner: p.key, offset, limit: 8 }),
+        });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || `Erreur ${res.status}`);
+        allIssues.push(...(j.issues || []));
+        totalUnflagged += j.unflagged || 0;
+        offset += j.count || 0;
+        setCohProgress({ done: offset, total: j.total || 0 });
+        if (j.done || (j.count ?? 0) === 0) break;
+      }
+      setIssues(allIssues);
+      setUnflagged(totalUnflagged);
+      setCoh(allIssues.length === 0 ? "ok" : "issues");
+      if (totalUnflagged > 0) {
+        toast.success(`${totalUnflagged} dossier(s) confirmé(s) — retiré(s) des flaggés.`);
         router.refresh();
       }
     } catch (e) {
@@ -125,18 +138,10 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
     }
   }
 
-  const dedupBtnStyle =
-    dedup === "ok"
-      ? { background: "#EFFBF2", borderColor: "#9BE0AF", color: "#13762C" }
-      : dedup === "dups"
-        ? { background: "#FFF5F5", borderColor: "#F3C2BE", color: "#CA1E12" }
-        : {};
-  const cohBtnStyle =
-    coh === "ok"
-      ? { background: "#EFFBF2", borderColor: "#9BE0AF", color: "#13762C" }
-      : coh === "issues"
-        ? { background: "#FFF7EB", borderColor: "#F5D9A8", color: "#955804" }
-        : {};
+  // Les 2 boutons « Vérifier » sont bleus ; le résultat (vert/rouge) s'affiche
+  // dans les bandeaux de statut sous la ligne. Un liseré vert quand la vérif est OK.
+  const BLUE = { background: "#4E49FC", borderColor: "#4E49FC", color: "#fff" } as const;
+  const bothOk = coh === "ok" && dedup === "ok";
 
   return (
     <div style={{ border: "1px solid #E8E8EC", borderRadius: 10, padding: "12px 14px" }}>
@@ -164,19 +169,23 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
               </Button>
             </a>
           )}
-          {/* Vérification des dossiers (cohérence) — entre CSV et Vérifier les doublons */}
-          <Button variant="outline" size="sm" className="gap-1.5" disabled={noReady || coh === "checking" || sending} onClick={verifyDossiers} style={cohBtnStyle}>
-            {coh === "checking" ? <RefreshCw className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
-            {coh === "checking" ? "Vérification…" : coh === "idle" ? "Vérifier les dossiers" : "Revérifier les dossiers"}
+          {/* 1) Vérifier les dossiers (re-lecture Front + cohérence) — bleu */}
+          <Button size="sm" className="gap-1.5" disabled={noReady || coh === "checking" || sending} onClick={verifyDossiers}
+            style={{ ...BLUE, boxShadow: coh === "ok" ? "inset 0 0 0 2px #16A34A" : undefined }}>
+            {coh === "checking" ? <RefreshCw className="h-3.5 w-3.5" /> : coh === "ok" ? <ShieldCheck className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+            {coh === "checking"
+              ? `Vérification… ${cohProgress.total ? `${cohProgress.done}/${cohProgress.total}` : ""}`
+              : coh === "idle" ? "Vérifier les dossiers" : "Revérifier les dossiers"}
           </Button>
-          {/* Vérification anti-doublon */}
-          <Button variant="outline" size="sm" className="gap-1.5" disabled={noReady || dedup === "checking" || sending} onClick={verify} style={dedupBtnStyle}>
-            {dedup === "ok" ? <ShieldCheck className="h-3.5 w-3.5" /> : dedup === "dups" ? <ShieldAlert className="h-3.5 w-3.5" /> : dedup === "checking" ? <RefreshCw className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+          {/* 2) Vérifier les doublons — bleu */}
+          <Button size="sm" className="gap-1.5" disabled={noReady || dedup === "checking" || sending} onClick={verify}
+            style={{ ...BLUE, boxShadow: dedup === "ok" ? "inset 0 0 0 2px #16A34A" : undefined }}>
+            {dedup === "checking" ? <RefreshCw className="h-3.5 w-3.5" /> : dedup === "ok" ? <ShieldCheck className="h-3.5 w-3.5" /> : <ShieldAlert className="h-3.5 w-3.5" />}
             {dedup === "checking" ? "Vérification…" : dedup === "idle" ? "Vérifier les doublons" : "Régénérer la vérification"}
           </Button>
-          {/* Prévisualiser & envoyer — vert/cliquable seulement après la vérif des dossiers */}
-          <Button size="sm" className="gap-1.5" disabled={noReady || coh !== "ok"} onClick={() => setOpen((v) => !v)}
-            style={coh === "ok" ? { background: "#16A34A", borderColor: "#16A34A", color: "#fff" } : {}}>
+          {/* 3) Prévisualiser & envoyer — cliquable/vert seulement quand les 2 vérifs sont OK */}
+          <Button size="sm" className="gap-1.5" disabled={noReady || !bothOk} onClick={() => setOpen((v) => !v)}
+            style={bothOk ? { background: "#16A34A", borderColor: "#16A34A", color: "#fff" } : {}}>
             <Send className="h-3.5 w-3.5" /> {open ? "Fermer" : "Prévisualiser & envoyer"}
           </Button>
         </div>

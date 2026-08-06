@@ -8,7 +8,7 @@ import fs from "fs";
 import path from "path";
 import { PDFDocument, StandardFonts, PDFFont, PDFPage } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
-import { matchPartner } from "@/lib/front-insurance";
+import { matchPartner, extractInsuranceInfoFromFront } from "@/lib/front-insurance";
 import { ODR_SENT_DOCS, OdrSentRecord } from "@/lib/odr-sent-data";
 
 export const ODR_PARTNERS = [
@@ -238,52 +238,70 @@ function coherenceIssues(partner: OdrPartnerKey, assureur: string, num: string):
   return iss;
 }
 
-// Repasse de vérification des dossiers d'un assureur (données déjà fiabilisées via
-// Matera) : contrôle la cohérence de chaque dossier avec n°, et pour les FLAGGÉS
-// confirmés cohérents, LÈVE le flag (note « flag levé ») → ils repassent en dossiers
-// normaux. Renvoie le nb vérifié, le nb de flaggés confirmés/déflaggés, et les
-// incohérences restantes (bloquantes pour l'envoi).
+// Repasse de vérification des dossiers d'un assureur : pour CHAQUE dossier (avec n°)
+// on fait une RE-LECTURE FRONT indépendante (comme l'automatisation 1) + le contrôle
+// de cohérence data (assureur ↔ partenaire, préfixe n°). Un désaccord Front ou une
+// incohérence data = problème listé (bloquant). Pour les FLAGGÉS confirmés OK, on
+// LÈVE le flag → ils repassent en dossiers normaux.
+//
+// Coûteux (1 appel Front/dossier) → traité par TRANCHE (offset/limit) : l'appelant
+// boucle avec une progression. La liste des candidats (odr_en_cours + n°, triée par
+// nom) est stable pendant la passe (lever un flag ne change pas l'appartenance).
 export async function verifyOdrDossiers(
   partner: OdrPartnerKey,
   actorEmail: string,
-): Promise<{ checked: number; unflagged: number; issues: OdrIssue[] }> {
+  offset = 0,
+  limit = 1000,
+): Promise<{ total: number; count: number; unflagged: number; issues: OdrIssue[]; done: boolean }> {
   const rows = await prisma.insurancePipeline.findMany({
     where: { statut: "odr_en_cours", odrPartenaire: partner, copro: { archivedAt: null } },
     select: {
       id: true,
-      copro: { select: { nom: true, numeroContrat: true, assureurActuel: true } },
+      copro: { select: { nom: true, numeroContrat: true, assureurActuel: true, buildingId: true } },
       events: { where: { type: "note_ajoutee" }, select: { description: true } },
     },
     orderBy: { copro: { nom: "asc" } },
   });
+  const withNum = rows.filter((r) => (r.copro.numeroContrat || "").trim());
+  const total = withNum.length;
+  const slice = withNum.slice(offset, offset + limit);
 
   const issues: OdrIssue[] = [];
-  let checked = 0;
   let unflagged = 0;
-  for (const r of rows) {
+  for (const r of slice) {
     const num = (r.copro.numeroContrat || "").trim();
-    if (!num) continue; // sans n° → déjà isolé, hors envoi
-    checked++;
     const ass = (r.copro.assureurActuel || "").trim();
     const iss = coherenceIssues(partner, ass, num);
+
+    // Re-lecture Front indépendante (best-effort : une panne Front = non concluant,
+    // on ne bloque pas là-dessus ; seul un DÉSACCORD net Front compte).
+    try {
+      const info = await extractInsuranceInfoFromFront(r.copro.buildingId);
+      if (info.partnerKey && info.partnerKey.toUpperCase() !== partner) {
+        iss.push(`Front indique ${info.partnerKey.toUpperCase()} (≠ ${partner})`);
+      }
+    } catch {
+      // Front indisponible pour ce dossier → non concluant, on continue.
+    }
+
     if (iss.length) {
       issues.push({ pipelineId: r.id, nom: r.copro.nom, numeroContrat: num, assureur: ass || null, issues: iss });
-      continue; // incohérent → on ne lève PAS le flag
+      continue; // problème → on ne lève PAS le flag
     }
-    // Cohérent : si encore flaggé, on lève le flag (data confirmée = vrai ODR).
+    // Confirmé OK : si encore flaggé, on lève le flag (data confirmée = vrai ODR).
     if (isFlagged(r.events)) {
       await prisma.pipelineEvent.create({
         data: {
           pipelineId: r.id,
           type: "note_ajoutee",
-          description: "ODR confirmé (re-vérifié) — flag « faux ODR / Wakam » levé",
+          description: "ODR confirmé (re-vérifié Front) — flag « faux ODR / Wakam » levé",
           createdBy: actorEmail,
         },
       });
       unflagged++;
     }
   }
-  return { checked, unflagged, issues };
+  return { total, count: slice.length, unflagged, issues, done: offset + slice.length >= total };
 }
 
 // ---- Template ODR (texte affiché dans l'admin + corps du mail de repli) ----
