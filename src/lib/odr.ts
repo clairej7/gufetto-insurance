@@ -343,6 +343,11 @@ export function frenchDate(d: Date): string {
   return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+// Date pour nom de fichier : jj_mm_aaaa.
+export function frenchDateFile(d: Date): string {
+  return frenchDate(d).replace(/\//g, "_");
+}
+
 // Lettre ODR remplie en texte (corps du mail de repli mailto + base du PDF).
 export function fillOdrLetterText(dossiers: OdrDossier[], dateStr: string): string {
   const lignes = dossiers
