@@ -559,15 +559,18 @@ function parseEcheanceCandidate(v: unknown): Date | null {
 }
 
 // Cotisation annuelle TTC + prochaine échéance lues dans un PDF (avis d'échéance /
-// quittance / relance) via Claude.
-async function extractPrimeFromPdf(pdf: Buffer): Promise<{ montant: number | null; type: string; certain: boolean; echeance: Date | null }> {
-  if (!process.env.ANTHROPIC_API_KEY) return { montant: null, type: "autre", certain: false, echeance: null };
-  const PROMPT = `Tu lis un document d'assurance multirisque immeuble : avis d'échéance, échéancier, quittance, appel de cotisation, ou relance pour impayé.
-Retourne UNIQUEMENT un JSON sans markdown : {"montantAnnuelTTC": number|null, "type": "avis_echeance"|"relance_impaye"|"autre", "certain": boolean, "prochaineEcheance": "YYYY-MM-DD"|null}
-- montantAnnuelTTC = la COTISATION / PRIME ANNUELLE TTC (montant pour UNE année entière), en euros (nombre pur, sans symbole ni séparateur de milliers).
-- Si le document ne donne qu'un montant partiel (un trimestre, une fraction, un solde impayé) sans permettre de déduire l'annuel avec certitude → renvoie ce montant si c'est le mieux disponible et certain=false.
-- certain=true UNIQUEMENT si tu es sûr que le montant est la prime annuelle TTC complète.
-- prochaineEcheance = la date de PROCHAINE échéance / date d'effet de la période à venir (format YYYY-MM-DD), UNIQUEMENT si elle est explicite et sûre ; sinon null.`;
+// quittance / rappel / relance) via Claude. `annuelComplet` = le montant couvre bien
+// UNE année entière (≠ trimestre, fraction, solde impayé, frais de courtage…).
+async function extractPrimeFromPdf(pdf: Buffer): Promise<{ montant: number | null; type: string; certain: boolean; annuelComplet: boolean; echeance: Date | null }> {
+  if (!process.env.ANTHROPIC_API_KEY) return { montant: null, type: "autre", certain: false, annuelComplet: false, echeance: null };
+  const PROMPT = `Tu lis un document d'assurance multirisque immeuble (MRI) : avis d'échéance, échéancier, quittance, appel de cotisation, rappel ou relance pour impayé.
+Retourne UNIQUEMENT un JSON sans markdown : {"montantAnnuelTTC": number|null, "type": "avis_echeance"|"relance_impaye"|"autre", "annuelComplet": boolean, "certain": boolean, "prochaineEcheance": "YYYY-MM-DD"|null}
+- montantAnnuelTTC = la COTISATION / PRIME ANNUELLE TTC de l'assurance MRI (montant pour UNE année entière, typiquement une période du type 01/01→31/12 ou de date à date sur ~12 mois), en euros (nombre pur, sans symbole ni séparateur de milliers).
+- annuelComplet = true SEULEMENT si ce montant couvre une année ENTIÈRE. false si c'est un trimestre, une fraction, un acompte, un SOLDE partiel impayé, ou des FRAIS (courtage, honoraires, gestion, pénalités) — dans ces cas ne renvoie PAS ce montant comme prime.
+- ⚠️ Ne confonds JAMAIS la prime d'assurance avec des FRAIS DE COURTAGE / honoraires / frais de gestion / une commission : si le document ne concerne QUE des frais, renvoie montantAnnuelTTC=null et annuelComplet=false.
+- Un rappel/relance peut indiquer la prime annuelle complète (ex. « prime de X € pour la période du 01/01 au 31/12 ») : dans ce cas renvoie X avec annuelComplet=true. S'il n'indique qu'un solde partiel dû → annuelComplet=false.
+- certain=true UNIQUEMENT si tu es sûr d'avoir lu le bon montant annuel TTC complet.
+- prochaineEcheance = la date de PROCHAINE échéance / date d'effet de la période à venir (format YYYY-MM-DD), UNIQUEMENT si explicite et sûre ; sinon null.`;
   try {
     const resp = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
@@ -578,29 +581,31 @@ Retourne UNIQUEMENT un JSON sans markdown : {"montantAnnuelTTC": number|null, "t
       ] }],
     });
     const c = resp.content[0];
-    if (c.type !== "text") return { montant: null, type: "autre", certain: false, echeance: null };
+    if (c.type !== "text") return { montant: null, type: "autre", certain: false, annuelComplet: false, echeance: null };
     const raw = c.text.trim().replace(/^```json?\s*/i, "").replace(/\s*```$/i, "");
-    const j = JSON.parse(raw) as { montantAnnuelTTC?: number | null; type?: string; certain?: boolean; prochaineEcheance?: string | null };
+    const j = JSON.parse(raw) as { montantAnnuelTTC?: number | null; type?: string; annuelComplet?: boolean; certain?: boolean; prochaineEcheance?: string | null };
     return {
       montant: typeof j.montantAnnuelTTC === "number" ? j.montantAnnuelTTC : null,
       type: j.type ?? "autre",
       certain: !!j.certain,
+      annuelComplet: !!j.annuelComplet,
       echeance: parseEcheanceCandidate(j.prochaineEcheance),
     };
   } catch {
-    return { montant: null, type: "autre", certain: false, echeance: null };
+    return { montant: null, type: "autre", certain: false, annuelComplet: false, echeance: null };
   }
 }
 
-const PRIME_DOC_SUBJECT = /avis d'?[ée]ch[ée]ance|[ée]ch[ée]ance|cotisation|quittance|appel de (?:prime|cotisation)|impay|relance|prime/i;
-const PRIME_TEXT_RE = /(?:cotisation|prime|montant\s+(?:total|ttc|annuel)|[àa]\s+r[ée]gler|total\s+ttc)[^€\d]{0,40}?([\d][\d\s.,]{2,})\s*€/i;
+const PRIME_DOC_SUBJECT = /avis d'?[ée]ch[ée]ance|[ée]ch[ée]ance|cotisation|quittance|appel de (?:prime|cotisation)|impay|relance|rappel|prime/i;
 // Garde-fou : une prime MRI d'immeuble dépasse rarement ~150 k€ → au-delà de 300 k€
 // c'est presque sûrement un montant de GARANTIE (millions), pas la cotisation.
 const isPlausiblePrime = (n: number) => n > 0 && n < 300000;
 
-// Cherche la prime pour un dossier SANS prime : avis d'échéance / relance impayé
-// dans Front (par building_id + nom/adresse). Priorité au PDF (Claude) ; repli corps
-// de mail (moins sûr → unsure). Ne renvoie jamais de valeur invraisemblable.
+// Cherche la prime pour un dossier SANS prime : avis d'échéance / quittance / rappel
+// dans Front (par building_id + nom/adresse), lus par Claude. On n'écrit QUE des
+// montants confirmés « annuel complet » (jamais un solde partiel, une fraction ou des
+// frais de courtage). Pas de repli regex sur le corps de mail (trop d'erreurs : frais
+// pris pour la prime). Ne renvoie jamais de valeur invraisemblable.
 export async function getPrimeFromFrontDocs(
   buildingId: string,
   hints: (string | null | undefined)[] = [],
@@ -626,44 +631,34 @@ export async function getPrimeFromFrontDocs(
 
   let unsureHit: PrimeDocResult | null = null;
   for (const { c } of ranked) {
-    const isRelance = /impay|relance|mise en demeure/i.test(c.subject ?? "");
+    const isRelance = /impay|relance|rappel|mise en demeure/i.test(c.subject ?? "");
     const messages = await getMessages(c.id);
     for (const m of messages) {
       if (!m.is_inbound) continue;
-      // 1) PDF avis d'échéance / quittance → Claude (le plus fiable)
+      // PDF avis d'échéance / quittance / rappel → Claude. On n'accepte QUE si Claude
+      // confirme un montant ANNUEL COMPLET (sinon : solde/fraction/frais → ignoré).
       const pdfAtt = (m.attachments ?? []).find(
         (a) => a.content_type === "application/pdf" && a.url &&
-          /avis|[ée]ch[ée]ance|quittance|cotisation|prime|appel|impay|relance/i.test(a.filename || ""),
+          /avis|[ée]ch[ée]ance|quittance|cotisation|prime|appel|impay|relance|rappel/i.test(a.filename || ""),
       );
-      if (pdfAtt?.url) {
-        const pdf = await downloadAttachment(pdfAtt.url);
-        if (pdf) {
-          const ex = await extractPrimeFromPdf(pdf);
-          if (ex.echeance && !foundEcheance) foundEcheance = ex.echeance;
-          if (ex.montant && isPlausiblePrime(ex.montant)) {
-            const relance = ex.type === "relance_impaye" || isRelance;
-            const clear = ex.certain && ex.type === "avis_echeance" && !isRelance;
-            const res: PrimeDocResult = {
-              montant: Math.round(ex.montant),
-              confidence: clear ? "clear" : "unsure",
-              source: `${relance ? "relance impayé" : "avis d'échéance"} (PDF)`,
-              conversationId: c.id,
-              echeance: ex.echeance ?? foundEcheance,
-            };
-            if (clear) return res;
-            unsureHit = unsureHit ?? res;
-          }
-        }
-      }
-      // 2) Corps du mail (moins sûr → unsure)
-      if (!unsureHit) {
-        const body = m.text || m.blurb || m.body || "";
-        const mm = `${m.subject ?? ""}\n${body}`.match(PRIME_TEXT_RE);
-        const montant = mm ? parseEuroAmount(mm[1]) : null;
-        if (montant && isPlausiblePrime(montant)) {
-          unsureHit = { montant: Math.round(montant), confidence: "unsure", source: isRelance ? "corps relance impayé" : "corps mail avis", conversationId: c.id, echeance: foundEcheance };
-        }
-      }
+      if (!pdfAtt?.url) continue;
+      const pdf = await downloadAttachment(pdfAtt.url);
+      if (!pdf) continue;
+      const ex = await extractPrimeFromPdf(pdf);
+      if (ex.echeance && !foundEcheance) foundEcheance = ex.echeance;
+      // Garde-fou clé : jamais un montant partiel / des frais → doit être annuel complet.
+      if (!ex.montant || !ex.annuelComplet || !isPlausiblePrime(ex.montant)) continue;
+      const relance = ex.type === "relance_impaye" || isRelance;
+      const clear = ex.certain && ex.type === "avis_echeance" && !relance;
+      const res: PrimeDocResult = {
+        montant: Math.round(ex.montant),
+        confidence: clear ? "clear" : "unsure",
+        source: `${relance ? "rappel / relance" : "avis d'échéance"} (PDF)`,
+        conversationId: c.id,
+        echeance: ex.echeance ?? foundEcheance,
+      };
+      if (clear) return res;
+      unsureHit = unsureHit ?? res;
     }
   }
   if (unsureHit) { unsureHit.echeance = unsureHit.echeance ?? foundEcheance; return unsureHit; }
