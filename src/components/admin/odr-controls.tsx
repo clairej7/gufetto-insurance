@@ -89,6 +89,34 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
     }
   }
 
+  // Résolution des incohérences après vérif : renvoyer en Identification (cancel)
+  // ou garder comme ODR confirmé (keep). Résout les issues listées → coh repasse OK.
+  async function resolveIssues(action: "cancel" | "keep") {
+    const ids = issues.map((i) => i.pipelineId);
+    if (!ids.length) return;
+    const msg = action === "cancel"
+      ? `Renvoyer ${ids.length} dossier(s) en « Identification » (ODR annulé, vérif manuelle) ?`
+      : `Garder ${ids.length} dossier(s) comme ODR confirmés (assureur inchangé) ?`;
+    if (!window.confirm(msg)) return;
+    try {
+      const res = await fetch("/api/odr/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pipelineIds: ids, action }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || `Erreur ${res.status}`);
+      toast.success(action === "cancel"
+        ? `${j.count} dossier(s) renvoyé(s) en Identification.`
+        : `${j.count} dossier(s) gardé(s) comme ODR confirmés.`);
+      setIssues([]);
+      setCoh("ok"); // toutes les incohérences listées sont résolues
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur de résolution");
+    }
+  }
+
   async function verify() {
     setDedup("checking");
     try {
@@ -220,16 +248,30 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
         </div>
       )}
       {coh === "issues" && issues.length > 0 && (
-        <div style={{ marginTop: 10, border: "1px solid #F5D9A8", background: "#FFF7EB", borderRadius: 8, padding: "10px 12px", maxHeight: 220, overflowY: "auto" }}>
+        <div style={{ marginTop: 10, border: "1px solid #F5D9A8", background: "#FFF7EB", borderRadius: 8, padding: "10px 12px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#955804", marginBottom: 6 }}>
-            <AlertTriangle className="h-4 w-4" /> {issues.length} dossier{issues.length > 1 ? "s" : ""} avec incohérence — à corriger puis revérifier :
+            <AlertTriangle className="h-4 w-4" /> {issues.length} dossier{issues.length > 1 ? "s" : ""} en incohérence — vérifie à la main, puis choisis :
           </div>
-          {issues.map((it) => (
-            <div key={it.pipelineId} style={{ fontSize: 12.5, color: "#4E4E58", padding: "2px 0" }}>
-              <a href={`/pipeline/${it.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "underline" }}>{it.nom}</a>
-              <span style={{ marginLeft: 6, color: "#955804" }}>{it.issues.join(" ; ")}</span>
-            </div>
-          ))}
+          <div style={{ maxHeight: 200, overflowY: "auto" }}>
+            {issues.map((it) => (
+              <div key={it.pipelineId} style={{ fontSize: 12.5, color: "#4E4E58", padding: "2px 0" }}>
+                <a href={`/pipeline/${it.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "underline" }}>{it.nom}</a>
+                <span style={{ marginLeft: 6, color: "#955804" }}>{it.issues.join(" ; ")}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            <Button size="sm" variant="outline" className="gap-1.5" disabled={sending} onClick={() => resolveIssues("cancel")}>
+              Renvoyer en Identification
+            </Button>
+            <Button size="sm" className="gap-1.5" disabled={sending} onClick={() => resolveIssues("keep")}
+              style={{ background: "#16A34A", borderColor: "#16A34A", color: "#fff" }}>
+              Garder (ODR confirmé)
+            </Button>
+            <span style={{ fontSize: 11.5, color: "#A2A1AF", alignSelf: "center" }}>
+              « Renvoyer » = sortis du lot (ODR annulé, note ajoutée) · « Garder » = validés, assureur inchangé
+            </span>
+          </div>
         </div>
       )}
 
