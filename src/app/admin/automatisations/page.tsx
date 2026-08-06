@@ -8,6 +8,7 @@ import { AutofillBatchButton } from "@/components/admin/autofill-batch-button";
 import { VerifyPrimesBatchButton } from "@/components/admin/verify-primes-batch-button";
 import { OdrControls } from "@/components/admin/odr-controls";
 import { PrimeBatchButton } from "@/components/admin/prime-batch-button";
+import { getPrimeCleanHistory } from "@/lib/prime";
 import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 
 type Etat = "deploye" | "encours" | "attente";
@@ -58,10 +59,12 @@ export default async function AutomatisationsPage() {
   // Historique des envois ODR (une ligne par envoi).
   const odrHistory = await getOdrSendHistory();
 
-  // Automatisation 8 « clean prime » : dossiers sans prime (copro active).
+  // Automatisation 8 « clean prime » : dossiers sans prime (copro active) + historique.
   const eligibleAuto8 = await prisma.insurancePipeline.count({
     where: { copro: { archivedAt: null, primeActuelle: null } },
   });
+  const primeHistory = await getPrimeCleanHistory();
+  const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
 
   const automations: {
     n: number;
@@ -257,6 +260,42 @@ export default async function AutomatisationsPage() {
                       {eligibleAuto8} dossier{eligibleAuto8 > 1 ? "s" : ""} sans prime renseignée (copro active).
                     </p>
                     <PrimeBatchButton stock={eligibleAuto8} />
+
+                    {/* Historique clean prime */}
+                    {primeHistory.length > 0 && (
+                      <div style={{ marginTop: 16 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6 }}>Historique</div>
+                        <div style={{ overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                            <thead>
+                              <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                                <th style={{ padding: "7px 12px", fontWeight: 600 }}>Date</th>
+                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right" }}>Sans prime / total</th>
+                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right" }}>Taux</th>
+                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right" }}>Primes connues</th>
+                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right" }}>Résolus (run)</th>
+                                <th style={{ padding: "7px 12px", fontWeight: 600, textAlign: "right" }}>Montant ajouté</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {primeHistory.map((h, i) => (
+                                <tr key={i} style={{ borderTop: "1px solid #F1F1F4" }}>
+                                  <td style={{ padding: "6px 12px", color: "#4E4E58", whiteSpace: "nowrap" }}>
+                                    {new Date(h.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                    {i === primeHistory.length - 1 && <span style={{ marginLeft: 6, fontSize: 10.5, padding: "1px 6px", borderRadius: 999, background: "#F1F1F4", color: "#8A8A99" }}>baseline</span>}
+                                  </td>
+                                  <td style={{ padding: "6px 12px", color: "#26262C", textAlign: "right" }}>{h.sansPrime} / {h.total}</td>
+                                  <td style={{ padding: "6px 12px", color: h.taux > 0.3 ? "#955804" : "#13762C", textAlign: "right" }}>{Math.round(h.taux * 100)} %</td>
+                                  <td style={{ padding: "6px 12px", color: "#26262C", textAlign: "right" }}>{eur0(h.primeConnue)}</td>
+                                  <td style={{ padding: "6px 12px", color: "#13762C", fontWeight: 600, textAlign: "right" }}>{h.resolved > 0 ? `+${h.resolved}` : "—"}</td>
+                                  <td style={{ padding: "6px 12px", color: "#13762C", fontWeight: 600, textAlign: "right" }}>{h.montantAdded > 0 ? `+${eur0(h.montantAdded)}` : "—"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

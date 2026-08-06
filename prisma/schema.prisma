@@ -287,3 +287,19 @@ model SyncRun {
   @@index([source, startedAt])
   @@index([startedAt])
 }
+
+// Historique de l'automatisation 8 « clean prime ». 1 ligne = un instantané (baseline
+// initiale, puis un par run de vérification en masse) : état du stock (dossiers sans
+// prime / total, primes connues à date) + ce que le run a apporté (résolus, montant).
+model PrimeCleanRun {
+  id               String   @id @default(cuid())
+  createdAt        DateTime @default(now())
+  totalDossiers    Int      // dossiers actifs (non archivés)
+  sansPrime        Int      // dossiers sans prime à cette date
+  primeConnueTotal Float    // somme des primes connues à cette date
+  resolved         Int      @default(0) // dossiers pour lesquels une prime a été trouvée par CE run
+  montantAdded     Float    @default(0) // montant de primes ajouté par CE run
+  createdBy        String?
+
+  @@index([createdAt])
+}
