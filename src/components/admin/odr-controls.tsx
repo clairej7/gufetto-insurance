@@ -19,7 +19,7 @@ export type OdrPartnerSummary = {
   flaggedReady: number;
 };
 type SentRow = { adresse: string; numeroContrat: string };
-type HistoryRow = { date: string; partner: string; label: string; count: number; montant: number; arr: number; to: string | null };
+type HistoryRow = { date: string; partner: string; label: string; count: number; montant: number; arr: number; to: string | null; source: "app" | "doc" };
 type Dup = { pipelineId: string; nom: string; numeroContrat: string | null; against: string; by: "numero" | "adresse" };
 type Issue = { pipelineId: string; nom: string; numeroContrat: string | null; assureur: string | null; issues: string[] };
 type DedupState = "idle" | "checking" | "ok" | "dups";
@@ -498,7 +498,14 @@ export function OdrControls({ template, partners, sent, history }: { template: s
                   <tbody>
                     {history.map((h, i) => (
                       <tr key={i} style={{ borderTop: "1px solid #F1F1F4" }}>
-                        <td style={{ padding: "7px 14px", color: "#4E4E58" }}>{new Date(h.date).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
+                        <td style={{ padding: "7px 14px", color: "#4E4E58", whiteSpace: "nowrap" }}>
+                          {h.source === "doc"
+                            ? new Date(h.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })
+                            : new Date(h.date).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          {h.source === "doc" && (
+                            <span style={{ marginLeft: 6, fontSize: 10.5, padding: "1px 6px", borderRadius: 999, background: "#F1F1F4", color: "#8A8A99" }}>doc</span>
+                          )}
+                        </td>
                         <td style={{ padding: "7px 14px", color: "#26262C", fontWeight: 600 }}>{h.label}</td>
                         <td style={{ padding: "7px 14px", color: "#4E4E58", textAlign: "right" }}>{h.count}</td>
                         <td style={{ padding: "7px 14px", color: "#4E4E58", textAlign: "right" }}>{eur(h.montant)}</td>

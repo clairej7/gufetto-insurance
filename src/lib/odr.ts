@@ -9,7 +9,7 @@ import path from "path";
 import { PDFDocument, StandardFonts, PDFFont, PDFPage } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
 import { matchPartner, extractInsuranceInfoFromFront } from "@/lib/front-insurance";
-import { ODR_SENT_DOCS, OdrSentRecord } from "@/lib/odr-sent-data";
+import { ODR_SENT_DOCS, OdrSentRecord, ODR_MANUAL_SENDS } from "@/lib/odr-sent-data";
 
 export const ODR_PARTNERS = [
   { key: "AXA", label: "AXA" },
@@ -182,6 +182,7 @@ export type OdrSendHistoryRow = {
   montant: number; // somme des primes des dossiers envoyés
   arr: number; // ARR Matera = montant × 0,25
   to: string | null;
+  source: "app" | "doc"; // envoi via l'app, ou import indicatif d'un doc historique
 };
 
 // Un envoi = un lot de dossiers passés en « ODR envoyées » via /api/odr/send
@@ -207,17 +208,30 @@ export async function getOdrSendHistory(): Promise<OdrSendHistoryRow[]> {
     groups.set(conv, g);
   }
 
-  return [...groups.values()]
-    .sort((a, b) => b.date.getTime() - a.date.getTime())
-    .map((g) => ({
-      date: g.date.toISOString(),
-      partner: g.partner,
-      label: isOdrPartnerKey(g.partner) ? partnerLabel(g.partner) : g.partner,
-      count: g.count,
-      montant: g.montant,
-      arr: g.montant * 0.25,
-      to: g.to,
-    }));
+  const appRows: OdrSendHistoryRow[] = [...groups.values()].map((g) => ({
+    date: g.date.toISOString(),
+    partner: g.partner,
+    label: isOdrPartnerKey(g.partner) ? partnerLabel(g.partner) : g.partner,
+    count: g.count,
+    montant: g.montant,
+    arr: g.montant * 0.25,
+    to: g.to,
+    source: "app" as const,
+  }));
+
+  // Envois historiques (docs PDF, avant l'app) — indicatifs.
+  const docRows: OdrSendHistoryRow[] = ODR_MANUAL_SENDS.map((m) => ({
+    date: new Date(m.date).toISOString(),
+    partner: m.partner,
+    label: partnerLabel(m.partner),
+    count: m.count,
+    montant: m.montant,
+    arr: m.montant * 0.25,
+    to: null,
+    source: "doc" as const,
+  }));
+
+  return [...appRows, ...docRows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
 
 export type OdrDuplicate = {
