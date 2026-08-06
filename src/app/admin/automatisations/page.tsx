@@ -186,14 +186,19 @@ export default async function AutomatisationsPage() {
                   </span>
                 </div>
 
-                {/* Description */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 900 }}>
-                  {a.description.map((p, i) => (
-                    <p key={i} style={{ fontSize: 13, lineHeight: "20px", color: "#4E4E58", margin: 0 }}>
-                      {p}
-                    </p>
-                  ))}
-                </div>
+                {/* Description — repliée par défaut pour ne pas polluer la carte */}
+                <details>
+                  <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content" }}>
+                    Description
+                  </summary>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 900, marginTop: 10 }}>
+                    {a.description.map((p, i) => (
+                      <p key={i} style={{ fontSize: 13, lineHeight: "20px", color: "#4E4E58", margin: 0 }}>
+                        {p}
+                      </p>
+                    ))}
+                  </div>
+                </details>
 
                 {/* Contrôles admin — pour l'instant uniquement l'auto 1 (le batch). */}
                 {a.n === 1 && (
