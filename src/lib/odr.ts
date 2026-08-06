@@ -209,7 +209,7 @@ Fait à Paris le Date : {{date}}
 Lu et approuvé`;
 
 export function frenchDate(d: Date): string {
-  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 // Lettre ODR remplie en texte (corps du mail de repli mailto + base du PDF).
@@ -298,14 +298,19 @@ export async function renderOdrPdf(dossiers: OdrDossier[], dateStr: string): Pro
 
   const draw = (
     text: string,
-    opts: { b?: boolean; size?: number; lh?: number } = {},
+    opts: { b?: boolean; size?: number; lh?: number; align?: "left" | "center" | "right" } = {},
   ) => {
     const size = opts.size ?? 11;
     const lh = opts.lh ?? 15;
     const f = opts.b ? bold : font;
+    const align = opts.align ?? "left";
     for (const ln of wrap(sanitize(text), f, size)) {
       ensure(lh);
-      if (ln) page.drawText(ln, { x: margin, y: y - size, size, font: f });
+      if (ln) {
+        const w = f.widthOfTextAtSize(ln, size);
+        const x = align === "center" ? (W - w) / 2 : align === "right" ? W - margin - w : margin;
+        page.drawText(ln, { x, y: y - size, size, font: f });
+      }
       y -= lh;
     }
   };
@@ -317,7 +322,7 @@ export async function renderOdrPdf(dossiers: OdrDossier[], dateStr: string): Pro
   draw("Matera", { b: true, size: 12 });
   draw("8 cité Paradis, 75010 Paris", { size: 10 });
   gap(16);
-  draw("Ordre de Remplacement", { b: true, size: 16 });
+  draw("Ordre de Remplacement", { b: true, size: 16, align: "center" });
   gap(14);
   draw(
     "Je soussigné Monsieur Raphaël Di Meglio, en qualité de représentant, vous informe de ma volonté de résilier les contrats suivants à la prochaine échéance :",
@@ -337,12 +342,13 @@ export async function renderOdrPdf(dossiers: OdrDossier[], dateStr: string): Pro
     "D'établir les nouveaux contrats applicables à leurs prochaines échéances selon les instructions qu'il vous soumettra.",
   );
   gap(20);
-  draw(`Fait à Paris le Date : ${dateStr}`);
+  // Bloc de clôture aligné à DROITE, sur 2 lignes (comme les templates envoyés).
+  draw(`Fait à Paris le Date : ${dateStr}`, { align: "right" });
   gap(6);
-  draw("Lu et approuvé");
+  draw("Lu et approuvé", { align: "right" });
 
-  // Bloc signature + cachet Matera (fidèle au template docx). Best-effort : si les
-  // fichiers manquent, on n'ajoute rien plutôt que de casser la génération.
+  // Signature en bas à GAUCHE + tampon Matera en bas à DROITE (fidèle au template).
+  // Best-effort : si les fichiers manquent, on n'ajoute rien plutôt que de casser.
   try {
     const sigBuf = fs.readFileSync(path.join(process.cwd(), "public/odr/odr_signature.png"));
     const cachetBuf = fs.readFileSync(path.join(process.cwd(), "public/odr/odr_cachet.png"));
@@ -357,7 +363,7 @@ export async function renderOdrPdf(dossiers: OdrDossier[], dateStr: string): Pro
     ensure(blockH);
     const top = y;
     page.drawImage(sig, { x: margin, y: top - sigH, width: sigW, height: sigH });
-    page.drawImage(cachet, { x: margin + sigW + 24, y: top - cachetH, width: cachetW, height: cachetH });
+    page.drawImage(cachet, { x: W - margin - cachetW, y: top - cachetH, width: cachetW, height: cachetH });
     y = top - blockH;
   } catch {
     // pas d'images embarquées → lettre sans cachet
