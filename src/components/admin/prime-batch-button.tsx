@@ -47,6 +47,16 @@ export function PrimeBatchButton({ stock }: { stock: number }) {
         setAgg({ ...total });
         if (j.done || j.processed === 0) break;
       }
+      // Instantané d'historique en fin de run (best-effort).
+      if (total.processed > 0) {
+        try {
+          await fetch("/api/prime/snapshot", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resolved: total.resolved, montant: total.montant }),
+          });
+        } catch { /* non bloquant */ }
+      }
       toast.success(`Vérif terminée : ${total.resolved} prime(s) récupérée(s) · ${eur(total.montant)} sur ${total.processed} dossier(s).`);
       router.refresh();
     } catch (e) {
@@ -77,11 +87,20 @@ export function PrimeBatchButton({ stock }: { stock: number }) {
       </div>
 
       {(running || done) && (
-        <p className="text-xs" style={{ color: "#656576" }}>
-          <strong style={{ color: "#13762C" }}>{agg.resolved}</strong> prime{agg.resolved > 1 ? "s" : ""} récupérée{agg.resolved > 1 ? "s" : ""} ·{" "}
-          <strong style={{ color: "#13762C" }}>{eur(agg.montant)}</strong> récupérés · {agg.processed} dossier{agg.processed > 1 ? "s" : ""} vérifié{agg.processed > 1 ? "s" : ""}
-          {running ? " · en cours…" : ""}
-        </p>
+        <div className="flex flex-col gap-1" style={{ maxWidth: 460 }}>
+          <div className="flex justify-between text-xs" style={{ color: "#656576" }}>
+            <span>Vérification des dossiers sans prime…</span>
+            <span>{agg.processed}{stock ? ` / ${stock}` : ""}</span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "#EEE" }}>
+            <div className="h-full rounded-full transition-all" style={{ width: `${stock > 0 ? Math.min(100, Math.round((agg.processed / stock) * 100)) : 0}%`, background: "#4E49FC" }} />
+          </div>
+          <p className="text-xs" style={{ color: "#656576" }}>
+            <strong style={{ color: "#13762C" }}>{agg.resolved}</strong> prime{agg.resolved > 1 ? "s" : ""} récupérée{agg.resolved > 1 ? "s" : ""} ·{" "}
+            <strong style={{ color: "#13762C" }}>{eur(agg.montant)}</strong> récupérés
+            {running ? " · en cours…" : " · terminé"}
+          </p>
+        </div>
       )}
     </div>
   );
