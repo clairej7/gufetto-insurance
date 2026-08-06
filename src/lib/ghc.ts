@@ -12,6 +12,7 @@
 import { prisma } from "@/lib/prisma";
 import { matchPartner } from "@/lib/front-insurance";
 import { isEcheancePerimee } from "@/lib/perime";
+import { isCloturePourClient } from "@/lib/pipeline";
 import type { PipelineStatut } from "@/generated/prisma/client";
 
 const PRIME_FLOOR = 300;       // < 300 € = frais/partiel → ignoré
@@ -23,6 +24,9 @@ const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
 const ODR_STATUTS = ["odr_en_cours", "odr_envoye", "odr_accepte"];
 // Statuts où l'assureur actuel NE doit PAS être écrasé par GHC (ODR engagé).
 const ODR_ASSUREUR_PROTECT = ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"];
+// Statuts « gagné / perdu / clos » : GHC ne touche NI le statut NI l'assureur (sinon
+// on sort un dossier gagné de sa catégorie, ou un Wakam se fait re-catégoriser).
+const NON_ACTIF_STATUTS = ["odr_accepte", "odr_en_vigueur", "contrat_signe", "resiliation_envoyee", "sepa_complete", "termine", "abandonne", "refuse", "non_assurable"];
 // Statuts « voie RS/devis » (si GHC dit partenaire → aurait dû partir en ODR).
 const RS_STATUTS = ["rs_en_cours", "rs_recu", "devis_demandes", "devis_recus", "envoye_cs", "validation_cs"];
 
@@ -39,7 +43,7 @@ export type GhcChunkResult = GhcApplyResult & { runId: string; total: number; pr
 const GHC_DEFAULT_FILE = "[Matera x GHC] Cleaning contrats assurance.xlsx";
 
 type GhcCopro = {
-  id: string; nom: string; buildingId: string;
+  id: string; nom: string; buildingId: string; clientMriStatut: string | null;
   assureurActuel: string | null; courtierActuel: string | null; numeroContrat: string | null;
   primeActuelle: number | null; dateEcheance: Date | null; donneePerimee: boolean; ghcFields: string | null;
   pipelines: { id: string; statut: PipelineStatut; odrPartenaire: string | null }[];
@@ -48,7 +52,7 @@ type GhcRow = { assureur: string | null; courtier: string | null; numeroContrat:
 type GhcReviewInput = { buildingId: string; coproNom: string; kind: string; message: string };
 
 const GHC_COPRO_SELECT = {
-  id: true, nom: true, buildingId: true, assureurActuel: true, courtierActuel: true,
+  id: true, nom: true, buildingId: true, clientMriStatut: true, assureurActuel: true, courtierActuel: true,
   numeroContrat: true, primeActuelle: true, dateEcheance: true, donneePerimee: true, ghcFields: true,
   pipelines: { select: { id: true, statut: true, odrPartenaire: true } },
 } as const;
@@ -59,14 +63,15 @@ async function applyGhcToCopro(c: GhcCopro, g: GhcRow, now: Date, actorEmail: st
   const data: Record<string, unknown> = {};
   const fields: string[] = [];
 
-  // Dossier déjà engagé en ODR : on NE TOUCHE PAS à l'assureur actuel (c'est celui
-  // qu'on remplace ; si l'ODR est refusé, le gestionnaire le corrigera lui-même). Un
-  // éventuel désaccord avec GHC reste signalé dans le rapport (cas particulier ODR).
-  const isOdrEngage = c.pipelines.some((p) => ODR_ASSUREUR_PROTECT.includes(p.statut));
+  // Dossier CLOS (client MRI) ou gagné/perdu/ODR engagé : on ne touche NI le statut
+  // (pas de routage) NI l'assureur actuel — sinon on sort le dossier de sa catégorie
+  // (clos → actif) ou on re-catégorise un Wakam. Les désaccords restent au rapport.
+  const estClos = isCloturePourClient(c.clientMriStatut, c.assureurActuel);
+  const protegeAssureur = estClos || c.pipelines.some((p) => ODR_ASSUREUR_PROTECT.includes(p.statut) || NON_ACTIF_STATUTS.includes(p.statut));
 
   // Assureur / courtier / n° : GHC-backed (badge) dès qu'une valeur existe ; on
   // n'ÉCRIT que si elle diffère réellement (casse/espaces ignorés → pas de churn).
-  if (g.assureur && !isOdrEngage) {
+  if (g.assureur && !protegeAssureur) {
     fields.push("assureur");
     if (norm(g.assureur) !== norm(c.assureurActuel)) { data.assureurActuel = g.assureur; r.assureursMaj++; }
   }
@@ -109,10 +114,11 @@ async function applyGhcToCopro(c: GhcCopro, g: GhcRow, now: Date, actorEmail: st
     r.dossiersClean++;
   }
 
-  // Aiguillage + cas particuliers (par pipeline)
+  // Aiguillage + cas particuliers (par pipeline). Un dossier CLOS (client MRI) resté
+  // en « identifie » ne doit JAMAIS être routé (cf. estClos ci-dessus).
   const partner = g.assureur ? matchPartner(g.assureur) : null;
   for (const p of c.pipelines) {
-    if (p.statut === "identifie" && g.assureur && !g.aVerifier) {
+    if (p.statut === "identifie" && !estClos && g.assureur && !g.aVerifier) {
       let target: PipelineStatut | null = null;
       if (partner) target = "odr_en_cours";
       else if (g.numeroContrat || c.numeroContrat) target = "rs_en_cours";
