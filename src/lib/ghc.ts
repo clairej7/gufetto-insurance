@@ -143,7 +143,9 @@ async function applyGhcToCopro(c: GhcCopro, g: GhcRow, now: Date, actorEmail: st
     } else if (partner && ODR_STATUTS.includes(p.statut) && p.odrPartenaire && matchPartner(p.odrPartenaire) !== partner) {
       reviews.push({ buildingId: c.buildingId, coproNom: c.nom, kind: "odr_conflit", message: `ODR en cours avec « ${p.odrPartenaire} » mais GHC dit assureur « ${g.assureur} »` });
       r.casParticuliers++;
-    } else if (partner && RS_STATUTS.includes(p.statut)) {
+    } else if (partner && !estClos && RS_STATUTS.includes(p.statut)) {
+      // !estClos : un dossier client-MRI en voie RS est en réalité GAGNÉ (clos) → ne
+      // pas le flagger « devrait être ODR » (ce n'est pas une opportunité, c'est gagné).
       reviews.push({ buildingId: c.buildingId, coproNom: c.nom, kind: "rs_vers_odr", message: `En « ${p.statut} » mais GHC dit partenaire « ${g.assureur} » → ODR possible` });
       r.casParticuliers++;
     }
