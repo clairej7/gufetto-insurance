@@ -8,7 +8,7 @@ import { AutofillBatchButton } from "@/components/admin/autofill-batch-button";
 import { VerifyPrimesBatchButton } from "@/components/admin/verify-primes-batch-button";
 import { OdrControls } from "@/components/admin/odr-controls";
 import { PrimeBatchButton } from "@/components/admin/prime-batch-button";
-import { getPrimeCleanHistory } from "@/lib/prime";
+import { getPrimeCleanHistory, getPrimeByStage } from "@/lib/prime";
 import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 
 type Etat = "deploye" | "encours" | "attente";
@@ -68,7 +68,11 @@ export default async function AutomatisationsPage() {
     where: { copro: { archivedAt: null, primeActuelle: null, primeVerifTenteLe: null } },
   });
   const primeHistory = await getPrimeCleanHistory();
+  const primeStages = await getPrimeByStage();
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
+  const fmtEurC = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} M€` : n >= 1e3 ? `${Math.round(n / 1e3)} k€` : `${Math.round(n)} €`);
+  // Vert (peu d'inconnu) → rouge (bcp d'inconnu) selon le taux de primes connues.
+  const stageColor = (tauxInconnu: number) => `hsl(${Math.round((1 - tauxInconnu) * 125)}, 62%, 42%)`;
 
   const automations: {
     n: number;
@@ -265,6 +269,24 @@ export default async function AutomatisationsPage() {
                       <strong>{eligibleAuto8Untried}</strong> jamais tenté{eligibleAuto8Untried > 1 ? "s" : ""} (les runs ne traitent que ceux-là).
                     </p>
                     <PrimeBatchButton stock={eligibleAuto8Untried} />
+
+                    {/* Complétude des primes par étape (miroir Tracking Revenus) */}
+                    <div style={{ marginTop: 16 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6 }}>Complétude des primes par étape</div>
+                      <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                        {primeStages.map((s) => {
+                          const c = stageColor(s.tauxInconnu);
+                          return (
+                            <div key={s.label} style={{ flex: "0 0 128px", border: "1px solid #E8E8EC", borderTop: `3px solid ${c}`, borderRadius: 8, padding: "8px 10px", background: "#fff" }}>
+                              <div style={{ fontSize: 11, color: "#656576", lineHeight: "14px", minHeight: 28 }}>{s.label}</div>
+                              <div style={{ fontSize: 15, fontWeight: 700, color: "#26262C", marginTop: 4 }}>{fmtEurC(s.montant)}</div>
+                              <div style={{ fontSize: 11, fontWeight: 600, color: c, marginTop: 2 }}>{Math.round(s.tauxInconnu * 100)}% inconnu</div>
+                              <div style={{ fontSize: 10.5, color: "#A2A1AF", marginTop: 1 }}>{s.sansPrime}/{s.total} sans prime</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
 
                     {/* Historique clean prime */}
                     {primeHistory.length > 0 && (
