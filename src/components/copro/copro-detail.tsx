@@ -48,6 +48,7 @@ import { ResiliationAction } from "@/components/copro/steps/resiliation-action";
 import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl, saveSignedPdfUrl, toggleTermineTask, completeTask, reopenTask, setOdrPartenaire, updateEcheance } from "@/lib/actions";
 import { DueDatePicker } from "@/components/ui/due-date-picker";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 type Pipeline = {
@@ -65,6 +66,7 @@ type Pipeline = {
     numeroContrat: string | null;
     courtierActuel: string | null;
     primeActuelle: number | null;
+    primeAVerifier: boolean;
     dateEcheance: Date | null;
     dateDebutContrat: Date | null;
     contactCsEmail: string | null;
@@ -455,8 +457,39 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
   const [signatureFile, setSignatureFile] = useState<File | null | undefined>(undefined);
   const [isSigning, setIsSigning] = useState(false);
   const [signedPdfPath, setSignedPdfPath] = useState<string | null>(null);
+  const router = useRouter();
   const [editingContrat, setEditingContrat] = useState(false);
+  const [verifPrime, setVerifPrime] = useState(false);
   const [editingEcheance, setEditingEcheance] = useState(false);
+
+  // Automatisation 8 « clean prime » : cherche la prime dans Front (avis d'échéance
+  // / relance impayé) pour ce dossier sans prime.
+  async function handleVerifPrime() {
+    setVerifPrime(true);
+    try {
+      const res = await fetch("/api/prime/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pipelineId: pipeline.id }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || `Erreur ${res.status}`);
+      if (j.found) {
+        toast.success(
+          j.confidence === "unsure"
+            ? `Prime récupérée : ${j.montant} € (${j.source}) — à vérifier`
+            : `Prime récupérée : ${j.montant} € (${j.source})`,
+        );
+        router.refresh();
+      } else {
+        toast.info("Aucune prime trouvée dans Front (avis d'échéance / relance impayé).");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur lors de la vérification");
+    } finally {
+      setVerifPrime(false);
+    }
+  }
   const [echeanceInput, setEcheanceInput] = useState(
     pipeline.copro.dateEcheance ? new Date(pipeline.copro.dateEcheance).toISOString().slice(0, 10) : ""
   );
@@ -777,7 +810,29 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                 <InfoRow label="Assureur" value={pipeline.copro.assureurActuel} />
                 <InfoRow label="N° de contrat" value={pipeline.copro.numeroContrat} />
                 <InfoRow label="Courtier" value={pipeline.copro.courtierActuel} />
-                <InfoRow label="Prime annuelle" value={pipeline.copro.primeActuelle ? `${pipeline.copro.primeActuelle.toLocaleString("fr-FR")} €` : null} />
+                {pipeline.copro.primeActuelle ? (
+                  <div>
+                    <InfoRow label="Prime annuelle" value={`${pipeline.copro.primeActuelle.toLocaleString("fr-FR")} €`} />
+                    {pipeline.copro.primeAVerifier && (
+                      <p className="text-xs mt-0.5" style={{ color: "#955804" }}>Montant récupéré automatiquement, vérifier</p>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <InfoRow label="Prime annuelle" value={null} />
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs font-semibold" style={{ color: "#CA1E12" }}>Aucune prime renseignée</span>
+                      <button
+                        onClick={handleVerifPrime}
+                        disabled={verifPrime}
+                        className="text-xs font-medium rounded-md px-2 py-0.5 transition-colors disabled:opacity-60"
+                        style={{ color: "#4E49FC", border: "1px solid #D9D8FF", background: "#F5F5FF" }}
+                      >
+                        {verifPrime ? "Recherche…" : "Vérifier la prime"}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <InfoRow label="Mail courtier/assureur" value={pipeline.copro.contactCourtierEmail} />
                 <InfoRow label="N° téléphone courtier/assureur" value={pipeline.copro.contactCourtierTel} />
               </dl>

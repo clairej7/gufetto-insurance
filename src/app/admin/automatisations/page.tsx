@@ -7,6 +7,7 @@ import { Navbar } from "@/components/navbar";
 import { AutofillBatchButton } from "@/components/admin/autofill-batch-button";
 import { VerifyPrimesBatchButton } from "@/components/admin/verify-primes-batch-button";
 import { OdrControls } from "@/components/admin/odr-controls";
+import { PrimeBatchButton } from "@/components/admin/prime-batch-button";
 import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 
 type Etat = "deploye" | "encours" | "attente";
@@ -56,6 +57,11 @@ export default async function AutomatisationsPage() {
   for (const b of odrBuckets) odrSent[b.key] = await getOdrSent(b.key);
   // Historique des envois ODR (une ligne par envoi).
   const odrHistory = await getOdrSendHistory();
+
+  // Automatisation 8 « clean prime » : dossiers sans prime (copro active).
+  const eligibleAuto8 = await prisma.insurancePipeline.count({
+    where: { copro: { archivedAt: null, primeActuelle: null } },
+  });
 
   const automations: {
     n: number;
@@ -135,9 +141,11 @@ export default async function AutomatisationsPage() {
     {
       n: 8,
       nom: "Agent de nettoyage de la data & remontée des cas étranges",
-      etat: "attente",
+      etat: "encours",
       description: [
-        "À venir — contenu à préciser.",
+        "Premier volet en ligne : « clean prime ». Beaucoup de dossiers n'ont pas de prime d'assurance renseignée — ce qui fausse les montants (historique ODR, dashboards Tracking). Cette brique récupère les primes manquantes.",
+        "Sur chaque fiche copro sans prime : une mention rouge « aucune prime renseignée » + un bouton « Vérifier la prime » qui cherche dans Front (surtout un avis d'échéance ou une relance pour impayé). Trouvé clairement → prime écrite ; trouvé mais incertain → prime écrite + mention « montant récupéré automatiquement, vérifier » ; rien → inchangé. Aucun changement d'étape.",
+        "Contrôles admin ci-dessous : identifier tous les dossiers sans prime, et lancer la vérification en masse (compteur en direct des primes récupérées + montant). Les dashboards du Tracking se mettent à jour automatiquement à mesure que les primes sont renseignées.",
       ],
     },
   ];
@@ -236,6 +244,19 @@ export default async function AutomatisationsPage() {
                       {eligibleAuto6} comparaison{eligibleAuto6 > 1 ? "s" : ""} de devis en cours — vérifie la dernière prime payée de chacune (via Front) et repère celles à recaler ou les cas étranges. Lecture seule.
                     </p>
                     <VerifyPrimesBatchButton stock={eligibleAuto6} />
+                  </div>
+                )}
+
+                {/* Contrôle admin — automatisation 8 : clean prime. */}
+                {a.n === 8 && (
+                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
+                      Contrôles admin
+                    </div>
+                    <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
+                      {eligibleAuto8} dossier{eligibleAuto8 > 1 ? "s" : ""} sans prime renseignée (copro active).
+                    </p>
+                    <PrimeBatchButton stock={eligibleAuto8} />
                   </div>
                 )}
               </div>

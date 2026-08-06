@@ -525,3 +525,116 @@ export async function getDernierePrimePayeeFromFront(
   ]);
   return (await scanConvsForPrime(results.flat(), pipelineId, true)) ?? empty("prime introuvable dans les demandes de devis Front");
 }
+
+// ---------------------------------------------------------------------------
+// Automatisation 8 « clean prime » — récupérer la prime depuis Front
+// (avis d'échéance / relance impayé) pour les dossiers SANS prime.
+// ---------------------------------------------------------------------------
+
+export type PrimeDocResult = {
+  montant: number | null;
+  confidence: "clear" | "unsure" | null;
+  source: string;
+  conversationId: string | null;
+};
+
+// Cotisation annuelle TTC lue dans un PDF (avis d'échéance / quittance / relance) via Claude.
+async function extractPrimeFromPdf(pdf: Buffer): Promise<{ montant: number | null; type: string; certain: boolean }> {
+  if (!process.env.ANTHROPIC_API_KEY) return { montant: null, type: "autre", certain: false };
+  const PROMPT = `Tu lis un document d'assurance multirisque immeuble : avis d'échéance, échéancier, quittance, appel de cotisation, ou relance pour impayé.
+Retourne UNIQUEMENT un JSON sans markdown : {"montantAnnuelTTC": number|null, "type": "avis_echeance"|"relance_impaye"|"autre", "certain": boolean}
+- montantAnnuelTTC = la COTISATION / PRIME ANNUELLE TTC (montant pour UNE année entière), en euros (nombre pur, sans symbole ni séparateur de milliers).
+- Si le document ne donne qu'un montant partiel (un trimestre, une fraction, un solde impayé) sans permettre de déduire l'annuel avec certitude → renvoie ce montant si c'est le mieux disponible et certain=false.
+- certain=true UNIQUEMENT si tu es sûr que le montant est la prime annuelle TTC complète.`;
+  try {
+    const resp = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 200,
+      messages: [{ role: "user", content: [
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdf.toString("base64") } },
+        { type: "text", text: PROMPT },
+      ] }],
+    });
+    const c = resp.content[0];
+    if (c.type !== "text") return { montant: null, type: "autre", certain: false };
+    const raw = c.text.trim().replace(/^```json?\s*/i, "").replace(/\s*```$/i, "");
+    const j = JSON.parse(raw) as { montantAnnuelTTC?: number | null; type?: string; certain?: boolean };
+    return { montant: typeof j.montantAnnuelTTC === "number" ? j.montantAnnuelTTC : null, type: j.type ?? "autre", certain: !!j.certain };
+  } catch {
+    return { montant: null, type: "autre", certain: false };
+  }
+}
+
+const PRIME_DOC_SUBJECT = /avis d'?[ée]ch[ée]ance|[ée]ch[ée]ance|cotisation|quittance|appel de (?:prime|cotisation)|impay|relance|prime/i;
+const PRIME_TEXT_RE = /(?:cotisation|prime|montant\s+(?:total|ttc|annuel)|[àa]\s+r[ée]gler|total\s+ttc)[^€\d]{0,40}?([\d][\d\s.,]{2,})\s*€/i;
+// Garde-fou : une prime MRI d'immeuble dépasse rarement ~150 k€ → au-delà de 300 k€
+// c'est presque sûrement un montant de GARANTIE (millions), pas la cotisation.
+const isPlausiblePrime = (n: number) => n > 0 && n < 300000;
+
+// Cherche la prime pour un dossier SANS prime : avis d'échéance / relance impayé
+// dans Front (par building_id + nom/adresse). Priorité au PDF (Claude) ; repli corps
+// de mail (moins sûr → unsure). Ne renvoie jamais de valeur invraisemblable.
+export async function getPrimeFromFrontDocs(
+  buildingId: string,
+  hints: (string | null | undefined)[] = [],
+): Promise<PrimeDocResult> {
+  const none = (source: string): PrimeDocResult => ({ montant: null, confidence: null, source, conversationId: null });
+  const terms = [...new Set(hints.map((t) => t?.trim()).filter((t): t is string => !!t))];
+  const convLists = await Promise.all([
+    buildingId ? searchByBuildingId(buildingId) : Promise.resolve([] as FrontConversation[]),
+    ...terms.map((t) => searchByText(t)),
+  ]);
+  const seen = new Set<string>();
+  const convs = convLists.flat().filter((c) => c.id && !seen.has(c.id) && seen.add(c.id));
+  if (convs.length === 0) return none("aucune conversation Front");
+
+  const ranked = convs
+    .filter((c) => !/devis|r[ée]siliation/i.test(c.subject ?? ""))
+    .map((c) => ({ c, score: (PRIME_DOC_SUBJECT.test(c.subject ?? "") ? 2 : 0) + (inboxLooksInsurer(c) ? 1 : 0) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+  if (ranked.length === 0) return none("aucun fil avis d'échéance / cotisation");
+
+  let unsureHit: PrimeDocResult | null = null;
+  for (const { c } of ranked) {
+    const isRelance = /impay|relance|mise en demeure/i.test(c.subject ?? "");
+    const messages = await getMessages(c.id);
+    for (const m of messages) {
+      if (!m.is_inbound) continue;
+      // 1) PDF avis d'échéance / quittance → Claude (le plus fiable)
+      const pdfAtt = (m.attachments ?? []).find(
+        (a) => a.content_type === "application/pdf" && a.url &&
+          /avis|[ée]ch[ée]ance|quittance|cotisation|prime|appel|impay|relance/i.test(a.filename || ""),
+      );
+      if (pdfAtt?.url) {
+        const pdf = await downloadAttachment(pdfAtt.url);
+        if (pdf) {
+          const ex = await extractPrimeFromPdf(pdf);
+          if (ex.montant && isPlausiblePrime(ex.montant)) {
+            const relance = ex.type === "relance_impaye" || isRelance;
+            const clear = ex.certain && ex.type === "avis_echeance" && !isRelance;
+            const res: PrimeDocResult = {
+              montant: Math.round(ex.montant),
+              confidence: clear ? "clear" : "unsure",
+              source: `${relance ? "relance impayé" : "avis d'échéance"} (PDF)`,
+              conversationId: c.id,
+            };
+            if (clear) return res;
+            unsureHit = unsureHit ?? res;
+          }
+        }
+      }
+      // 2) Corps du mail (moins sûr → unsure)
+      if (!unsureHit) {
+        const body = m.text || m.blurb || m.body || "";
+        const mm = `${m.subject ?? ""}\n${body}`.match(PRIME_TEXT_RE);
+        const montant = mm ? parseEuroAmount(mm[1]) : null;
+        if (montant && isPlausiblePrime(montant)) {
+          unsureHit = { montant: Math.round(montant), confidence: "unsure", source: isRelance ? "corps relance impayé" : "corps mail avis", conversationId: c.id };
+        }
+      }
+    }
+  }
+  return unsureHit ?? none("prime introuvable dans les avis d'échéance / relances Front");
+}
