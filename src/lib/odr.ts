@@ -117,21 +117,27 @@ function numMatch(a: string | null, b: string | null): boolean {
   return pa.some((p) => pb.has(p));
 }
 
-// adresse : n° de voie (1–4 chiffres, hors code postal) + mots significatifs.
-function addrTokens(s: string): { nums: Set<string>; words: Set<string> } {
-  const d = deburr(s).replace(/[^a-z0-9]+/g, " ");
-  const nums = new Set((d.match(/\b\d{1,4}\b/g) ?? []));
+// Adresse : on ISOLE la partie voie (tout ce qui précède le code postal) pour ne
+// PAS matcher sur la ville (ex. « Paris » présent partout → faux positifs). Clé =
+// 1er n° de voie + mots de rue distinctifs. Match = même n° ET un mot de rue commun.
+function streetPart(s: string): string {
+  const d = deburr(s);
+  const cp = d.match(/\b\d{5}\b/); // code postal → coupe la ville qui suit
+  return (cp ? d.slice(0, cp.index) : d).replace(/[^a-z0-9]+/g, " ");
+}
+function addrKey(s: string): { num: string | null; words: Set<string> } {
+  const st = streetPart(s);
+  const num = (st.match(/\b\d{1,4}\b/) ?? [null])[0]; // 1er n° = n° de voie
   const words = new Set(
-    d.split(" ").filter((w) => w.length >= 4 && !STREET_GENERIC.has(w) && !/^\d+$/.test(w)),
+    st.split(" ").filter((w) => w.length >= 4 && !STREET_GENERIC.has(w) && !/^\d+$/.test(w)),
   );
-  return { nums, words };
+  return { num, words };
 }
 function addrMatch(a: string, b: string): boolean {
-  const ta = addrTokens(a);
-  const tb = addrTokens(b);
-  const numHit = [...ta.nums].some((n) => tb.nums.has(n));
-  const wordHit = [...ta.words].some((w) => tb.words.has(w));
-  return numHit && wordHit;
+  const x = addrKey(a);
+  const y = addrKey(b);
+  if (!x.num || !y.num || x.num !== y.num) return false; // même n° de voie exigé
+  return [...x.words].some((w) => y.words.has(w)); // + au moins un mot de rue commun
 }
 
 // Ensemble « déjà envoyé » d'un assureur = docs fournis + dossiers déjà passés en
