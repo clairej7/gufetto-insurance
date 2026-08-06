@@ -117,8 +117,11 @@ async function applyGhcToCopro(c: GhcCopro, g: GhcRow, now: Date, actorEmail: st
       if (partner) target = "odr_en_cours";
       else if (g.numeroContrat || c.numeroContrat) target = "rs_en_cours";
       if (target) {
+        // Pose le marqueur odrPartenaire (AXA/GENERALI/SADA/MILA) → le dossier compte
+        // dans la carte « par assureur » du Suivi des ODR (qui s'appuie sur ce marqueur).
+        const markerData = target === "odr_en_cours" && partner ? { odrPartenaire: partner.toUpperCase() } : {};
         await prisma.$transaction([
-          prisma.insurancePipeline.update({ where: { id: p.id }, data: { statut: target } }),
+          prisma.insurancePipeline.update({ where: { id: p.id }, data: { statut: target, ...markerData } }),
           prisma.pipelineEvent.create({
             data: {
               pipelineId: p.id, type: "action_manuelle", ancienStatut: "identifie", nouveauStatut: target,
