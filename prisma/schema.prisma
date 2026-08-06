@@ -111,6 +111,13 @@ model Copro {
   // Horodatage de résolution (donnée plus récente retrouvée) → compteur « résolus ».
   perimeeResolvedAt   DateTime?
 
+  // Automatisation 8 volet 3 « correction GetHumanCall » : provenance par champ.
+  // ghcFields = liste JSON des champs issus de l'import GHC (["assureur","prime",
+  // "courtier","numero","echeance"]) → check vert « GHC » sur la fiche. Vidé si un
+  // gestionnaire ré-édite le bloc contrat (on ne revendique plus la source GHC).
+  ghcImportedAt DateTime?
+  ghcFields     String?
+
   // Contact Conseil Syndical
   contactCsEmail String?
   contactCsNom   String?
@@ -330,4 +337,56 @@ model PerimeCleanRun {
   createdBy     String?
 
   @@index([createdAt])
+}
+
+// Volet 3 « correction GetHumanCall » — données SOURCE issues de l'excel GHC
+// (agents Get Human Call qui ont appelé les assureurs). Clé = building_id normalisé.
+// Rechargée à chaque nouvelle version de l'excel.
+model GhcContract {
+  buildingId    String  @id
+  buildingName  String?
+  assureur      String?
+  courtier      String?
+  numeroContrat String?
+  montant       Float?
+  echeance      DateTime?
+  aVerifier     Boolean @default(false) // colonne « A vérifier » côté GHC
+  updatedAt     DateTime @updatedAt
+}
+
+// Historique des imports GHC (une ligne par « Appliquer GHC »). Le volet 3 affiche
+// l'excel source + la date + le détail ; la v2 ajoutera simplement une ligne.
+model GhcImportRun {
+  id             String   @id @default(cuid())
+  createdAt      DateTime @default(now())
+  label          String   // ex. "v1"
+  fileName       String?
+  dossiersClean  Int      @default(0)
+  assureursMaj   Int      @default(0)
+  primesMaj      Int      @default(0)
+  courtiersMaj   Int      @default(0)
+  numerosMaj     Int      @default(0)
+  echeancesMaj   Int      @default(0)
+  versOdr        Int      @default(0)
+  versRs         Int      @default(0)
+  divergences    Int      @default(0)
+  casParticuliers Int     @default(0)
+  createdBy      String?
+
+  @@index([createdAt])
+}
+
+// Rapport de divergences + cas particuliers d'un import GHC (contrôle humain).
+model GhcReview {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  importRunId String?
+  buildingId  String
+  coproNom    String
+  kind        String   // "prime_divergente" | "odr_conflit" | "rs_vers_odr"
+  message     String
+  resolved    Boolean  @default(false)
+
+  @@index([createdAt])
+  @@index([kind])
 }
