@@ -191,6 +191,27 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
         </div>
       </div>
 
+      {/* Barre de progression pendant les vérifications */}
+      {coh === "checking" && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#656576", marginBottom: 4 }}>
+            <span>Re-lecture Front des dossiers…</span>
+            <span>{cohProgress.total ? `${cohProgress.done}/${cohProgress.total}` : "démarrage…"}</span>
+          </div>
+          <div style={{ height: 6, width: "100%", background: "#EEE", borderRadius: 999, overflow: "hidden" }}>
+            <div style={{ height: "100%", borderRadius: 999, background: "#4E49FC", transition: "width .25s", width: cohProgress.total ? `${Math.round((100 * cohProgress.done) / cohProgress.total)}%` : "8%" }} />
+          </div>
+        </div>
+      )}
+      {dedup === "checking" && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 12, color: "#656576", marginBottom: 4 }}>Vérification des doublons…</div>
+          <div style={{ height: 6, width: "100%", background: "#EEE", borderRadius: 999, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: "40%", borderRadius: 999, background: "#4E49FC", animation: "odrpulse 1s ease-in-out infinite" }} />
+          </div>
+        </div>
+      )}
+
       {/* Statut de la vérification des dossiers (cohérence) */}
       {coh === "ok" && (
         <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#13762C" }}>
@@ -322,6 +343,7 @@ export function OdrControls({ template, partners, sent }: { template: string; pa
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <style>{`@keyframes odrpulse { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }`}</style>
       <p style={{ fontSize: 13, color: "#656576", margin: 0 }}>
         {totalReady} dossier{totalReady > 1 ? "s" : ""} ODR prêt{totalReady > 1 ? "s" : ""} à envoyer (avec n° de contrat)
         {totalMissing > 0 && <> · <span style={{ color: "#955804" }}>{totalMissing} bien en ODR mais sans n° à compléter</span></>}.
