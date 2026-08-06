@@ -110,11 +110,14 @@ function deburr(s: string): string {
   return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
-// n° de contrat : parts normalisées (gère les multi-n° "A / B / C"), longueur ≥ 5.
+// n° de contrat : parts normalisées, longueur ≥ 5. On ne découpe QUE sur de vrais
+// séparateurs multi-contrats (« , » « ; » « · » ou « / » entouré d'espaces). Un
+// slash COLLÉ fait partie du n° (police à base commune : "AT069324/0192" et
+// "AT069324/0875" sont 2 contrats distincts → ne PAS les fusionner).
 function contractParts(num: string | null): string[] {
   if (!num) return [];
   return num
-    .split(/[\/,;·]+/)
+    .split(/\s*[,;·]\s*|\s+\/\s+/)
     .map((p) => p.replace(/[^a-z0-9]/gi, "").toUpperCase())
     .filter((p) => p.length >= 5);
 }
