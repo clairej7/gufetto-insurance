@@ -7,7 +7,7 @@ import { Navbar } from "@/components/navbar";
 import { AutofillBatchButton } from "@/components/admin/autofill-batch-button";
 import { VerifyPrimesBatchButton } from "@/components/admin/verify-primes-batch-button";
 import { OdrControls } from "@/components/admin/odr-controls";
-import { getOdrByPartner, getOdrSent, ODR_TEMPLATE_TEXT } from "@/lib/odr";
+import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 
 type Etat = "deploye" | "encours" | "attente";
 const ETATS: Record<Etat, { label: string; bg: string; fg: string; dot: string }> = {
@@ -54,6 +54,8 @@ export default async function AutomatisationsPage() {
   // Ensemble « déjà envoyées » par assureur (docs fournis + base) pour les tables.
   const odrSent: Record<string, { adresse: string; numeroContrat: string }[]> = {};
   for (const b of odrBuckets) odrSent[b.key] = await getOdrSent(b.key);
+  // Historique des envois ODR (une ligne par envoi).
+  const odrHistory = await getOdrSendHistory();
 
   const automations: {
     n: number;
@@ -220,7 +222,7 @@ export default async function AutomatisationsPage() {
                     <div style={{ fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
                       Contrôles admin
                     </div>
-                    <OdrControls template={ODR_TEMPLATE_TEXT} partners={odrPartners} sent={odrSent} />
+                    <OdrControls template={ODR_TEMPLATE_TEXT} partners={odrPartners} sent={odrSent} history={odrHistory} />
                   </div>
                 )}
 
