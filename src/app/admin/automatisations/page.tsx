@@ -120,7 +120,7 @@ export default async function AutomatisationsPage() {
     {
       n: 3,
       nom: "Complétion du mail courtier",
-      etat: "encours",
+      etat: "deploye",
       description: [
         "Cette automatisation s'applique uniquement à l'étape « Récupération du RS » (RS en cours). Son but : mieux trouver le mail du courtier lorsqu'il est correctement identifié, afin de pouvoir ensuite envoyer plus facilement le mail de demande de RS (automatisation 4). Elle fait deux choses, en s'appuyant sur une base de référence de courtiers et d'assureurs.",
         "1) Filtre de vérification courtier / assureur : chaque dossier arrivant du pré-remplissage est repassé au crible. L'assureur trouvé à l'étape précédente est vérifié dans la base ; s'il s'agit en réalité d'un courtier (erreur fréquente), le dossier est renvoyé à l'étape « Identification » plutôt que de rester bloqué en RS avec une donnée fausse.",
