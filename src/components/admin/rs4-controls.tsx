@@ -21,9 +21,9 @@ type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: nu
 const DEFAULT_SUBJECT = "Demande de relevé de sinistralité — {adresse} — contrat n° {numeroContrat}";
 const DEFAULT_BODY = `Bonjour,
 
-Je me permets de vous contacter en qualité de syndic de la copropriété {adresse}, assurée auprès de {assureur} sous le contrat n° {numeroContrat}.
+Je me permets de vous contacter en qualité de syndic de la copropriété {adresse}, contrat n° {numeroContrat}.
 
-Afin de préparer le renouvellement du contrat multirisque immeuble, pourriez-vous nous faire parvenir le relevé de sinistralité des trois dernières années dans les meilleurs délais ?
+Pourriez-vous nous faire parvenir le contrat MRI actuel ainsi que le relevé de sinistralité des 3 dernières années dans les meilleurs délais ?
 
 Je vous en remercie par avance.
 
