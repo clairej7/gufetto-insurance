@@ -14,6 +14,7 @@ import { computePerimeState, getPerimeCleanHistory, ensurePerimeBaseline } from 
 import { GhcApplyButton } from "@/components/admin/ghc-apply-button";
 import { computeGhcState, getGhcImportHistory, getGhcReviews } from "@/lib/ghc";
 import { getCourtierRefState, getCourtierRefSample } from "@/lib/courtier-ref";
+import { CourtierAuditControls } from "@/components/admin/courtier-audit-controls";
 import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 
 type Etat = "deploye" | "encours" | "attente";
@@ -316,7 +317,8 @@ export default async function AutomatisationsPage() {
                           </table>
                         </div>
                       )}
-                      <p style={{ fontSize: 12, color: "#A2A1AF", marginTop: 10 }}>Prochaines étapes : scraper Front pour compléter les mails courtier manquants, gérer le cas « agence d&apos;un assureur = agent général » (ex. Allianz), puis brancher le filtre courtier/assureur + la complétion sur les dossiers en « RS en cours ».</p>
+                      <p style={{ fontSize: 12, color: "#A2A1AF", marginTop: 10 }}>Base alimentée. L&apos;audit ci-dessous applique cette base aux dossiers en « Récupération du RS ».</p>
+                      <CourtierAuditControls />
                     </div>
                   </details>
                 )}
