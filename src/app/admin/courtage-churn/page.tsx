@@ -34,6 +34,14 @@ export default async function CourtageChurnPage() {
           <h1 style={{ fontSize: 22, fontWeight: 700, color: "#26262C" }}>Courtage Churn</h1>
           <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>À traiter plus tard</span>
         </div>
+
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#FEF6E7", border: "1px solid #F5D78A", borderRadius: 10, padding: "12px 16px", margin: "12px 0 20px", maxWidth: 780 }}>
+          <span style={{ fontSize: 18, lineHeight: "20px" }}>📊</span>
+          <div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: "#7A4E02" }}>À faire : créer un dashboard dans Tracking pour le suivi de ces dossiers</div>
+            <div style={{ fontSize: 12.5, color: "#8A5A08", marginTop: 2 }}>Actuellement aucun visu dédié au courtage / churn — ces dossiers ne sont suivis nulle part.</div>
+          </div>
+        </div>
         <p style={{ fontSize: 13.5, color: "#656576", maxWidth: 760, margin: "0 0 20px" }}>
           Dossiers d&apos;assurance liés à du <strong>churn</strong> (contrat transféré, contrordre, prime impayée, fin de mandat syndic)
           repérés lors de la réconciliation entre la liste ODR AXA et Gufetto. Ce ne sont <strong>pas</strong> des pertes de pipeline

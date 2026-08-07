@@ -180,8 +180,11 @@ function PipelineRow({ pipeline, taskTemplates, cloture = false, odr = false }: 
       {/* Copropriété — left border couleur urgence */}
       <td style={{ padding: "0 16px 0 13px", height: 48, borderLeft: `3px solid ${isLost ? "#CA1E12" : borderColor}`, verticalAlign: "middle", minWidth: 180 }}>
         <div>
-          <span style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", display: "block", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {pipeline.copro.nom}
+          <span style={{ display: "flex", alignItems: "center", gap: 4, maxWidth: 240 }}>
+            <span style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {pipeline.copro.nom}
+            </span>
+            {(pipeline.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
           </span>
           {pipeline.copro.adresse && (
             <span style={{ fontSize: 12, color: "#A2A1AF", display: "block", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
@@ -241,6 +244,7 @@ type SavedFilters = {
   selectedStatut: string[];
   selectedEcheance: string;
   selectedAssureur: string[];
+  selectedPrime: string;
   search: string;
 };
 
@@ -258,6 +262,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
   const [selectedStatut, setSelectedStatut] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [selectedAssureur, setSelectedAssureur] = useState<string[]>([]);
+  const [selectedPrime, setSelectedPrime] = useState("all");
   const [search, setSearch] = useState("");
   const filtersLoaded = useRef(false);
 
@@ -274,6 +279,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
         if (Array.isArray(saved.selectedStatut)) setSelectedStatut(saved.selectedStatut);
         if (typeof saved.selectedEcheance === "string") setSelectedEcheance(saved.selectedEcheance);
         if (Array.isArray(saved.selectedAssureur)) setSelectedAssureur(saved.selectedAssureur);
+        if (typeof saved.selectedPrime === "string") setSelectedPrime(saved.selectedPrime);
         if (typeof saved.search === "string") setSearch(saved.search);
       }
     } catch { /* sessionStorage indisponible ou JSON corrompu : on garde les défauts */ }
@@ -284,17 +290,17 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
   useEffect(() => {
     if (!filtersLoaded.current) return;
     try {
-      const toSave: SavedFilters = { sortKey, sortAsc, view, selectedGestionnaire, selectedStatut, selectedEcheance, selectedAssureur, search };
+      const toSave: SavedFilters = { sortKey, sortAsc, view, selectedGestionnaire, selectedStatut, selectedEcheance, selectedAssureur, selectedPrime, search };
       sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(toSave));
     } catch { /* quota ou indisponible : tant pis, pas bloquant */ }
-  }, [sortKey, sortAsc, view, selectedGestionnaire, selectedStatut, selectedEcheance, selectedAssureur, search]);
+  }, [sortKey, sortAsc, view, selectedGestionnaire, selectedStatut, selectedEcheance, selectedAssureur, selectedPrime, search]);
 
   const assureurs = [...new Set(pipelines.map((p) => p.copro.assureurActuel).filter(Boolean) as string[])].sort();
-  const hasActiveFilters = selectedGestionnaire.length > 0 || selectedStatut.length > 0 || selectedEcheance !== "all" || selectedAssureur.length > 0 || search !== "";
+  const hasActiveFilters = selectedGestionnaire.length > 0 || selectedStatut.length > 0 || selectedEcheance !== "all" || selectedAssureur.length > 0 || selectedPrime !== "all" || search !== "";
 
   function resetFilters() {
     setSelectedGestionnaire([]); setSelectedStatut([]);
-    setSelectedEcheance("all"); setSelectedAssureur([]); setSearch("");
+    setSelectedEcheance("all"); setSelectedAssureur([]); setSelectedPrime("all"); setSearch("");
   }
 
   const filtered = pipelines.filter((p) => {
@@ -307,6 +313,11 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
       if (selectedEcheance === "lt2" && (days === null || days > 60)) return false;
       if (selectedEcheance === "bt2_6" && (days === null || days <= 60 || days > 180)) return false;
       if (selectedEcheance === "gt6" && (days === null || days <= 180)) return false;
+    }
+    if (selectedPrime !== "all") {
+      const prime = p.copro.primeActuelle;
+      if (selectedPrime === "lt10" && !(prime != null && prime <= 10000)) return false;
+      if (selectedPrime === "gt10" && !(prime != null && prime > 10000)) return false;
     }
     return true;
   });
@@ -424,6 +435,11 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
         onChange={setSelectedAssureur}
         width={140}
       />
+      <select value={selectedPrime} onChange={(e) => setSelectedPrime(e.target.value)} style={selectStyle}>
+        <option value="all">Toutes les primes</option>
+        <option value="lt10">{"Prime < 10 k€"}</option>
+        <option value="gt10">{"Prime > 10 k€ 👑"}</option>
+      </select>
 
       {/* Search */}
       <div style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 10px", border: "1px solid #E8E8EC", borderRadius: 4, background: "#fff", minWidth: 180 }}>
