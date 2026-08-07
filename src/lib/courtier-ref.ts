@@ -13,26 +13,36 @@ export const normNom = (s: string | null | undefined): string =>
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 
-export type CourtierRefState = { total: number; avecEmail: number; sansEmail: number; parSource: Record<string, number> };
+export type CourtierRefState = {
+  total: number;
+  courtiers: number;
+  assureurs: number;
+  courtiersAvecMail: number;
+  courtiersSansMail: number;
+  parSource: Record<string, number>;
+};
 
 export async function getCourtierRefState(): Promise<CourtierRefState> {
-  const [total, avecEmail, bySource] = await Promise.all([
+  const [total, courtiers, assureurs, courtiersAvecMail, bySource] = await Promise.all([
     prisma.courtierRef.count(),
-    prisma.courtierRef.count({ where: { NOT: { email: null } } }),
+    prisma.courtierRef.count({ where: { type: "courtier" } }),
+    prisma.courtierRef.count({ where: { type: "assureur" } }),
+    prisma.courtierRef.count({ where: { type: "courtier", NOT: { email: null } } }),
     prisma.courtierRef.groupBy({ by: ["source"], _count: true }),
   ]);
   const parSource: Record<string, number> = {};
   for (const r of bySource) parSource[r.source] = r._count;
-  return { total, avecEmail, sansEmail: total - avecEmail, parSource };
+  return { total, courtiers, assureurs, courtiersAvecMail, courtiersSansMail: courtiers - courtiersAvecMail, parSource };
 }
 
-export type CourtierRefRow = { id: string; nom: string; email: string | null; assureur: string | null; source: string; occurrences: number; verifie: boolean };
+export type CourtierRefRow = { id: string; nom: string; type: string; email: string | null; emailsAll: string | null; assureur: string | null; source: string; occurrences: number; verifie: boolean };
 
-export async function getCourtierRefSample(limit = 40): Promise<CourtierRefRow[]> {
+export async function getCourtierRefSample(limit = 60): Promise<CourtierRefRow[]> {
   return prisma.courtierRef.findMany({
-    orderBy: [{ occurrences: "desc" }, { nom: "asc" }],
+    // courtiers d'abord (cœur de la base), puis les plus vus, puis alpha.
+    orderBy: [{ type: "asc" }, { occurrences: "desc" }, { nom: "asc" }],
     take: limit,
-    select: { id: true, nom: true, email: true, assureur: true, source: true, occurrences: true, verifie: true },
+    select: { id: true, nom: true, type: true, email: true, emailsAll: true, assureur: true, source: true, occurrences: true, verifie: true },
   });
 }
 
