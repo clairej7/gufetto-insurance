@@ -8,13 +8,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, AlertTriangle, XCircle, ListChecks, Wand2, Loader2, Eraser } from "lucide-react";
+import { CheckCircle2, AlertTriangle, XCircle, ListChecks, Wand2, Loader2, Eraser, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 type Counts = { vert: number; orange: number; rouge: number };
 type OrangeRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; refNom: string | null; mail: string | null; fillable: boolean; fillEmail: string | null };
-type Audit = { counts: Counts; total: number; fillable: number; orange: OrangeRow[] };
+type ReadyRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; mail: string | null };
+type Audit = { counts: Counts; total: number; fillable: number; orange: OrangeRow[]; ready: ReadyRow[] };
 
 function Buckets({ counts, total }: { counts: Counts; total: number }) {
   const items = [
@@ -48,9 +49,13 @@ export function CourtierAuditControls() {
   const [loading, setLoading] = useState(false);
   const [filling, setFilling] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [loaded, setLoaded] = useState<number | null>(null);
   const [showOrange, setShowOrange] = useState(false);
+  const [showReady, setShowReady] = useState(false);
 
   const nonFillable = audit ? audit.orange.filter((r) => !r.fillable).length : 0;
+  const isClean = !!audit && audit.counts.orange === 0;
 
   async function verify() {
     setLoading(true);
@@ -80,6 +85,24 @@ export function CourtierAuditControls() {
       toast.error(e instanceof Error ? e.message : "Échec du remplissage");
     } finally {
       setFilling(false);
+    }
+  }
+
+  async function sendToAuto4() {
+    if (!audit || !isClean) return;
+    if (!window.confirm(`Charger l'échantillon clean (${audit.ready.length} dossier(s) courtier + mail, RS non envoyée) dans l'automatisation 4 ?`)) return;
+    setSending(true);
+    try {
+      const res = await fetch("/api/courtier/send-to-auto4", { method: "POST" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      const data = await res.json();
+      setLoaded(data.loaded);
+      toast.success(`${data.loaded} dossier(s) chargé(s) dans l'automatisation 4.`);
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Échec du chargement");
+    } finally {
+      setSending(false);
     }
   }
 
@@ -181,6 +204,55 @@ export function CourtierAuditControls() {
               </p>
             </div>
           )}
+
+          {/* Échantillon clean prêt pour l'auto 4 (courtier + mail, RS non envoyée). */}
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #F1F1F4" }}>
+            <button onClick={() => setShowReady((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#13762C", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+              {showReady ? "▾" : "▸"} Échantillon clean prêt pour l&apos;envoi RS — {audit.ready.length} dossier(s)
+            </button>
+            {showReady && (
+              <div style={{ marginTop: 8, maxHeight: 340, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                      {["Adresse", "Assureur", "Courtier", "Mail courtier"].map((h) => (
+                        <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {audit.ready.map((r) => (
+                      <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
+                        <td style={{ padding: "6px 10px", color: "#26262C" }}>
+                          <a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a>
+                        </td>
+                        <td style={{ padding: "6px 10px", color: "#656576" }}>{r.assureur || "—"}</td>
+                        <td style={{ padding: "6px 10px", color: "#656576" }}>{r.courtier || "—"}</td>
+                        <td style={{ padding: "6px 10px", color: "#13762C" }}>{r.mail || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div style={{ marginTop: 12 }}>
+              <Button onClick={sendToAuto4} disabled={!isClean || sending || audit.ready.length === 0} size="sm">
+                {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                Envoyer l&apos;échantillon clean à l&apos;automatisation 4 ({audit.ready.length})
+              </Button>
+              {!isClean && (
+                <p style={{ fontSize: 11, color: "#B4690E", marginTop: 6 }}>
+                  Disponible une fois l&apos;échantillon clean (0 orange) — remplis les mails puis enlève les non-remplissables.
+                </p>
+              )}
+              {loaded !== null && (
+                <p style={{ fontSize: 12, color: "#13762C", fontWeight: 600, marginTop: 6 }}>
+                  ✓ {loaded} dossier(s) chargé(s) dans l&apos;automatisation 4.
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

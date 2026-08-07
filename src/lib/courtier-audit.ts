@@ -305,3 +305,32 @@ export async function clearNonFillableCourtiers(actorEmail: string, pipelineId?:
   const after = await getCourtierAudit(pipelineId);
   return { cleared: details.length, before, after, details };
 }
+
+// Dossiers « prêts pour l'envoi RS » = bucket vert (courtier + mail) qui n'ont PAS
+// déjà reçu une demande de RS. C'est l'échantillon clean qu'on charge dans l'auto 4.
+export function readySample(audit: CourtierAudit): CourtierAuditRow[] {
+  return audit.rows.filter((r) => r.bucket === "vert" && !r.rsSent);
+}
+
+// Charge l'échantillon clean dans l'automatisation 4 : pose rsBatchAt sur les
+// dossiers prêts (idempotent) + trace un event. Aucun changement d'étape ici.
+export async function sendCleanSampleToAuto4(actorEmail: string): Promise<{ loaded: number; batchTotal: number }> {
+  const audit = await getCourtierAudit();
+  const ready = readySample(audit);
+  const now = new Date();
+  for (const r of ready) {
+    await prisma.insurancePipeline.update({ where: { id: r.pipelineId }, data: { rsBatchAt: now } });
+  }
+  if (ready.length) {
+    await prisma.pipelineEvent.createMany({
+      data: ready.map((r) => ({ pipelineId: r.pipelineId, type: "action_manuelle" as const, description: "Chargé dans l'automatisation 4 (envoi de la demande de RS)", metadata: { auto: "rs_batch_load" }, createdBy: actorEmail })),
+    });
+  }
+  const batchTotal = await getRsBatchCount();
+  return { loaded: ready.length, batchTotal };
+}
+
+// Nb de dossiers actuellement chargés pour l'auto 4 (encore en Récupération du RS).
+export async function getRsBatchCount(): Promise<number> {
+  return prisma.insurancePipeline.count({ where: { statut: RS_STATUT, rsBatchAt: { not: null }, copro: { archivedAt: null } } });
+}
