@@ -270,36 +270,45 @@ export default async function AutomatisationsPage() {
                       Contrôles admin
                     </summary>
                     <div style={{ marginTop: 10 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C", marginBottom: 4 }}>Base de référence courtiers</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C", marginBottom: 4 }}>Base de référence courtiers / assureurs</div>
+                      <p style={{ fontSize: 13, color: "#656576", margin: "0 0 4px" }}>
+                        <strong>{courtierState.courtiers}</strong> courtier{courtierState.courtiers > 1 ? "s" : ""} · <strong style={{ color: "#13762C" }}>{courtierState.courtiersAvecMail}</strong> avec mail type, {courtierState.courtiersSansMail} sans.
+                      </p>
                       <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
-                        <strong>{courtierState.total}</strong> courtier{courtierState.total > 1 ? "s" : ""} référencé{courtierState.total > 1 ? "s" : ""} · <strong style={{ color: "#13762C" }}>{courtierState.avecEmail}</strong> avec mail · {courtierState.sansEmail} sans mail.
-                        {courtierState.total === 0 && " Base vide — à alimenter en 2 temps : (1) import de ta liste, (2) scraping des mails courtier vus dans Front."}
+                        <strong>{courtierState.assureurs}</strong> compagnie{courtierState.assureurs > 1 ? "s" : ""} d&apos;assurance — garde-fou : on ne demande pas le RS à une compagnie, elle renvoie vers le courtier.
+                        {courtierState.total === 0 && " Base vide — à alimenter : (1) import, (2) scraping Front."}
                       </p>
                       {courtierState.total > 0 && (
-                        <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 280, border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                        <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 300, border: "1px solid #E8E8EC", borderRadius: 8 }}>
                           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                             <thead>
                               <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-                                {["Courtier", "Mail", "Assureur", "Source", "Vu"].map((h, i) => (
+                                {["Nom", "Type", "Mail principal", "Autres mails", "Vu"].map((h, i) => (
                                   <th key={i} style={{ padding: "7px 12px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC", textAlign: i === 4 ? "right" : "left" }}>{h}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
-                              {courtierSample.map((c) => (
-                                <tr key={c.id} style={{ borderTop: "1px solid #F1F1F4" }}>
-                                  <td style={{ padding: "6px 12px", color: "#26262C" }}>{c.nom}</td>
-                                  <td style={{ padding: "6px 12px", color: c.email ? "#26262C" : "#CA1E12" }}>{c.email ?? "manquant"}</td>
-                                  <td style={{ padding: "6px 12px", color: "#656576" }}>{c.assureur ?? "—"}</td>
-                                  <td style={{ padding: "6px 12px", color: "#A2A1AF" }}>{c.source}</td>
-                                  <td style={{ padding: "6px 12px", color: "#A2A1AF", textAlign: "right" }}>{c.occurrences || "—"}</td>
-                                </tr>
-                              ))}
+                              {courtierSample.map((c) => {
+                                const autres = (c.emailsAll ? c.emailsAll.split(";") : []).length;
+                                const estAssureur = c.type === "assureur";
+                                return (
+                                  <tr key={c.id} style={{ borderTop: "1px solid #F1F1F4" }}>
+                                    <td style={{ padding: "6px 12px", color: "#26262C", fontWeight: estAssureur ? 400 : 600 }}>{c.nom}</td>
+                                    <td style={{ padding: "6px 12px" }}>
+                                      <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 999, background: estAssureur ? "#FDECEA" : "#EAF3FE", color: estAssureur ? "#CA1E12" : "#1F6FE0" }}>{estAssureur ? "assureur" : "courtier"}</span>
+                                    </td>
+                                    <td style={{ padding: "6px 12px", color: c.email ? "#26262C" : estAssureur ? "#A2A1AF" : "#CA1E12" }}>{c.email ?? (estAssureur ? "—" : "manquant")}</td>
+                                    <td style={{ padding: "6px 12px", color: "#A2A1AF" }}>{autres > 1 ? `+${autres - 1}` : "—"}</td>
+                                    <td style={{ padding: "6px 12px", color: "#A2A1AF", textAlign: "right" }}>{c.occurrences || "—"}</td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
                       )}
-                      <p style={{ fontSize: 12, color: "#A2A1AF", marginTop: 10 }}>Prochaines étapes : (1) importer la base fournie, (2) scraper Front pour compléter les mails manquants, puis brancher le filtre courtier/assureur + la complétion sur les dossiers en « RS en cours ».</p>
+                      <p style={{ fontSize: 12, color: "#A2A1AF", marginTop: 10 }}>Prochaines étapes : scraper Front pour compléter les mails courtier manquants, gérer le cas « agence d&apos;un assureur = agent général » (ex. Allianz), puis brancher le filtre courtier/assureur + la complétion sur les dossiers en « RS en cours ».</p>
                     </div>
                   </details>
                 )}

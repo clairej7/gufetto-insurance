@@ -401,7 +401,9 @@ model CourtierRef {
   id          String   @id @default(cuid())
   nom         String   // nom du courtier / cabinet (tel qu'affiché)
   nomNorm     String   // nom normalisé (minuscule, sans accents) — clé de rapprochement
+  type        String   @default("courtier") // "courtier" | "assureur" (garde-fou : ne pas demander le RS à une compagnie)
   email       String?  // mail type / de contact du courtier
+  emailsAll   String?  // tous les mails connus, séparés par ";" (le 1er = principal)
   assureur    String?  // compagnie(s) associée(s), optionnel
   source      String   @default("manuel") // "manuel" | "import" | "front"
   occurrences Int      @default(0) // nb d'apparitions (ex. vu N fois dans Front)
