@@ -47,7 +47,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
               <Link
                 href="/pipeline"
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap shrink-0",
                   pathname.startsWith("/pipeline")
                     ? "text-[#4E49FC] bg-[#F5F5FF]"
                     : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
@@ -59,7 +59,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
               <Link
                 href="/tasks"
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap shrink-0",
                   pathname.startsWith("/tasks")
                     ? "text-[#4E49FC] bg-[#F5F5FF]"
                     : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
@@ -73,7 +73,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
                   <Link
                     href="/admin"
                     className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap shrink-0",
                       pathname === "/admin"
                         ? "text-[#4E49FC] bg-[#F5F5FF]"
                         : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
@@ -85,7 +85,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
                   <Link
                     href="/admin/automatisations"
                     className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap shrink-0",
                       pathname.startsWith("/admin/automatisations")
                         ? "text-[#4E49FC] bg-[#F5F5FF]"
                         : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
@@ -97,7 +97,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
                   <Link
                     href="/admin/courtage-churn"
                     className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap shrink-0",
                       pathname.startsWith("/admin/courtage-churn")
                         ? "text-[#4E49FC] bg-[#F5F5FF]"
                         : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
@@ -109,7 +109,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
                   <Link
                     href="/admin/activite"
                     className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap shrink-0",
                       pathname.startsWith("/admin/activite")
                         ? "text-[#4E49FC] bg-[#F5F5FF]"
                         : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"
@@ -121,7 +121,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
                   <Link
                     href="/admin/synchro"
                     className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap shrink-0",
                       pathname.startsWith("/admin/synchro")
                         ? "text-[#4E49FC] bg-[#F5F5FF]"
                         : "text-[#656576] hover:text-[#26262C] hover:bg-[#F7F7F8]"

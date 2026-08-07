@@ -321,7 +321,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
   const barsRow: React.CSSProperties = { display: "flex", alignItems: "flex-end", gap: 8, height: CHART_H + 40 };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, fontFamily: FONT_SANS }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 32, fontFamily: FONT_SANS }}>
 
       {/* ── Filtres ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -384,6 +384,15 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
             </div>
           );
         })}
+      </div>
+
+      {/* ── Taux de pénétration (= taux de signature) ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: 18, background: "#F5F5FF", border: "1.5px solid #4E49FC", borderRadius: 10, padding: "18px 26px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
+        <span style={{ fontSize: 34, fontWeight: 800, color: "#4E49FC", letterSpacing: "-0.03em", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{tauxSignature}%</span>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Taux de pénétration</div>
+          <div style={{ fontSize: 12.5, color: "#656576", marginTop: 2 }}>= taux de signature · {wonPipelines.length} deals gagnés sur {realTotal} dossiers</div>
+        </div>
       </div>
 
       {/* ── Bar chart : répartition par étape ── */}
