@@ -73,7 +73,24 @@ export default async function CourtageChurnPage() {
           </table>
         </div>
 
-        <p style={{ fontSize: 12, color: "#A2A1AF", marginTop: 16 }}>Source : {CHURN.source}. Snapshot — sera réactualisé quand on traitera le sujet courtage/churn.</p>
+        {/* Immeubles hors périmètre Gufetto (ODR AXA) — dont une grande partie en churn */}
+        <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px dashed #E8E8EC" }}>
+          <div className="flex items-center gap-3 mb-1">
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Immeubles hors périmètre Gufetto (ODR AXA)</h2>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>À traiter prochainement</span>
+          </div>
+          <p style={{ fontSize: 13.5, color: "#656576", maxWidth: 780, margin: "0 0 12px" }}>
+            Réconciliation de la liste ODR AXA : <strong>68 immeubles</strong> (~<strong>296 k€</strong> de primes) sont des immeubles
+            Matera portant un ODR AXA mais <strong>absents du périmètre Gufetto</strong> (funnel MRI qui ne couvre que ~10 % du parc
+            Matera). En les inspectant, <strong>une grande partie est en réalité en churn</strong> (immeubles ayant quitté / en cours de
+            départ). À trier plus tard : distinguer les vrais actifs à onboarder des dossiers churnés à sortir.
+          </p>
+          <a href="/churn/ODR_AXA_hors_Gufetto.xlsx" download style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#4E49FC", border: "1px solid #D9D9F5", background: "#F5F5FF", borderRadius: 8, padding: "8px 14px" }}>
+            ⬇ Télécharger la liste (Excel — 68 immeubles)
+          </a>
+        </div>
+
+        <p style={{ fontSize: 12, color: "#A2A1AF", marginTop: 24 }}>Source : {CHURN.source}. Snapshot — sera réactualisé quand on traitera le sujet courtage/churn.</p>
       </main>
     </div>
   );
