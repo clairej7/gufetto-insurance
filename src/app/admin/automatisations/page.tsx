@@ -16,6 +16,7 @@ import { computeGhcState, getGhcImportHistory, getGhcReviews } from "@/lib/ghc";
 import { getCourtierRefState, getCourtierRefSample } from "@/lib/courtier-ref";
 import { CourtierAuditControls } from "@/components/admin/courtier-audit-controls";
 import { getRsBatchCount } from "@/lib/courtier-audit";
+import { Rs4Controls } from "@/components/admin/rs4-controls";
 import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 
 type Etat = "deploye" | "encours" | "attente";
@@ -130,7 +131,7 @@ export default async function AutomatisationsPage() {
     {
       n: 4,
       nom: "Envoi des demandes de RS",
-      etat: "attente",
+      etat: "encours",
       description: [
         "Envoie automatiquement les demandes de relevé de sinistralité (RS) aux courtiers / assureurs via Front, à partir des infos remplies par l'automatisation 1.",
         "Gère le cycle complet : relances automatiques en l'absence de réponse, puis traitement des réponses entrantes — remercier, enregistrer le RS reçu, faire avancer le dossier à l'étape suivante, et archiver l'échange.",
@@ -239,14 +240,8 @@ export default async function AutomatisationsPage() {
                   </div>
                 </details>
 
-                {/* Auto 4 : échantillon clean chargé depuis l'auto 3, en attente d'envoi. */}
-                {a.n === 4 && rsBatchCount > 0 && (
-                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: "#13762C", background: "#EAF7EE", border: "1px solid #B7E4C4", borderRadius: 999, padding: "4px 12px" }}>
-                      📥 {rsBatchCount} dossier{rsBatchCount > 1 ? "s" : ""} chargé{rsBatchCount > 1 ? "s" : ""} depuis l&apos;auto 3 — en attente d&apos;envoi
-                    </span>
-                  </div>
-                )}
+                {/* Auto 4 : volets (vérification échantillon, envoi, relances). */}
+                {a.n === 4 && <Rs4Controls batchCount={rsBatchCount} />}
 
                 {/* Contrôles admin — pour l'instant uniquement l'auto 1 (le batch). */}
                 {a.n === 1 && (
