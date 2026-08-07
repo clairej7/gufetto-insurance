@@ -15,8 +15,9 @@ import { Button } from "@/components/ui/button";
 type Counts = { vert: number; orange: number; rouge: number };
 type OrangeRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; refNom: string | null; mail: string | null; fillable: boolean; fillEmail: string | null };
 type ReadyRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; mail: string | null; rsSent: boolean };
+type RougeRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; mail: string | null; reason: string };
 type HistRow = { sentAt: string; count: number };
-type Audit = { counts: Counts; total: number; stepTotal: number; fillable: number; orange: OrangeRow[]; ready: ReadyRow[]; history: HistRow[] };
+type Audit = { counts: Counts; total: number; stepTotal: number; fillable: number; orange: OrangeRow[]; rouge: RougeRow[]; ready: ReadyRow[]; history: HistRow[] };
 
 function Buckets({ counts, total }: { counts: Counts; total: number }) {
   const items = [
@@ -53,6 +54,7 @@ export function CourtierAuditControls() {
   const [sending, setSending] = useState(false);
   const [loaded, setLoaded] = useState<number | null>(null);
   const [showOrange, setShowOrange] = useState(false);
+  const [showRouge, setShowRouge] = useState(false);
   const [showReady, setShowReady] = useState(false);
 
   const nonFillable = audit ? audit.orange.filter((r) => !r.fillable).length : 0;
@@ -201,6 +203,40 @@ export function CourtierAuditControls() {
               <p style={{ fontSize: 11, color: "#A2A1AF", marginTop: 6 }}>
                 Lignes vertes = mail proposé via la base (seront remplies). Lignes orange = mail présent mais d&apos;un autre domaine/cabinet (à vérifier). Clique une adresse pour ouvrir le dossier.
               </p>
+            </div>
+          )}
+
+          {audit.rouge.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <button onClick={() => setShowRouge((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#CA1E12", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                {showRouge ? "▾" : "▸"} Détail des {audit.rouge.length} dossiers « sans courtier » (à vérifier à la main)
+              </button>
+              {showRouge && (
+                <div style={{ marginTop: 8, maxHeight: 340, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                        {["Adresse", "Assureur", "Courtier", "Mail courtier", "Raison"].map((h) => (
+                          <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {audit.rouge.map((r) => (
+                        <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
+                          <td style={{ padding: "6px 10px", color: "#26262C" }}>
+                            <a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a>
+                          </td>
+                          <td style={{ padding: "6px 10px", color: "#656576" }}>{r.assureur || "—"}</td>
+                          <td style={{ padding: "6px 10px", color: "#656576" }}>{r.courtier || "—"}</td>
+                          <td style={{ padding: "6px 10px", color: "#656576" }}>{r.mail || "—"}</td>
+                          <td style={{ padding: "6px 10px", color: "#A2A1AF" }}>{r.reason}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
