@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getCourtierAudit } from "@/lib/courtier-audit";
+import { getCourtierAudit, getRsBatchHistory } from "@/lib/courtier-audit";
 
 // GET /api/courtier/audit[?pipelineId=]
 // Sans pipelineId (admin) : audit global de l'étape « Récupération du RS ».
@@ -30,5 +30,6 @@ export async function GET(req: NextRequest) {
   const ready = audit.rows
     .filter((r) => r.bucket === "vert" && !r.rsSent)
     .map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, assureur: r.assureur, courtier: r.courtier, mail: r.mail }));
-  return NextResponse.json({ counts: audit.counts, total: audit.total, fillable: audit.fillable, orange, ready });
+  const history = await getRsBatchHistory();
+  return NextResponse.json({ counts: audit.counts, total: audit.total, fillable: audit.fillable, orange, ready, history });
 }

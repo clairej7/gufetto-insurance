@@ -419,3 +419,12 @@ model CourtierRef {
 
   @@index([nomNorm])
 }
+
+// Automatisation 3 → 4 : historique des envois de l'échantillon clean vers
+// l'auto 4 (date + nombre de dossiers), pour garder une trace.
+model RsBatchLog {
+  id         String   @id @default(cuid())
+  sentAt     DateTime @default(now())
+  count      Int
+  actorEmail String?
+}
