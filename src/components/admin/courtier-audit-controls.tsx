@@ -15,7 +15,8 @@ import { Button } from "@/components/ui/button";
 type Counts = { vert: number; orange: number; rouge: number };
 type OrangeRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; refNom: string | null; mail: string | null; fillable: boolean; fillEmail: string | null };
 type ReadyRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; mail: string | null };
-type Audit = { counts: Counts; total: number; fillable: number; orange: OrangeRow[]; ready: ReadyRow[] };
+type HistRow = { sentAt: string; count: number };
+type Audit = { counts: Counts; total: number; fillable: number; orange: OrangeRow[]; ready: ReadyRow[]; history: HistRow[] };
 
 function Buckets({ counts, total }: { counts: Counts; total: number }) {
   const items = [
@@ -99,6 +100,7 @@ export function CourtierAuditControls() {
       setLoaded(data.loaded);
       toast.success(`${data.loaded} dossier(s) chargé(s) dans l'automatisation 4.`);
       router.refresh();
+      await verify(); // les dossiers chargés sortent de l'audit + l'historique se met à jour
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Échec du chargement");
     } finally {
@@ -252,6 +254,20 @@ export function CourtierAuditControls() {
                 </p>
               )}
             </div>
+
+            {audit.history.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Historique des envois</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {audit.history.map((h, i) => (
+                    <div key={i} style={{ fontSize: 12, color: "#656576", display: "flex", gap: 8 }}>
+                      <span style={{ color: "#26262C", fontVariantNumeric: "tabular-nums" }}>{new Date(h.sentAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                      <span>→ {h.count} dossier{h.count > 1 ? "s" : ""} envoyé{h.count > 1 ? "s" : ""} à l&apos;auto 4</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

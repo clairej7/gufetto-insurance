@@ -283,8 +283,10 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
   const G_GAGNE  = grp(["odr_accepte", "contrat_signe", "_clos"]);
   const G_PERDU  = grp(["_perdu"]);
 
-  // Taux de pénétration théorique : si tous les « ODR envoyées » passaient en accepté.
-  const tauxTheorique = realTotal > 0 ? Math.round(((wonPipelines.length + aggEnvoye.length) / realTotal) * 100) : 0;
+  // Taux de pénétration théorique : si les dossiers en passe d'être gagnés
+  // (« Validation du CS » + « ODR en cours » + « ODR envoyées ») passaient tous en clos.
+  const enPasseDeClos = rowsForCol("envoye_cs").length + aggEnCours.length + aggEnvoye.length;
+  const tauxTheorique = realTotal > 0 ? Math.round(((wonPipelines.length + enPasseDeClos) / realTotal) * 100) : 0;
 
   // Totaux de complétude des primes (tous stades confondus).
   const primeTotalDossiers = primeStages.reduce((a, s) => a + s.total, 0);
@@ -437,7 +439,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
           <span style={{ fontSize: 26, fontWeight: 700, color: "#8A87E8", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{tauxTheorique}%</span>
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, fontStyle: "italic", color: "#8A87E8" }}>Taux de pénétration théorique</div>
-            <div style={{ fontSize: 12, color: "#A2A1AF", marginTop: 2 }}>lorsque les « ODR envoyées » passeront en « ODR acceptés »</div>
+            <div style={{ fontSize: 12, color: "#A2A1AF", marginTop: 2 }}>lorsque les « Validation du CS » / « ODR en cours » / « ODR envoyées » seront passés en clos</div>
           </div>
         </div>
       </div>

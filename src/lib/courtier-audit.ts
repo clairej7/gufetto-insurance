@@ -228,10 +228,12 @@ export function classify(
   };
 }
 
-async function loadRsDossiers() {
+async function loadRsDossiers(excludeBatched: boolean) {
   const [pipelines, rs, base] = await Promise.all([
     prisma.insurancePipeline.findMany({
-      where: { statut: RS_STATUT, copro: { archivedAt: null } },
+      // On exclut les dossiers déjà chargés dans l'auto 4 (rsBatchAt) : ils ne
+      // repassent plus dans l'audit (pas de re-traitement des copros validées).
+      where: { statut: RS_STATUT, copro: { archivedAt: null }, ...(excludeBatched ? { rsBatchAt: null } : {}) },
       select: { id: true, copro: { select: { nom: true, buildingId: true, adresse: true, courtierActuel: true, contactCourtierEmail: true, assureurActuel: true } } },
     }),
     prisma.pipelineEvent.findMany({ where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { pipelineId: true }, distinct: ["pipelineId"] }),
@@ -253,7 +255,9 @@ function summarize(rows: CourtierAuditRow[]): CourtierAudit {
 
 // Audit global sur l'étape RS (lecture seule).
 export async function getCourtierAudit(pipelineId?: string): Promise<CourtierAudit> {
-  const { pipelines, rsSet, idx } = await loadRsDossiers();
+  // Global : on masque les dossiers déjà envoyés à l'auto 4. Par dossier (fiche) :
+  // on garde tout pour pouvoir re-vérifier un dossier précis.
+  const { pipelines, rsSet, idx } = await loadRsDossiers(!pipelineId);
   const scope = pipelineId ? pipelines.filter((p) => p.id === pipelineId) : pipelines;
   const rows = scope.map((p) => classify({ pipelineId: p.id, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, assureur: p.copro.assureurActuel, rsSent: rsSet.has(p.id), nom: p.copro.nom, buildingId: p.copro.buildingId, adresse: p.copro.adresse }, idx));
   return summarize(rows);
@@ -325,6 +329,7 @@ export async function sendCleanSampleToAuto4(actorEmail: string): Promise<{ load
     await prisma.pipelineEvent.createMany({
       data: ready.map((r) => ({ pipelineId: r.pipelineId, type: "action_manuelle" as const, description: "Chargé dans l'automatisation 4 (envoi de la demande de RS)", metadata: { auto: "rs_batch_load" }, createdBy: actorEmail })),
     });
+    await prisma.rsBatchLog.create({ data: { count: ready.length, actorEmail } });
   }
   const batchTotal = await getRsBatchCount();
   return { loaded: ready.length, batchTotal };
@@ -333,4 +338,10 @@ export async function sendCleanSampleToAuto4(actorEmail: string): Promise<{ load
 // Nb de dossiers actuellement chargés pour l'auto 4 (encore en Récupération du RS).
 export async function getRsBatchCount(): Promise<number> {
   return prisma.insurancePipeline.count({ where: { statut: RS_STATUT, rsBatchAt: { not: null }, copro: { archivedAt: null } } });
+}
+
+// Historique des envois vers l'auto 4 (date + nombre), le plus récent d'abord.
+export async function getRsBatchHistory(limit = 12): Promise<{ sentAt: string; count: number }[]> {
+  const rows = await prisma.rsBatchLog.findMany({ orderBy: { sentAt: "desc" }, take: limit, select: { sentAt: true, count: true } });
+  return rows.map((r) => ({ sentAt: r.sentAt.toISOString(), count: r.count }));
 }
