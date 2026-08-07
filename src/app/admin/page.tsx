@@ -40,6 +40,8 @@ export default async function AdminPage() {
 
   const taskTemplates = await prisma.stageTaskTemplate.findMany();
   const primeStages = await getPrimeByStage();
+  // Nb de dossiers pour lesquels une demande de RS a été envoyée via Front (event rsType=draft_sent).
+  const rsDemandes = (await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
 
   const gestionnaires = [
     ...new Set(
@@ -84,6 +86,7 @@ export default async function AdminPage() {
           events={events as Parameters<typeof AdminBoard>[0]["events"]}
           lostPipelines={lostPipelines as Parameters<typeof AdminBoard>[0]["lostPipelines"]}
           primeStages={primeStages}
+          rsDemandes={rsDemandes}
         />
       </main>
     </div>
