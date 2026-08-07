@@ -42,6 +42,8 @@ interface AdminBoardProps {
   lostPipelines: Pipeline[];
   // Complétude des primes par étape (miroir des montants) — calculée côté serveur.
   primeStages: PrimeStageRow[];
+  // Nb de demandes de RS envoyées via Front (dossiers distincts).
+  rsDemandes: number;
 }
 
 
@@ -138,7 +140,7 @@ const TD_RIGHT: React.CSSProperties = { ...TD, textAlign: "right" };
 
 type KpiFilter = "actifs" | "gagnes" | "perdus" | null;
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
@@ -428,12 +430,15 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
           <span style={{ fontSize: 36, fontWeight: 800, color: "#4E49FC", letterSpacing: "-0.03em", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{tauxSignature}%</span>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Taux de pénétration</div>
-            <div style={{ fontSize: 12.5, color: "#656576", marginTop: 2 }}>= taux de signature · {wonPipelines.length} gagnés sur {realTotal} dossiers</div>
+            <div style={{ fontSize: 12.5, color: "#656576", marginTop: 2 }}>{wonPipelines.length} gagnés sur {realTotal} dossiers</div>
           </div>
         </div>
-        <div style={{ borderLeft: "1px solid #C7C5F5", paddingLeft: 28, maxWidth: 320 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: "#6D69F5", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{tauxTheorique}%</div>
-          <div style={{ fontSize: 11.5, color: "#8A8A99", marginTop: 3 }}>Taux de pénétration théorique avec acceptation des ODR (si les {aggEnvoye.length} « ODR envoyées » passaient d&apos;un coup en « ODR acceptés »)</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, borderLeft: "1px solid #C7C5F5", paddingLeft: 28, maxWidth: 380 }}>
+          <span style={{ fontSize: 26, fontWeight: 700, color: "#8A87E8", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{tauxTheorique}%</span>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, fontStyle: "italic", color: "#8A87E8" }}>Taux de pénétration théorique</div>
+            <div style={{ fontSize: 12, color: "#A2A1AF", marginTop: 2 }}>lorsque les « ODR envoyées » passeront en « ODR acceptés »</div>
+          </div>
         </div>
       </div>
 
@@ -637,44 +642,65 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
 
       {/* ── Suivi des changements d'assureur (dossiers classiques, hors ODR) ── */}
       <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Suivi des changements d&apos;assureur</span>
+          <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>Partie en cours de configuration</span>
         </div>
         <div style={{ fontSize: 12, color: "#656576", marginBottom: 18 }}>
           Dossiers classiques (RS → devis → conseil syndical → signature), hors ODR.{" "}
           <span style={{ color: "#A2A1AF" }}>« Signé » et « Clos » excluent les dossiers gagnés via un ODR.</span>
         </div>
 
-        {/* Pipeline changement d'assureur — kanban */}
-        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginBottom: 10 }}>Pipeline — nombre · montant en jeu · ARR potentiel (×0,25)</div>
-        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
+        {/* Pipeline changement d'assureur — kanban, 3 cartes par ligne */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
           {classicStages.map(st => {
             const prime = sumPrime(st.rows);
             return (
-              <div key={st.key} style={{ flex: "1 1 0", minWidth: 140, border: "1px solid #E8E8EC", borderTop: `3px solid ${st.color}`, borderRadius: 8, padding: "12px 14px", background: "#fff" }}>
-                <div style={{ fontSize: 11, fontWeight: 600, fontFamily: FONT_MONO, textTransform: "uppercase", letterSpacing: "0.04em", color: st.color, marginBottom: 8 }}>{st.label}</div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{st.rows.length}</div>
-                <div style={{ fontSize: 11, color: "#656576", marginBottom: 8 }}>dossiers</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#26262C" }}>{prime > 0 ? fmtEurC(prime) : "—"}</div>
-                <div style={{ fontSize: 10.5, color: "#A2A1AF" }}>en jeu</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: st.color, marginTop: 4 }}>{prime > 0 ? fmtEurC(prime * 0.25) : "—"}</div>
-                <div style={{ fontSize: 10.5, color: "#A2A1AF" }}>ARR potentiel</div>
+              <div key={st.key} style={{ border: "1px solid #E8E8EC", borderTop: `3px solid ${st.color}`, borderRadius: 8, padding: "16px 18px", background: "#fff" }}>
+                <div style={{ fontSize: 12, fontWeight: 600, fontFamily: FONT_MONO, textTransform: "uppercase", letterSpacing: "0.04em", color: st.color, marginBottom: 12 }}>{st.label}</div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 18, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{st.rows.length}</div>
+                    <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>dossiers</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 17, fontWeight: 700, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{prime > 0 ? fmtEurC(prime) : "—"}</div>
+                    <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>en jeu</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 17, fontWeight: 700, color: st.color, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{prime > 0 ? fmtEurC(prime * 0.25) : "—"}</div>
+                    <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>ARR potentiel</div>
+                  </div>
+                </div>
+
+                {st.key === "rs_en_cours" && (
+                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px dashed #E8E8EC" }}>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsDemandes}</div>
+                    <div style={{ fontSize: 12, color: "#656576", marginTop: 3 }}>demandes de RS envoyées</div>
+                  </div>
+                )}
+
+                {st.key === "clos" && (() => {
+                  const g = (l: string) => classicInsurers.find(x => x.label === l)?.count ?? 0;
+                  const axa = g("AXA"), sada = g("SADA"), mila = g("Mila");
+                  const autres = wonClassic.length - axa - sada - mila;
+                  const rows: [string, number][] = [["AXA", axa], ["Mila", mila], ["SADA", sada], ["Autres", autres]];
+                  return (
+                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px dashed #E8E8EC" }}>
+                      <div style={{ fontSize: 11, color: "#A2A1AF", marginBottom: 6 }}>Assureurs des {wonClassic.length} gagnés</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        {rows.filter(([, n]) => n > 0).map(([label, n]) => (
+                          <div key={label} style={{ fontSize: 13, color: "#26262C" }}>
+                            <strong style={{ fontVariantNumeric: "tabular-nums" }}>{n}</strong> {label}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
-        </div>
-
-        {/* Assureurs des gagnés (classiques) */}
-        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginTop: 20, marginBottom: 10 }}>Assureurs des {wonClassic.length} gagnés (signé + clos, hors ODR)</div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {classicInsurers.length === 0
-            ? <div style={{ fontSize: 12, color: "#A2A1AF" }}>Aucun gagné classique.</div>
-            : classicInsurers.map(ins => (
-              <div key={ins.label} style={{ border: "1px solid #E8E8EC", borderRadius: 8, padding: "10px 16px", background: "#FBFBFB", minWidth: 88 }}>
-                <div style={{ fontSize: 22, fontWeight: 700, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{ins.count}</div>
-                <div style={{ fontSize: 12, color: "#656576", marginTop: 3 }}>{ins.label}</div>
-              </div>
-            ))}
         </div>
       </div>
 
