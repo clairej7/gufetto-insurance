@@ -4,14 +4,16 @@ import { prisma } from "@/lib/prisma";
 import { categoriseDossier } from "@/lib/pipeline";
 
 // Étapes du Tracking (mêmes labels/regroupements que « Répartition par étape »).
+// Même ordre EXACT que « Revenus — montants en jeu » du Tracking (G_FUNNEL, G_ODR,
+// G_GAGNE, G_PERDU) : les ODR viennent après la voie RS/devis, pas au début.
 const PRIME_STAGES: { key: string; label: string }[] = [
   { key: "identifie", label: "Identification" },
-  { key: "odr_en_cours", label: "ODR en cours" },
-  { key: "odr_envoye", label: "ODR envoyées" },
   { key: "rs_en_cours", label: "Récupération du RS" },
   { key: "devis_demandes", label: "Demande des devis" },
   { key: "devis_recus", label: "Comparaison des devis" },
   { key: "envoye_cs", label: "Validation du CS" },
+  { key: "odr_en_cours", label: "ODR en cours" },
+  { key: "odr_envoye", label: "ODR envoyées" },
   { key: "odr_accepte", label: "ODR acceptés" },
   { key: "contrat_signe", label: "Signé" },
   { key: "_clos", label: "Clos" },
