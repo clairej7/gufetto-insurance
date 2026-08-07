@@ -156,6 +156,19 @@ export type CourtierAuditRow = {
 
 const GENERIC_DOM = new Set(["gmail.com", "orange.fr", "wanadoo.fr", "free.fr", "hotmail.fr", "hotmail.com", "outlook.fr", "outlook.com", "yahoo.fr", "yahoo.com", "laposte.net", "sfr.fr", "live.fr"]);
 
+// Groupes de courtiers : domaines interchangeables (même maison). Ex. Odealim
+// rachète Assurcopro/Assurgérance → un mail @odealim pour Assurcopro = cohérent.
+const DOMAIN_GROUPS: string[][] = [
+  ["odealim.com", "odealim.fr", "assurcopro.fr", "assurcopro.com", "assurgerance.com"],
+];
+const GROUP_OF = new Map<string, Set<string>>();
+for (const g of DOMAIN_GROUPS) { const s = new Set(g); for (const d of g) GROUP_OF.set(d, s); }
+function expandDomains(doms: Iterable<string>): Set<string> {
+  const out = new Set<string>();
+  for (const d of doms) { out.add(d); const g = GROUP_OF.get(d); if (g) for (const x of g) out.add(x); }
+  return out;
+}
+
 // Le champ mail peut contenir PLUSIEURS adresses (séparées par , ou ;).
 function splitEmails(field: string): string[] {
   return field.split(/[;,]/).map((s) => s.trim().toLowerCase()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s));
@@ -169,8 +182,8 @@ function mailCoherent(field: string, res: Resolution, idx: CourtierIndex): boole
   const domains = splitEmails(field).map(domainOf).filter(Boolean);
   if (!domains.length) return false;
   if (res.kind === "courtier" && res.ref) {
-    const doms = new Set((res.ref.emailsAll ?? res.ref.email ?? "").split(";").map((s) => domainOf(s.trim())).filter(Boolean));
-    if (domains.some((d) => doms.has(d))) return true; // le bon cabinet est présent
+    const doms = expandDomains((res.ref.emailsAll ?? res.ref.email ?? "").split(";").map((s) => domainOf(s.trim())).filter(Boolean));
+    if (domains.some((d) => doms.has(d))) return true; // le bon cabinet (ou son groupe) est présent
     if (domains.every((d) => GENERIC_DOM.has(d))) return true; // seulement du générique → toléré
     return false; // que d'autres cabinets/compagnies → incohérent
   }
@@ -193,18 +206,25 @@ export function classify(
   if (res.kind === "self") return { ...base, bucket: "rouge", reason: `« ${res.label} » (ex-assureur / syndic — pas un courtier tiers)`, fillable: false, fillEmail: null };
   if (res.kind === "assureur") return { ...base, bucket: "rouge", reason: `assureur renseigné à la place du courtier (${res.label})`, fillable: false, fillEmail: null };
 
-  // res.kind === "courtier" (valable)
+  // res.kind === "courtier" (valable). On peut remplir depuis la base si : courtier
+  // connu en base, avec un mail, et match sûr. Vrai pour un mail manquant ET pour
+  // un mail incohérent (mail d'assureur/autre cabinet → à ÉCRASER par le mail type).
+  const fillEmail = res.ref?.email ?? null;
+  const canFill = !!fillEmail && res.confident;
+
   if (mail && hasValidEmail(mail)) {
     if (mailCoherent(mail, res, idx)) return { ...base, bucket: "vert", reason: res.ref ? `courtier + mail cohérent (${res.ref.nom})` : "courtier (hors base) + mail", fillable: false, fillEmail: null };
-    return { ...base, bucket: "orange", reason: "mail présent mais incohérent (autre domaine/cabinet)", fillable: false, fillEmail: null };
+    return {
+      ...base, bucket: "orange",
+      reason: canFill ? `mail d'un autre domaine → à remplacer par le mail courtier (${res.ref!.nom})` : "mail présent mais incohérent (autre domaine/cabinet) — hors base",
+      fillable: canFill, fillEmail,
+    };
   }
   // courtier valable sans mail → remplissable si en base + mail dispo + match sûr.
-  const fillEmail = res.ref?.email ?? null;
-  const fillable = !!fillEmail && res.confident;
   return {
     ...base, bucket: "orange",
-    reason: fillable ? `sans mail — remplissable via base (${res.ref!.nom})` : res.ref ? `sans mail — base sans mail ou match incertain (${res.ref.nom})` : "sans mail — courtier hors base",
-    fillable, fillEmail,
+    reason: canFill ? `sans mail — remplissable via base (${res.ref!.nom})` : res.ref ? `sans mail — base sans mail ou match incertain (${res.ref.nom})` : "sans mail — courtier hors base",
+    fillable: canFill, fillEmail,
   };
 }
 
@@ -246,12 +266,17 @@ export async function autofillCourtierMails(actorEmail: string, pipelineId?: str
   const targets = before.rows.filter((r) => r.fillable && r.fillEmail);
   const details: { pipelineId: string; nom: string; email: string }[] = [];
   for (const t of targets) {
-    // sécurité : ne pas écraser si un mail est apparu entre-temps.
     const cur = await prisma.insurancePipeline.findUnique({ where: { id: t.pipelineId }, select: { copro: { select: { id: true, contactCourtierEmail: true } } } });
-    if (!cur || (cur.copro.contactCourtierEmail ?? "").trim()) continue;
+    if (!cur) continue;
+    const prevMail = (cur.copro.contactCourtierEmail ?? "").trim();
+    // sécurité : si le mail cible est déjà en place, ne rien faire.
+    if (prevMail && prevMail.toLowerCase() === t.fillEmail!.toLowerCase()) continue;
     await prisma.copro.update({ where: { id: cur.copro.id }, data: { contactCourtierEmail: t.fillEmail!, contratVerrouilleLe: new Date() } });
+    const desc = prevMail
+      ? `Mail courtier remplacé (mail d'un autre domaine → mail type courtier) : « ${prevMail} » → ${t.fillEmail} (${t.refNom})`
+      : `Mail courtier rempli via la base : ${t.fillEmail} (${t.refNom})`;
     await prisma.pipelineEvent.create({
-      data: { pipelineId: t.pipelineId, type: "action_manuelle", description: `Mail courtier rempli via la base : ${t.fillEmail} (${t.refNom})`, metadata: { auto: "courtier_mail_fill", email: t.fillEmail, refNom: t.refNom }, createdBy: actorEmail },
+      data: { pipelineId: t.pipelineId, type: "action_manuelle", description: desc, metadata: { auto: "courtier_mail_fill", email: t.fillEmail, refNom: t.refNom, previous: prevMail || null }, createdBy: actorEmail },
     });
     details.push({ pipelineId: t.pipelineId, nom: t.nom, email: t.fillEmail! });
   }
