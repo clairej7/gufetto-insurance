@@ -392,3 +392,23 @@ model GhcReview {
   @@index([createdAt])
   @@index([kind])
 }
+
+// Automatisation 3 — base de référence des courtiers/cabinets et de leur mail type.
+// Sert à (1) reconnaître qu'un « assureur » est en réalité un courtier, (2) compléter
+// le mail courtier manquant avant l'envoi des demandes de RS (auto 4). Alimentée par
+// la liste fournie par Quentin + un scraping des mails courtier vus dans Front.
+model CourtierRef {
+  id          String   @id @default(cuid())
+  nom         String   // nom du courtier / cabinet (tel qu'affiché)
+  nomNorm     String   // nom normalisé (minuscule, sans accents) — clé de rapprochement
+  email       String?  // mail type / de contact du courtier
+  assureur    String?  // compagnie(s) associée(s), optionnel
+  source      String   @default("manuel") // "manuel" | "import" | "front"
+  occurrences Int      @default(0) // nb d'apparitions (ex. vu N fois dans Front)
+  verifie     Boolean  @default(false) // email vérifié / validé manuellement
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([nomNorm])
+}

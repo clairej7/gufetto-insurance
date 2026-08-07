@@ -13,6 +13,7 @@ import { getPrimeCleanHistory } from "@/lib/prime";
 import { computePerimeState, getPerimeCleanHistory, ensurePerimeBaseline } from "@/lib/perime";
 import { GhcApplyButton } from "@/components/admin/ghc-apply-button";
 import { computeGhcState, getGhcImportHistory, getGhcReviews } from "@/lib/ghc";
+import { getCourtierRefState, getCourtierRefSample } from "@/lib/courtier-ref";
 import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 
 type Etat = "deploye" | "encours" | "attente";
@@ -80,6 +81,9 @@ export default async function AutomatisationsPage() {
   const ghcState = await computeGhcState();
   const ghcHistory = await getGhcImportHistory();
   const ghcReviews = await getGhcReviews();
+  // Auto 3 — base de référence courtiers.
+  const courtierState = await getCourtierRefState();
+  const courtierSample = await getCourtierRefSample();
   const ghcReviewLabel: Record<string, string> = { prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
 
@@ -113,7 +117,7 @@ export default async function AutomatisationsPage() {
     {
       n: 3,
       nom: "Complétion du mail courtier",
-      etat: "attente",
+      etat: "encours",
       description: [
         "Cette automatisation s'applique uniquement à l'étape « Récupération du RS » (RS en cours). Son but : mieux trouver le mail du courtier lorsqu'il est correctement identifié, afin de pouvoir ensuite envoyer plus facilement le mail de demande de RS (automatisation 4). Elle fait deux choses, en s'appuyant sur une base de référence de courtiers et d'assureurs.",
         "1) Filtre de vérification courtier / assureur : chaque dossier arrivant du pré-remplissage est repassé au crible. L'assureur trouvé à l'étape précédente est vérifié dans la base ; s'il s'agit en réalité d'un courtier (erreur fréquente), le dossier est renvoyé à l'étape « Identification » plutôt que de rester bloqué en RS avec une donnée fausse.",
@@ -256,6 +260,46 @@ export default async function AutomatisationsPage() {
                     </summary>
                     <div style={{ marginTop: 10 }}>
                       <OdrControls template={ODR_TEMPLATE_TEXT} partners={odrPartners} sent={odrSent} history={odrHistory} />
+                    </div>
+                  </details>
+                )}
+
+                {a.n === 3 && (
+                  <details style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                    <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content" }}>
+                      Contrôles admin
+                    </summary>
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C", marginBottom: 4 }}>Base de référence courtiers</div>
+                      <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
+                        <strong>{courtierState.total}</strong> courtier{courtierState.total > 1 ? "s" : ""} référencé{courtierState.total > 1 ? "s" : ""} · <strong style={{ color: "#13762C" }}>{courtierState.avecEmail}</strong> avec mail · {courtierState.sansEmail} sans mail.
+                        {courtierState.total === 0 && " Base vide — à alimenter en 2 temps : (1) import de ta liste, (2) scraping des mails courtier vus dans Front."}
+                      </p>
+                      {courtierState.total > 0 && (
+                        <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 280, border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                            <thead>
+                              <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                                {["Courtier", "Mail", "Assureur", "Source", "Vu"].map((h, i) => (
+                                  <th key={i} style={{ padding: "7px 12px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC", textAlign: i === 4 ? "right" : "left" }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {courtierSample.map((c) => (
+                                <tr key={c.id} style={{ borderTop: "1px solid #F1F1F4" }}>
+                                  <td style={{ padding: "6px 12px", color: "#26262C" }}>{c.nom}</td>
+                                  <td style={{ padding: "6px 12px", color: c.email ? "#26262C" : "#CA1E12" }}>{c.email ?? "manquant"}</td>
+                                  <td style={{ padding: "6px 12px", color: "#656576" }}>{c.assureur ?? "—"}</td>
+                                  <td style={{ padding: "6px 12px", color: "#A2A1AF" }}>{c.source}</td>
+                                  <td style={{ padding: "6px 12px", color: "#A2A1AF", textAlign: "right" }}>{c.occurrences || "—"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      <p style={{ fontSize: 12, color: "#A2A1AF", marginTop: 10 }}>Prochaines étapes : (1) importer la base fournie, (2) scraper Front pour compléter les mails manquants, puis brancher le filtre courtier/assureur + la complétion sur les dossiers en « RS en cours ».</p>
                     </div>
                   </details>
                 )}
