@@ -19,7 +19,7 @@ type Task = {
   pipeline: {
     id: string;
     copro: { nom: string };
-  };
+  } | null;
 };
 
 export function TasksList({ tasks }: { tasks: Task[] }) {
@@ -133,14 +133,20 @@ function TaskCard({ task }: { task: Task }) {
           <p className="text-xs mt-0.5" style={{ color: "#656576" }}>{task.body}</p>
         )}
         <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-          <Link
-            href={`/pipeline/${task.pipeline.id}`}
-            className="inline-flex items-center gap-1 text-xs hover:underline"
-            style={{ color: "#4E49FC" }}
-          >
-            <ExternalLink className="h-3 w-3" />
-            {task.pipeline.copro.nom}
-          </Link>
+          {task.pipeline ? (
+            <Link
+              href={`/pipeline/${task.pipeline.id}`}
+              className="inline-flex items-center gap-1 text-xs hover:underline"
+              style={{ color: "#4E49FC" }}
+            >
+              <ExternalLink className="h-3 w-3" />
+              {task.pipeline.copro.nom}
+            </Link>
+          ) : (
+            <span className="inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded" style={{ color: "#656576", background: "#F1F1F4" }}>
+              Général
+            </span>
+          )}
           {isDone && task.completedAt && (
             <span className="text-xs" style={{ color: "#A2A1AF" }}>
               Terminée le {new Date(task.completedAt).toLocaleDateString("fr-FR")}
