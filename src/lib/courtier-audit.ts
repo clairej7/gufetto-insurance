@@ -283,3 +283,25 @@ export async function autofillCourtierMails(actorEmail: string, pipelineId?: str
   const after = await getCourtierAudit(pipelineId);
   return { filled: details.length, before, after, details };
 }
+
+// « Enlever les non-remplissables » : bascule les dossiers ORANGE non remplissables
+// (courtier hors base / non résolvable) en « sans courtier » en vidant courtierActuel.
+// Le nom d'origine est conservé dans un event (rien de perdu). Cliquet posé →
+// Omni ne repeuplera pas le champ. But : échantillon 100 % clean (plus d'orange).
+export async function clearNonFillableCourtiers(actorEmail: string, pipelineId?: string): Promise<{ cleared: number; before: CourtierAudit; after: CourtierAudit; details: { pipelineId: string; nom: string; previous: string }[] }> {
+  const before = await getCourtierAudit(pipelineId);
+  const targets = before.rows.filter((r) => r.bucket === "orange" && !r.fillable);
+  const details: { pipelineId: string; nom: string; previous: string }[] = [];
+  for (const t of targets) {
+    const cur = await prisma.insurancePipeline.findUnique({ where: { id: t.pipelineId }, select: { copro: { select: { id: true, courtierActuel: true } } } });
+    if (!cur) continue;
+    const previous = (cur.copro.courtierActuel ?? "").trim();
+    await prisma.copro.update({ where: { id: cur.copro.id }, data: { courtierActuel: null, contratVerrouilleLe: new Date() } });
+    await prisma.pipelineEvent.create({
+      data: { pipelineId: t.pipelineId, type: "action_manuelle", description: `Courtier « ${previous || "?"} » retiré (non résolvable via la base) → classé sans courtier`, metadata: { auto: "courtier_clear_nonfillable", previous: previous || null }, createdBy: actorEmail },
+    });
+    details.push({ pipelineId: t.pipelineId, nom: t.nom, previous });
+  }
+  const after = await getCourtierAudit(pipelineId);
+  return { cleared: details.length, before, after, details };
+}

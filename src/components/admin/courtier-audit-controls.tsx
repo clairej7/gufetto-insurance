@@ -8,7 +8,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, AlertTriangle, XCircle, ListChecks, Wand2, Loader2 } from "lucide-react";
+import { CheckCircle2, AlertTriangle, XCircle, ListChecks, Wand2, Loader2, Eraser } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -44,14 +44,16 @@ function Buckets({ counts, total }: { counts: Counts; total: number }) {
 export function CourtierAuditControls() {
   const router = useRouter();
   const [audit, setAudit] = useState<Audit | null>(null);
-  const [after, setAfter] = useState<{ counts: Counts; total: number; fillable: number } | null>(null);
+  const [mutated, setMutated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [filling, setFilling] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [showOrange, setShowOrange] = useState(false);
+
+  const nonFillable = audit ? audit.orange.filter((r) => !r.fillable).length : 0;
 
   async function verify() {
     setLoading(true);
-    setAfter(null);
     try {
       const res = await fetch("/api/courtier/audit");
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
@@ -70,13 +72,33 @@ export function CourtierAuditControls() {
       const res = await fetch("/api/courtier/autofill", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
       const data = await res.json();
-      setAfter(data.after);
       toast.success(`${data.filled} mail(s) courtier rempli(s) via la base.`);
+      setMutated(true);
       router.refresh();
+      await verify();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Échec du remplissage");
     } finally {
       setFilling(false);
+    }
+  }
+
+  async function clearNonFillable() {
+    if (!audit || nonFillable === 0) return;
+    if (!window.confirm(`Basculer ${nonFillable} dossier(s) « courtier hors base non résolvable » en « sans courtier » ?\n\nLe champ courtier sera vidé (le nom d'origine reste tracé dans l'historique du dossier). But : plus aucun dossier orange.`)) return;
+    setClearing(true);
+    try {
+      const res = await fetch("/api/courtier/clear-nonfillable", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      const data = await res.json();
+      toast.success(`${data.cleared} dossier(s) basculé(s) en « sans courtier ».`);
+      setMutated(true);
+      router.refresh();
+      await verify();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Échec de l'opération");
+    } finally {
+      setClearing(false);
     }
   }
 
@@ -93,12 +115,20 @@ export function CourtierAuditControls() {
           {filling ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}
           Remplir automatiquement les mails courtiers{audit ? ` (${audit.fillable})` : ""}
         </Button>
+        <Button onClick={clearNonFillable} disabled={!audit || clearing || nonFillable === 0} variant="outline" size="sm">
+          {clearing ? <Loader2 size={15} className="animate-spin" /> : <Eraser size={15} />}
+          Enlever les non-remplissables{audit ? ` (${nonFillable})` : ""}
+        </Button>
       </div>
 
       {audit && (
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 12, color: "#A2A1AF", marginBottom: 6 }}>
-            {after ? "Avant remplissage" : `${audit.total} dossiers en « Récupération du RS »`}
+          <div style={{ fontSize: 12, marginBottom: 6, color: mutated && audit.counts.orange === 0 ? "#13762C" : "#A2A1AF", fontWeight: mutated && audit.counts.orange === 0 ? 600 : 400 }}>
+            {mutated
+              ? audit.counts.orange === 0
+                ? `✓ Échantillon clean : ${audit.total} dossiers, aucun orange restant`
+                : `État après action — ${audit.total} dossiers en « Récupération du RS »`
+              : `${audit.total} dossiers en « Récupération du RS »`}
           </div>
           <Buckets counts={audit.counts} total={audit.total} />
 
@@ -151,13 +181,6 @@ export function CourtierAuditControls() {
               </p>
             </div>
           )}
-        </div>
-      )}
-
-      {after && (
-        <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#13762C", marginBottom: 6 }}>État final après remplissage</div>
-          <Buckets counts={after.counts} total={after.total} />
         </div>
       )}
     </div>
