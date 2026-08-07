@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 
 type Counts = { vert: number; orange: number; rouge: number };
 type OrangeRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; refNom: string | null; mail: string | null; fillable: boolean; fillEmail: string | null };
-type ReadyRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; mail: string | null };
+type ReadyRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; mail: string | null; rsSent: boolean };
 type HistRow = { sentAt: string; count: number };
 type Audit = { counts: Counts; total: number; stepTotal: number; fillable: number; orange: OrangeRow[]; ready: ReadyRow[]; history: HistRow[] };
 
@@ -91,7 +91,7 @@ export function CourtierAuditControls() {
 
   async function sendToAuto4() {
     if (!audit || !isClean) return;
-    if (!window.confirm(`Charger l'échantillon clean (${audit.ready.length} dossier(s) courtier + mail, RS non envoyée) dans l'automatisation 4 ?`)) return;
+    if (!window.confirm(`Charger l'échantillon clean (${audit.ready.length} dossier(s) courtier + mail) dans l'automatisation 4 ?`)) return;
     setSending(true);
     try {
       const res = await fetch("/api/courtier/send-to-auto4", { method: "POST" });
@@ -207,7 +207,7 @@ export function CourtierAuditControls() {
           {/* Échantillon clean prêt pour l'auto 4 (courtier + mail, RS non envoyée). */}
           <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #F1F1F4" }}>
             <button onClick={() => setShowReady((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#13762C", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-              {showReady ? "▾" : "▸"} Échantillon clean prêt pour l&apos;envoi RS — {audit.ready.length} dossier(s)
+              {showReady ? "▾" : "▸"} Échantillon clean pour l&apos;auto 4 — {audit.ready.length} dossier(s){audit.ready.some((r) => r.rsSent) ? ` (dont ${audit.ready.filter((r) => r.rsSent).length} RS déjà envoyée)` : ""}
             </button>
             {showReady && (
               <div style={{ marginTop: 8, maxHeight: 340, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
@@ -224,6 +224,7 @@ export function CourtierAuditControls() {
                       <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
                         <td style={{ padding: "6px 10px", color: "#26262C" }}>
                           <a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a>
+                          {r.rsSent && <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 600, padding: "1px 6px", borderRadius: 999, background: "#EAF3FE", color: "#1F6FE0" }}>RS déjà envoyée</span>}
                         </td>
                         <td style={{ padding: "6px 10px", color: "#656576" }}>{r.assureur || "—"}</td>
                         <td style={{ padding: "6px 10px", color: "#656576" }}>{r.courtier || "—"}</td>

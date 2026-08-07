@@ -326,10 +326,11 @@ export async function clearNonFillableCourtiers(actorEmail: string, pipelineId?:
   return { cleared: details.length, before, after, details };
 }
 
-// Dossiers « prêts pour l'envoi RS » = bucket vert (courtier + mail) qui n'ont PAS
-// déjà reçu une demande de RS. C'est l'échantillon clean qu'on charge dans l'auto 4.
+// Échantillon clean chargé dans l'auto 4 = TOUS les dossiers verts (courtier + mail),
+// y compris ceux dont la RS a déjà été envoyée : l'auto 4 fera le tri (nouvel envoi
+// vs relance/traitement de réponse) via le marqueur draft_sent.
 export function readySample(audit: CourtierAudit): CourtierAuditRow[] {
-  return audit.rows.filter((r) => r.bucket === "vert" && !r.rsSent);
+  return audit.rows.filter((r) => r.bucket === "vert");
 }
 
 // Charge l'échantillon clean dans l'automatisation 4 : pose rsBatchAt sur les
