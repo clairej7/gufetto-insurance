@@ -118,12 +118,16 @@ export function Rs4Controls({ volet1Count, volet2, volet3 }: { volet1Count: numb
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setMoving(false); }
   }
 
-  async function sendVolet2() {
+  async function sendVolet2(limit?: number) {
     if (volet2.nouveaux === 0 && volet2.dejaEnvoyes === 0) return;
-    if (!window.confirm(`Envoyer ${volet2.nouveaux} demande(s) de RS aux courtiers maintenant ?${volet2.dejaEnvoyes ? `\n(${volet2.dejaEnvoyes} dossier(s) déjà envoyé(s) auparavant seront juste basculés au suivi, sans nouveau mail.)` : ""}`)) return;
+    const n = limit ? Math.min(limit, volet2.nouveaux) : volet2.nouveaux;
+    const msg = limit
+      ? `Envoyer un lot de test de ${n} demande(s) de RS ?`
+      : `Envoyer ${volet2.nouveaux} demande(s) de RS aux courtiers maintenant ?${volet2.dejaEnvoyes ? `\n(${volet2.dejaEnvoyes} dossier(s) déjà envoyé(s) seront basculés au suivi, sans nouveau mail.)` : ""}`;
+    if (!window.confirm(msg)) return;
     setSending(true);
     try {
-      const res = await fetch("/api/rs4/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subject, body }) });
+      const res = await fetch("/api/rs4/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subject, body, ...(limit ? { limit } : {}) }) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
       const data = await res.json();
       toast.success(`${data.sent} mail(s) envoyé(s)${data.movedExisting ? `, ${data.movedExisting} basculé(s) au suivi` : ""}${data.failed ? `, ${data.failed} échec(s)` : ""}.`);
@@ -220,9 +224,12 @@ export function Rs4Controls({ volet1Count, volet2, volet3 }: { volet1Count: numb
                 <p style={{ fontSize: 11, color: "#A2A1AF", margin: 0 }}>Ta signature Front est ajoutée automatiquement en pied de chaque mail. Pas de pièce jointe (n° de contrat connu).</p>
               </div>
             )}
-            <div style={{ marginTop: 12 }}>
-              <Button onClick={sendVolet2} disabled={sending || volet2.nouveaux === 0} size="sm">
+            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <Button onClick={() => sendVolet2()} disabled={sending || volet2.nouveaux === 0} size="sm">
                 {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Envoyer {volet2.nouveaux} demande{volet2.nouveaux > 1 ? "s" : ""} de RS
+              </Button>
+              <Button onClick={() => sendVolet2(5)} disabled={sending || volet2.nouveaux === 0} variant="outline" size="sm">
+                {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Envoyer un lot de {Math.min(5, volet2.nouveaux)} (test)
               </Button>
             </div>
           </>

@@ -38,10 +38,12 @@ function renderHtml(text: string, signatureHtml: string | null, hiddenRef: strin
 
 // Envoi d'UN mail via Front (channel messages = envoi réel). Best-effort tag +
 // assignation au gestionnaire. Renvoie le conversationId ou null si échec.
-async function frontSend(opts: { to: string; subject: string; html: string; pipelineId: string; gestionnaireEmail: string | null }): Promise<{ ok: boolean; conversationId: string | null; error?: string }> {
+async function frontSend(opts: { to: string; subject: string; html: string; pipelineId: string; gestionnaireEmail: string | null; authorEmail: string }): Promise<{ ok: boolean; conversationId: string | null; error?: string }> {
   if (!FRONT_TOKEN || !FRONT_CHANNEL_ID) return { ok: false, conversationId: null, error: "Front non configuré" };
   const form = new FormData();
-  form.append("author_id", `alt:email:${FRONT_AUTHOR_EMAIL}`);
+  // Auteur = teammate qui déclenche l'envoi → nom d'expéditeur correct + sa
+  // signature (une adresse partagée non-teammate afficherait le nom du channel).
+  form.append("author_id", `alt:email:${opts.authorEmail || FRONT_AUTHOR_EMAIL}`);
   form.append("to[]", opts.to);
   form.append("subject", opts.subject);
   form.append("body", opts.html);
@@ -143,33 +145,41 @@ export async function getRs4Volet2Data(): Promise<Volet2Data> {
 // Envoie la demande de RS aux « nouveaux » (jamais envoyée) et fait passer au
 // volet 3 (rs4SentAt). Les dossiers dont la RS était DÉJÀ partie ne sont pas
 // re-mailés : on les bascule au volet 3 avec leur date d'envoi d'origine.
-export async function sendVolet2(actorEmail: string, subjectTpl: string, bodyTpl: string): Promise<{ sent: number; failed: number; movedExisting: number; errors: string[] }> {
+// `limit` : n'envoyer qu'un lot de N nouveaux (test) sans toucher au reste.
+export async function sendVolet2(actorEmail: string, subjectTpl: string, bodyTpl: string, limit?: number): Promise<{ sent: number; failed: number; movedExisting: number; errors: string[] }> {
   const ps = await volet2Candidates();
   const signature = await getSignatureHtml(actorEmail);
   let sent = 0, failed = 0, movedExisting = 0;
   const errors: string[] = [];
   const now = new Date();
-  for (const p of ps) {
+
+  const nouveaux = ps.filter((p) => p.events.length === 0);
+  const deja = ps.filter((p) => p.events.length > 0);
+  const toSend = typeof limit === "number" && limit > 0 ? nouveaux.slice(0, limit) : nouveaux;
+
+  for (const p of toSend) {
     const c = p.copro;
-    if (p.events.length > 0) {
-      // déjà envoyée : pas de nouveau mail → suivi/relances à partir de la date d'origine.
-      const first = p.events.reduce((a, e) => (e.createdAt < a ? e.createdAt : a), p.events[0].createdAt);
-      await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4SentAt: first } });
-      movedExisting++;
-      continue;
-    }
     const to = c.contactCourtierEmail?.split(/[;,]/)[0]?.trim() || "";
     if (!to) { failed++; errors.push(`${c.nom} : pas de mail`); continue; }
     const vars = { adresse: c.adresse || c.nom, assureur: c.assureurActuel || "", numeroContrat: c.numeroContrat || "", nom: c.nom };
     const subject = fillTemplate(subjectTpl, vars);
     const html = renderHtml(fillTemplate(bodyTpl, vars), signature, `<span style="display:none;font-size:0;line-height:0;color:transparent">gufetto-ref:${p.id}:rs</span>`);
-    const r = await frontSend({ to, subject, html, pipelineId: p.id, gestionnaireEmail: c.gestionnaireEmail });
+    const r = await frontSend({ to, subject, html, pipelineId: p.id, gestionnaireEmail: c.gestionnaireEmail, authorEmail: actorEmail });
     if (!r.ok) { failed++; errors.push(`${c.nom} : ${r.error ?? "échec"}`); continue; }
     await prisma.$transaction([
       prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4SentAt: now } }),
       prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Demande de RS envoyée au courtier (${to})`, metadata: { rsType: "draft_sent", relanceNum: 0, to, conversationId: r.conversationId, auto: "rs4_send" }, createdBy: actorEmail } }),
     ]);
     sent++;
+  }
+
+  // Un lot limité (test) ne touche pas aux déjà-envoyés ; l'envoi complet, si.
+  if (!(typeof limit === "number" && limit > 0)) {
+    for (const p of deja) {
+      const first = p.events.reduce((a, e) => (e.createdAt < a ? e.createdAt : a), p.events[0].createdAt);
+      await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4SentAt: first } });
+      movedExisting++;
+    }
   }
   return { sent, failed, movedExisting, errors: errors.slice(0, 20) };
 }
@@ -218,7 +228,7 @@ export async function sendRelance(actorEmail: string, relanceNum: number, subjec
     const vars = { adresse: c.adresse || c.nom, assureur: c.assureurActuel || "", numeroContrat: c.numeroContrat || "", nom: c.nom, jours: String(jours) };
     const subject = fillTemplate(subjectTpl, vars);
     const html = renderHtml(fillTemplate(bodyTpl, vars), signature, `<span style="display:none;font-size:0;line-height:0;color:transparent">gufetto-ref:${p.id}:rs_relance</span>`);
-    const r = await frontSend({ to, subject, html, pipelineId: p.id, gestionnaireEmail: c.gestionnaireEmail });
+    const r = await frontSend({ to, subject, html, pipelineId: p.id, gestionnaireEmail: c.gestionnaireEmail, authorEmail: actorEmail });
     if (!r.ok) { failed++; errors.push(`${c.nom} : ${r.error ?? "échec"}`); continue; }
     await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Relance ${relanceNum} de la demande de RS envoyée (${to})`, metadata: { rsType: "draft_sent", relanceNum, to, conversationId: r.conversationId, auto: "rs4_relance" }, createdBy: actorEmail } });
     sent++;
