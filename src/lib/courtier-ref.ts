@@ -19,20 +19,22 @@ export type CourtierRefState = {
   assureurs: number;
   courtiersAvecMail: number;
   courtiersSansMail: number;
+  decouverts: number; // source=front, à vérifier
   parSource: Record<string, number>;
 };
 
 export async function getCourtierRefState(): Promise<CourtierRefState> {
-  const [total, courtiers, assureurs, courtiersAvecMail, bySource] = await Promise.all([
+  const [total, courtiers, assureurs, courtiersAvecMail, decouverts, bySource] = await Promise.all([
     prisma.courtierRef.count(),
     prisma.courtierRef.count({ where: { type: "courtier" } }),
     prisma.courtierRef.count({ where: { type: "assureur" } }),
     prisma.courtierRef.count({ where: { type: "courtier", NOT: { email: null } } }),
+    prisma.courtierRef.count({ where: { source: "front" } }),
     prisma.courtierRef.groupBy({ by: ["source"], _count: true }),
   ]);
   const parSource: Record<string, number> = {};
   for (const r of bySource) parSource[r.source] = r._count;
-  return { total, courtiers, assureurs, courtiersAvecMail, courtiersSansMail: courtiers - courtiersAvecMail, parSource };
+  return { total, courtiers, assureurs, courtiersAvecMail, courtiersSansMail: courtiers - courtiersAvecMail, decouverts, parSource };
 }
 
 export type CourtierRefRow = { id: string; nom: string; type: string; email: string | null; emailsAll: string | null; assureur: string | null; source: string; occurrences: number; verifie: boolean };
