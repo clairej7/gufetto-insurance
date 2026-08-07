@@ -16,7 +16,7 @@ type Counts = { vert: number; orange: number; rouge: number };
 type OrangeRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; refNom: string | null; mail: string | null; fillable: boolean; fillEmail: string | null };
 type ReadyRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; mail: string | null };
 type HistRow = { sentAt: string; count: number };
-type Audit = { counts: Counts; total: number; fillable: number; orange: OrangeRow[]; ready: ReadyRow[]; history: HistRow[] };
+type Audit = { counts: Counts; total: number; stepTotal: number; fillable: number; orange: OrangeRow[]; ready: ReadyRow[]; history: HistRow[] };
 
 function Buckets({ counts, total }: { counts: Counts; total: number }) {
   const items = [
@@ -149,11 +149,8 @@ export function CourtierAuditControls() {
       {audit && (
         <div style={{ marginTop: 14 }}>
           <div style={{ fontSize: 12, marginBottom: 6, color: mutated && audit.counts.orange === 0 ? "#13762C" : "#A2A1AF", fontWeight: mutated && audit.counts.orange === 0 ? 600 : 400 }}>
-            {mutated
-              ? audit.counts.orange === 0
-                ? `✓ Échantillon clean : ${audit.total} dossiers, aucun orange restant`
-                : `État après action — ${audit.total} dossiers en « Récupération du RS »`
-              : `${audit.total} dossiers en « Récupération du RS »`}
+            {mutated && audit.counts.orange === 0 && "✓ Échantillon clean — "}
+            {audit.stepTotal} dossiers en « Récupération du RS », {audit.total} encore en cours de vérification avant d&apos;envoyer à l&apos;automatisation 4
           </div>
           <Buckets counts={audit.counts} total={audit.total} />
 
