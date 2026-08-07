@@ -203,8 +203,10 @@ model InsurancePipeline {
 
 model Task {
   id            String            @id @default(cuid())
-  pipelineId    String
-  pipeline      InsurancePipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  // Optionnel : une tâche peut être transverse (backlog projet / clean data) sans
+  // dossier rattaché — elle s'affiche alors comme « Général » dans l'onglet Tâches.
+  pipelineId    String?
+  pipeline      InsurancePipeline? @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
 
   name          String
   body          String?   @db.Text
