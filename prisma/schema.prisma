@@ -200,6 +200,11 @@ model InsurancePipeline {
   // Auto 4 Volet 1 → Volet 2 : dossier « infos complètes » validé et passé au
   // volet d'envoi des mails. Posé par « Passer les X dossiers complets au volet 2 ».
   rs4Volet2At DateTime?
+  // Auto 4 Volet 2 → Volet 3 : date d'envoi de la demande de RS (ou date de l'envoi
+  // d'origine pour les dossiers déjà relancés). Sert de point de départ au compteur
+  // « X jours depuis l'envoi » et à l'éligibilité des relances. Sortie de la boucle
+  // quand le RS est reçu (le dossier quitte rs_en_cours).
+  rs4SentAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
