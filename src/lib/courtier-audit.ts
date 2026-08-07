@@ -147,7 +147,7 @@ export function resolveCourtier(raw: string | null | undefined, idx: CourtierInd
 export type Bucket = "vert" | "orange" | "rouge";
 export type CourtierAuditRow = {
   pipelineId: string; nom: string; buildingId: string; adresse: string | null;
-  courtier: string | null; mail: string | null; assureur: string | null;
+  courtier: string | null; mail: string | null; cleanMail: string | null; assureur: string | null;
   bucket: Bucket; reason: string;
   refNom: string | null; horsBase: boolean;
   fillable: boolean; fillEmail: string | null;
@@ -191,13 +191,29 @@ function mailCoherent(field: string, res: Resolution, idx: CourtierIndex): boole
   return domains.some((d) => { const o = idx.byDomain.get(d); return GENERIC_DOM.has(d) || !o || o.type !== "assureur"; });
 }
 
+// Sur un courtier CONNU avec plusieurs mails, ne garde que ceux dont le domaine
+// est celui du courtier (ou de son groupe). Renvoie le champ inchangé si : courtier
+// hors base, un seul mail, ou aucun mail au bon domaine (rien à élaguer sûrement).
+function keepCourtierDomainMails(field: string, res: Resolution, idx: CourtierIndex): string {
+  if (res.kind !== "courtier" || !res.ref) return field;
+  const mails = field.split(/[;,]/).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s));
+  if (mails.length <= 1) return field;
+  const doms = expandDomains((res.ref.emailsAll ?? res.ref.email ?? "").split(";").map((s) => domainOf(s.trim())).filter(Boolean));
+  const kept = mails.filter((m) => doms.has(domainOf(m)));
+  if (kept.length === 0 || kept.length === mails.length) return field;
+  return kept.join(", ");
+}
+
 export function classify(
   row: { pipelineId: string; courtier: string | null; mail: string | null; assureur: string | null; rsSent: boolean; nom: string; buildingId: string; adresse: string | null },
   idx: CourtierIndex,
 ): CourtierAuditRow {
   const res = resolveCourtier(row.courtier, idx);
   const mail = row.mail?.trim() || null;
-  const base = { pipelineId: row.pipelineId, nom: row.nom, buildingId: row.buildingId, adresse: row.adresse ?? null, courtier: row.courtier ?? null, mail, assureur: row.assureur ?? null, rsSent: row.rsSent, refNom: res.kind === "courtier" || res.kind === "assureur" ? (res.ref?.nom ?? null) : null, horsBase: res.kind === "courtier" && !res.ref };
+  // Mail nettoyé : sur un courtier connu avec plusieurs mails, on ne garde que
+  // ceux au domaine du courtier (ou de son groupe). Sinon = mail inchangé.
+  const cleanMail = mail ? keepCourtierDomainMails(mail, res, idx) : null;
+  const base = { pipelineId: row.pipelineId, nom: row.nom, buildingId: row.buildingId, adresse: row.adresse ?? null, courtier: row.courtier ?? null, mail, cleanMail, assureur: row.assureur ?? null, rsSent: row.rsSent, refNom: res.kind === "courtier" || res.kind === "assureur" ? (res.ref?.nom ?? null) : null, horsBase: res.kind === "courtier" && !res.ref };
 
   // Remarque 3 : RS déjà envoyée → vert d'office.
   if (row.rsSent) return { ...base, bucket: "vert", reason: "RS déjà envoyée", fillable: false, fillEmail: null };
@@ -323,6 +339,14 @@ export async function sendCleanSampleToAuto4(actorEmail: string): Promise<{ load
   const ready = readySample(audit);
   const now = new Date();
   for (const r of ready) {
+    // Nettoyage des mails multiples : ne garder que le domaine courtier avant l'envoi.
+    if (r.cleanMail && r.mail && r.cleanMail !== r.mail) {
+      const cop = await prisma.insurancePipeline.findUnique({ where: { id: r.pipelineId }, select: { copro: { select: { id: true } } } });
+      if (cop) {
+        await prisma.copro.update({ where: { id: cop.copro.id }, data: { contactCourtierEmail: r.cleanMail, contratVerrouilleLe: now } });
+        await prisma.pipelineEvent.create({ data: { pipelineId: r.pipelineId, type: "action_manuelle", description: `Mails non-courtier retirés avant envoi RS : « ${r.mail} » → ${r.cleanMail}`, metadata: { auto: "courtier_mail_prune", previous: r.mail, kept: r.cleanMail }, createdBy: actorEmail }, });
+      }
+    }
     await prisma.insurancePipeline.update({ where: { id: r.pipelineId }, data: { rsBatchAt: now } });
   }
   if (ready.length) {
