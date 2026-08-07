@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { AdminBoard } from "@/components/admin/admin-board";
+import { getPrimeByStage } from "@/lib/prime";
 
 export default async function AdminPage() {
   const session = await auth();
@@ -38,6 +39,7 @@ export default async function AdminPage() {
   });
 
   const taskTemplates = await prisma.stageTaskTemplate.findMany();
+  const primeStages = await getPrimeByStage();
 
   const gestionnaires = [
     ...new Set(
@@ -81,6 +83,7 @@ export default async function AdminPage() {
           gestionnaires={gestionnaires}
           events={events as Parameters<typeof AdminBoard>[0]["events"]}
           lostPipelines={lostPipelines as Parameters<typeof AdminBoard>[0]["lostPipelines"]}
+          primeStages={primeStages}
         />
       </main>
     </div>

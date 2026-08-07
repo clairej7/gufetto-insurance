@@ -9,7 +9,7 @@ import { VerifyPrimesBatchButton } from "@/components/admin/verify-primes-batch-
 import { OdrControls } from "@/components/admin/odr-controls";
 import { PrimeBatchButton } from "@/components/admin/prime-batch-button";
 import { PerimeBatchButton } from "@/components/admin/perime-batch-button";
-import { getPrimeCleanHistory, getPrimeByStage } from "@/lib/prime";
+import { getPrimeCleanHistory } from "@/lib/prime";
 import { computePerimeState, getPerimeCleanHistory, ensurePerimeBaseline } from "@/lib/perime";
 import { GhcApplyButton } from "@/components/admin/ghc-apply-button";
 import { computeGhcState, getGhcImportHistory, getGhcReviews } from "@/lib/ghc";
@@ -72,7 +72,6 @@ export default async function AutomatisationsPage() {
     where: { copro: { archivedAt: null, primeActuelle: null, primeVerifTenteLe: null } },
   });
   const primeHistory = await getPrimeCleanHistory();
-  const primeStages = await getPrimeByStage();
   // Composant « clean avis d'échéance » : compteurs live (concernés / résolus) + historique.
   await ensurePerimeBaseline();
   const perime = await computePerimeState();
@@ -83,9 +82,6 @@ export default async function AutomatisationsPage() {
   const ghcReviews = await getGhcReviews();
   const ghcReviewLabel: Record<string, string> = { prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
-  const fmtEurC = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} M€` : n >= 1e3 ? `${Math.round(n / 1e3)} k€` : `${Math.round(n)} €`);
-  // Vert (peu d'inconnu) → rouge (bcp d'inconnu) selon le taux de primes connues.
-  const stageColor = (tauxInconnu: number) => `hsl(${Math.round((1 - tauxInconnu) * 125)}, 62%, 42%)`;
 
   const automations: {
     n: number;
@@ -238,71 +234,59 @@ export default async function AutomatisationsPage() {
 
                 {/* Contrôles admin — pour l'instant uniquement l'auto 1 (le batch). */}
                 {a.n === 1 && (
-                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
+                  <details style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                    <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content" }}>
                       Contrôles admin
+                    </summary>
+                    <div style={{ marginTop: 10 }}>
+                      <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
+                        {eligibleAuto1} dossier{eligibleAuto1 > 1 ? "s" : ""} en « Identification » encore à pré-remplir
+                        (hors dossiers déjà clients / gagnés).
+                      </p>
+                      <AutofillBatchButton defaultTarget={Math.min(100, eligibleAuto1)} stock={eligibleAuto1} />
                     </div>
-                    <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
-                      {eligibleAuto1} dossier{eligibleAuto1 > 1 ? "s" : ""} en « Identification » encore à pré-remplir
-                      (hors dossiers déjà clients / gagnés).
-                    </p>
-                    <AutofillBatchButton defaultTarget={Math.min(100, eligibleAuto1)} stock={eligibleAuto1} />
-                  </div>
+                  </details>
                 )}
 
                 {/* Contrôles admin — automatisation 2 : ODR (export / template / envoi). */}
                 {a.n === 2 && (
-                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
+                  <details style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                    <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content" }}>
                       Contrôles admin
+                    </summary>
+                    <div style={{ marginTop: 10 }}>
+                      <OdrControls template={ODR_TEMPLATE_TEXT} partners={odrPartners} sent={odrSent} history={odrHistory} />
                     </div>
-                    <OdrControls template={ODR_TEMPLATE_TEXT} partners={odrPartners} sent={odrSent} history={odrHistory} />
-                  </div>
+                  </details>
                 )}
 
                 {/* Contrôle admin — automatisation 6 : vérifier toutes les comparaisons. */}
                 {a.n === 6 && (
-                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
+                  <details style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                    <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content" }}>
                       Contrôles admin
+                    </summary>
+                    <div style={{ marginTop: 10 }}>
+                      <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
+                        {eligibleAuto6} comparaison{eligibleAuto6 > 1 ? "s" : ""} de devis en cours — vérifie la dernière prime payée de chacune (via Front) et repère celles à recaler ou les cas étranges. Lecture seule.
+                      </p>
+                      <VerifyPrimesBatchButton stock={eligibleAuto6} />
                     </div>
-                    <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
-                      {eligibleAuto6} comparaison{eligibleAuto6 > 1 ? "s" : ""} de devis en cours — vérifie la dernière prime payée de chacune (via Front) et repère celles à recaler ou les cas étranges. Lecture seule.
-                    </p>
-                    <VerifyPrimesBatchButton stock={eligibleAuto6} />
-                  </div>
+                  </details>
                 )}
 
                 {/* Contrôle admin — automatisation 8 : clean prime. */}
                 {a.n === 8 && (
-                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
+                  <details style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                    <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content", marginBottom: 10 }}>
                       Contrôles admin
-                    </div>
+                    </summary>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C", marginBottom: 4 }}>Volet 1 — Clean prime</div>
                     <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
                       {eligibleAuto8} dossier{eligibleAuto8 > 1 ? "s" : ""} sans prime renseignée (copro active) — dont{" "}
                       <strong>{eligibleAuto8Untried}</strong> jamais tenté{eligibleAuto8Untried > 1 ? "s" : ""} (les runs ne traitent que ceux-là).
                     </p>
                     <PrimeBatchButton stock={eligibleAuto8Untried} />
-
-                    {/* Complétude des primes par étape (miroir Tracking Revenus) */}
-                    <div style={{ marginTop: 16 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6 }}>Complétude des primes par étape</div>
-                      <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-                        {primeStages.map((s) => {
-                          const c = stageColor(s.tauxInconnu);
-                          return (
-                            <div key={s.label} style={{ flex: "0 0 128px", border: "1px solid #E8E8EC", borderTop: `3px solid ${c}`, borderRadius: 8, padding: "8px 10px", background: "#fff" }}>
-                              <div style={{ fontSize: 11, color: "#656576", lineHeight: "14px", minHeight: 28 }}>{s.label}</div>
-                              <div style={{ fontSize: 15, fontWeight: 700, color: "#26262C", marginTop: 4 }}>{fmtEurC(s.montant)}</div>
-                              <div style={{ fontSize: 11, fontWeight: 600, color: c, marginTop: 2 }}>{Math.round(s.tauxInconnu * 100)}% inconnu</div>
-                              <div style={{ fontSize: 10.5, color: "#A2A1AF", marginTop: 1 }}>{s.sansPrime}/{s.total} sans prime</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
 
                     {/* Historique clean prime */}
                     {primeHistory.length > 0 && (
@@ -474,7 +458,7 @@ export default async function AutomatisationsPage() {
                         </div>
                       )}
                     </div>
-                  </div>
+                  </details>
                 )}
               </div>
             );
