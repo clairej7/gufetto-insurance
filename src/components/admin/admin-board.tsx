@@ -702,6 +702,14 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
             );
           })}
         </div>
+
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: "#FFF7EB", border: "1px solid #F5E0B0", borderRadius: 8, padding: "10px 14px", marginTop: 16 }}>
+          <span style={{ fontSize: 14, lineHeight: "18px" }}>🧹</span>
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#7A4E02" }}>Clean data en cours</div>
+            <div style={{ fontSize: 12, color: "#8A5A08", marginTop: 2 }}>La répartition par assureur se base sur l&apos;assureur actuel (souvent l&apos;ancien porteur, d&apos;où un « Autres » élevé). Elle sera fiabilisée via l&apos;enrichissement Matera (contrats fournisseurs).</div>
+          </div>
+        </div>
       </div>
 
       {/* ── Évolution semaine par semaine ── */}
