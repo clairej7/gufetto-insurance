@@ -507,7 +507,10 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                   onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
                   onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                 >
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.copro.nom}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    {(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
+                    <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.copro.nom}</div>
+                  </div>
                   <div style={{ marginTop: "auto", paddingTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
                     <span style={{ minWidth: 0, overflow: "hidden" }}>
                       {nextAction && <Tag variant={ACTION_VARIANT[nextAction.actionType] ?? "neutral"}>{nextAction.shortLabel}</Tag>}
@@ -738,8 +741,11 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                             onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
                             onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                           >
-                            <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {p.copro.nom}
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              {(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
+                              <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {p.copro.nom}
+                              </div>
                             </div>
                             <div style={{ marginTop: 4 }}>
                               <Tag variant="warning">ODR en cours</Tag>
@@ -777,8 +783,11 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                             onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
                             onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                           >
-                            <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {p.copro.nom}
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              {(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
+                              <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {p.copro.nom}
+                              </div>
                             </div>
                             <div style={{ marginTop: 4 }}>
                               <Tag variant="warning">ODR envoyée</Tag>
@@ -817,8 +826,11 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                             onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
                             onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                           >
-                            <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {p.copro.nom}
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              {(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
+                              <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {p.copro.nom}
+                              </div>
                             </div>
                             <div style={{ marginTop: 4 }}>
                               <Tag variant="success">ODR accepté</Tag>
@@ -856,8 +868,11 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                             onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
                             onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                           >
-                            <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {p.copro.nom}
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              {(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
+                              <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {p.copro.nom}
+                              </div>
                             </div>
                             <div style={{ marginTop: 4 }}>
                               <Tag variant="success">Clos</Tag>
@@ -896,8 +911,11 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                             onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,22,63,.08)")}
                             onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                           >
-                            <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {p.copro.nom}
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              {(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
+                              <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {p.copro.nom}
+                              </div>
                             </div>
                             <div style={{ marginTop: 4 }}>
                               <Tag variant="error">Perdu</Tag>
