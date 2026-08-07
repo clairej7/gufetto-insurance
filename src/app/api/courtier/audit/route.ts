@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getCourtierAudit, getRsBatchHistory } from "@/lib/courtier-audit";
+import { getCourtierAudit, getRsBatchHistory, getRsBatchCount } from "@/lib/courtier-audit";
 
 // GET /api/courtier/audit[?pipelineId=]
 // Sans pipelineId (admin) : audit global de l'étape « Récupération du RS ».
@@ -32,5 +32,7 @@ export async function GET(req: NextRequest) {
     // mail nettoyé (domaine courtier uniquement) — c'est ce qui sera envoyé.
     .map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, assureur: r.assureur, courtier: r.courtier, mail: r.cleanMail ?? r.mail }));
   const history = await getRsBatchHistory();
-  return NextResponse.json({ counts: audit.counts, total: audit.total, fillable: audit.fillable, orange, ready, history });
+  // Total de l'étape (dossiers déjà envoyés à l'auto 4 inclus) vs. encore à vérifier.
+  const stepTotal = audit.total + (await getRsBatchCount());
+  return NextResponse.json({ counts: audit.counts, total: audit.total, stepTotal, fillable: audit.fillable, orange, ready, history });
 }
