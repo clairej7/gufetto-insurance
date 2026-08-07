@@ -146,7 +146,7 @@ export function resolveCourtier(raw: string | null | undefined, idx: CourtierInd
 
 export type Bucket = "vert" | "orange" | "rouge";
 export type CourtierAuditRow = {
-  pipelineId: string; nom: string; buildingId: string;
+  pipelineId: string; nom: string; buildingId: string; adresse: string | null;
   courtier: string | null; mail: string | null; assureur: string | null;
   bucket: Bucket; reason: string;
   refNom: string | null; horsBase: boolean;
@@ -179,12 +179,12 @@ function mailCoherent(field: string, res: Resolution, idx: CourtierIndex): boole
 }
 
 export function classify(
-  row: { pipelineId: string; courtier: string | null; mail: string | null; assureur: string | null; rsSent: boolean; nom: string; buildingId: string },
+  row: { pipelineId: string; courtier: string | null; mail: string | null; assureur: string | null; rsSent: boolean; nom: string; buildingId: string; adresse: string | null },
   idx: CourtierIndex,
 ): CourtierAuditRow {
   const res = resolveCourtier(row.courtier, idx);
   const mail = row.mail?.trim() || null;
-  const base = { pipelineId: row.pipelineId, nom: row.nom, buildingId: row.buildingId, courtier: row.courtier ?? null, mail, assureur: row.assureur ?? null, rsSent: row.rsSent, refNom: res.kind === "courtier" || res.kind === "assureur" ? (res.ref?.nom ?? null) : null, horsBase: res.kind === "courtier" && !res.ref };
+  const base = { pipelineId: row.pipelineId, nom: row.nom, buildingId: row.buildingId, adresse: row.adresse ?? null, courtier: row.courtier ?? null, mail, assureur: row.assureur ?? null, rsSent: row.rsSent, refNom: res.kind === "courtier" || res.kind === "assureur" ? (res.ref?.nom ?? null) : null, horsBase: res.kind === "courtier" && !res.ref };
 
   // Remarque 3 : RS déjà envoyée → vert d'office.
   if (row.rsSent) return { ...base, bucket: "vert", reason: "RS déjà envoyée", fillable: false, fillEmail: null };
@@ -212,7 +212,7 @@ async function loadRsDossiers() {
   const [pipelines, rs, base] = await Promise.all([
     prisma.insurancePipeline.findMany({
       where: { statut: RS_STATUT, copro: { archivedAt: null } },
-      select: { id: true, copro: { select: { nom: true, buildingId: true, courtierActuel: true, contactCourtierEmail: true, assureurActuel: true } } },
+      select: { id: true, copro: { select: { nom: true, buildingId: true, adresse: true, courtierActuel: true, contactCourtierEmail: true, assureurActuel: true } } },
     }),
     prisma.pipelineEvent.findMany({ where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { pipelineId: true }, distinct: ["pipelineId"] }),
     prisma.courtierRef.findMany({ select: { id: true, nom: true, type: true, email: true, emailsAll: true } }),
@@ -235,7 +235,7 @@ function summarize(rows: CourtierAuditRow[]): CourtierAudit {
 export async function getCourtierAudit(pipelineId?: string): Promise<CourtierAudit> {
   const { pipelines, rsSet, idx } = await loadRsDossiers();
   const scope = pipelineId ? pipelines.filter((p) => p.id === pipelineId) : pipelines;
-  const rows = scope.map((p) => classify({ pipelineId: p.id, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, assureur: p.copro.assureurActuel, rsSent: rsSet.has(p.id), nom: p.copro.nom, buildingId: p.copro.buildingId }, idx));
+  const rows = scope.map((p) => classify({ pipelineId: p.id, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, assureur: p.copro.assureurActuel, rsSent: rsSet.has(p.id), nom: p.copro.nom, buildingId: p.copro.buildingId, adresse: p.copro.adresse }, idx));
   return summarize(rows);
 }
 

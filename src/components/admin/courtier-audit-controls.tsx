@@ -13,9 +13,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 type Counts = { vert: number; orange: number; rouge: number };
-type FillRow = { pipelineId: string; nom: string; courtier: string | null; refNom: string | null; email: string | null };
-type IncohRow = { nom: string; courtier: string | null; mail: string | null; refNom: string | null };
-type Audit = { counts: Counts; total: number; fillable: number; fillableList: FillRow[]; incoherents: IncohRow[] };
+type OrangeRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; refNom: string | null; mail: string | null; fillable: boolean; fillEmail: string | null };
+type Audit = { counts: Counts; total: number; fillable: number; orange: OrangeRow[] };
 
 function Buckets({ counts, total }: { counts: Counts; total: number }) {
   const items = [
@@ -48,8 +47,7 @@ export function CourtierAuditControls() {
   const [after, setAfter] = useState<{ counts: Counts; total: number; fillable: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [filling, setFilling] = useState(false);
-  const [showFill, setShowFill] = useState(false);
-  const [showIncoh, setShowIncoh] = useState(false);
+  const [showOrange, setShowOrange] = useState(false);
 
   async function verify() {
     setLoading(true);
@@ -104,37 +102,49 @@ export function CourtierAuditControls() {
           </div>
           <Buckets counts={audit.counts} total={audit.total} />
 
-          <div style={{ display: "flex", gap: 16, marginTop: 10, flexWrap: "wrap" }}>
-            {audit.fillable > 0 && (
-              <button onClick={() => setShowFill((v) => !v)} style={{ fontSize: 12, color: "#1F6FE0", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                {showFill ? "▾" : "▸"} {audit.fillable} remplissable(s) via la base
+          {audit.orange.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <button onClick={() => setShowOrange((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#B4690E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                {showOrange ? "▾" : "▸"} Détail des {audit.orange.length} dossiers orange (à checker avant remplissage) — {audit.fillable} remplissable(s)
               </button>
-            )}
-            {audit.incoherents.length > 0 && (
-              <button onClick={() => setShowIncoh((v) => !v)} style={{ fontSize: 12, color: "#B4690E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                {showIncoh ? "▾" : "▸"} {audit.incoherents.length} mail(s) incohérent(s) à vérifier
-              </button>
-            )}
-          </div>
-
-          {showFill && audit.fillable > 0 && (
-            <div style={{ marginTop: 8, maxHeight: 200, overflowY: "auto", border: "1px solid #E8E8EC", borderRadius: 8, fontSize: 12 }}>
-              {audit.fillableList.map((r) => (
-                <div key={r.pipelineId} style={{ display: "flex", gap: 8, padding: "5px 10px", borderTop: "1px solid #F1F1F4" }}>
-                  <span style={{ color: "#26262C", flex: 1 }}>{r.nom} · <span style={{ color: "#A2A1AF" }}>{r.courtier}</span></span>
-                  <span style={{ color: "#13762C" }}>→ {r.email}</span>
+              {showOrange && (
+                <div style={{ marginTop: 8, maxHeight: 340, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                        {["Adresse", "Assureur", "Courtier", "Mail courtier"].map((h) => (
+                          <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {audit.orange.map((r) => (
+                        <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4", background: r.fillable ? "#FCFEFC" : undefined }}>
+                          <td style={{ padding: "6px 10px", color: "#26262C" }}>
+                            <a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a>
+                          </td>
+                          <td style={{ padding: "6px 10px", color: "#656576" }}>{r.assureur || "—"}</td>
+                          <td style={{ padding: "6px 10px", color: "#656576" }}>
+                            {r.courtier || "—"}{r.refNom && r.refNom !== r.courtier ? <span style={{ color: "#A2A1AF" }}> (→{r.refNom})</span> : null}
+                          </td>
+                          <td style={{ padding: "6px 10px" }}>
+                            {r.fillable ? (
+                              <span style={{ color: "#13762C" }}>proposé : {r.fillEmail}</span>
+                            ) : r.mail ? (
+                              <span style={{ color: "#B4690E" }}>{r.mail}</span>
+                            ) : (
+                              <span style={{ color: "#A2A1AF", fontStyle: "italic" }}>hors base — non remplissable</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
-            </div>
-          )}
-          {showIncoh && audit.incoherents.length > 0 && (
-            <div style={{ marginTop: 8, maxHeight: 220, overflowY: "auto", border: "1px solid #E8E8EC", borderRadius: 8, fontSize: 12 }}>
-              {audit.incoherents.map((r, i) => (
-                <div key={i} style={{ display: "flex", gap: 8, padding: "5px 10px", borderTop: "1px solid #F1F1F4" }}>
-                  <span style={{ color: "#26262C", flex: 1 }}>{r.nom} · <span style={{ color: "#A2A1AF" }}>{r.courtier}{r.refNom && r.refNom !== r.courtier ? ` (→${r.refNom})` : ""}</span></span>
-                  <span style={{ color: "#B4690E", maxWidth: "50%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.mail}</span>
-                </div>
-              ))}
+              )}
+              <p style={{ fontSize: 11, color: "#A2A1AF", marginTop: 6 }}>
+                Lignes vertes = mail proposé via la base (seront remplies). Lignes orange = mail présent mais d&apos;un autre domaine/cabinet (à vérifier). Clique une adresse pour ouvrir le dossier.
+              </p>
             </div>
           )}
         </div>
