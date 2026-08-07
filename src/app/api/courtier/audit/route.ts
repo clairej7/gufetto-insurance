@@ -15,13 +15,16 @@ export async function GET(req: NextRequest) {
   if (pipelineId) {
     return NextResponse.json({ row: audit.rows[0] ?? null });
   }
-  // Global : compteurs + aperçu des remplissables et des incohérents (léger).
-  const fillableList = audit.rows
-    .filter((r) => r.fillable)
-    .map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, courtier: r.courtier, refNom: r.refNom, email: r.fillEmail }));
-  const incoherents = audit.rows
-    .filter((r) => r.bucket === "orange" && r.mail)
-    .map((r) => ({ nom: r.nom, courtier: r.courtier, mail: r.mail, refNom: r.refNom }))
-    .slice(0, 60);
-  return NextResponse.json({ counts: audit.counts, total: audit.total, fillable: audit.fillable, fillableList, incoherents });
+  // Global : compteurs + détail du bucket ORANGE (adresse/assureur/courtier/mail)
+  // pour un contrôle visuel avant remplissage.
+  const orange = audit.rows
+    .filter((r) => r.bucket === "orange")
+    .map((r) => ({
+      pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, assureur: r.assureur,
+      courtier: r.courtier, refNom: r.refNom, mail: r.mail,
+      fillable: r.fillable, fillEmail: r.fillEmail,
+    }))
+    // remplissables d'abord (ce qu'on s'apprête à écrire), puis les incohérents.
+    .sort((a, b) => Number(b.fillable) - Number(a.fillable));
+  return NextResponse.json({ counts: audit.counts, total: audit.total, fillable: audit.fillable, orange });
 }
