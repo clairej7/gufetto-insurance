@@ -197,6 +197,10 @@ model InsurancePipeline {
   // clean à l'automatisation 4 ». Consommé/retiré une fois la RS envoyée.
   rsBatchAt DateTime?
 
+  // Auto 4 Volet 1 → Volet 2 : dossier « infos complètes » validé et passé au
+  // volet d'envoi des mails. Posé par « Passer les X dossiers complets au volet 2 ».
+  rs4Volet2At DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

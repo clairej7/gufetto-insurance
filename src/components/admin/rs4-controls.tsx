@@ -7,7 +7,7 @@
 // Volet 3 : dossiers en cours + boucle de relances (à venir).
 
 import { useState } from "react";
-import { ListChecks, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { ListChecks, Loader2, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -54,9 +54,11 @@ function VoletTitle({ n, children }: { n: number; children: React.ReactNode }) {
   );
 }
 
-export function Rs4Controls({ batchCount }: { batchCount: number }) {
+export function Rs4Controls({ batchCount, volet2Count }: { batchCount: number; volet2Count: number }) {
   const [sample, setSample] = useState<Sample | null>(null);
   const [loading, setLoading] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [volet2, setVolet2] = useState(volet2Count);
   const [showComplete, setShowComplete] = useState(false);
   const [showIncomplete, setShowIncomplete] = useState(false);
 
@@ -70,6 +72,24 @@ export function Rs4Controls({ batchCount }: { batchCount: number }) {
       toast.error(e instanceof Error ? e.message : "Échec de la vérification");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function moveToVolet2() {
+    if (!sample || sample.complete === 0) return;
+    if (!window.confirm(`Passer les ${sample.complete} dossier(s) « infos complètes » au volet 2 (envoi des mails) ?`)) return;
+    setMoving(true);
+    try {
+      const res = await fetch("/api/rs4/move-to-volet2", { method: "POST" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      const data = await res.json();
+      setVolet2(data.volet2Total);
+      toast.success(`${data.moved} dossier(s) passé(s) au volet 2.`);
+      await verify(); // les dossiers passés sortent du volet 1
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Échec du passage au volet 2");
+    } finally {
+      setMoving(false);
     }
   }
 
@@ -123,6 +143,13 @@ export function Rs4Controls({ batchCount }: { batchCount: number }) {
                 </div>
               )}
             </div>
+
+            <div style={{ marginTop: 14 }}>
+              <Button onClick={moveToVolet2} disabled={moving || sample.complete === 0} size="sm">
+                {moving ? <Loader2 size={15} className="animate-spin" /> : <ArrowRight size={15} />}
+                Passer les {sample.complete} dossiers complets au volet 2
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -130,7 +157,12 @@ export function Rs4Controls({ batchCount }: { batchCount: number }) {
       {/* ── Volet 2 ── */}
       <div>
         <VoletTitle n={2}>Envoi des mails aux courtiers</VoletTitle>
-        <p style={{ fontSize: 12, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Infos à venir.</p>
+        {volet2 > 0 && (
+          <p style={{ fontSize: 13, color: "#656576", margin: "0 0 6px" }}>
+            <strong style={{ color: "#13762C" }}>{volet2}</strong> dossier{volet2 > 1 ? "s" : ""} chargé{volet2 > 1 ? "s" : ""} depuis le volet 1.
+          </p>
+        )}
+        <p style={{ fontSize: 12, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Envoi des mails : infos à venir.</p>
       </div>
 
       {/* ── Volet 3 ── */}
