@@ -192,6 +192,11 @@ model InsurancePipeline {
   // lieu de re-traiter les mêmes non-fiables à chaque clic. Re-tenté après un délai.
   autofillTenteLe DateTime?
 
+  // Automatisation 3 → 4 : dossier de l'échantillon « clean » chargé pour l'envoi
+  // automatique de la demande de RS (auto 4). Posé par « Envoyer l'échantillon
+  // clean à l'automatisation 4 ». Consommé/retiré une fois la RS envoyée.
+  rsBatchAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

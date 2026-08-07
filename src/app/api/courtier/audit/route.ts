@@ -26,5 +26,9 @@ export async function GET(req: NextRequest) {
     }))
     // remplissables d'abord (ce qu'on s'apprête à écrire), puis les incohérents.
     .sort((a, b) => Number(b.fillable) - Number(a.fillable));
-  return NextResponse.json({ counts: audit.counts, total: audit.total, fillable: audit.fillable, orange });
+  // Échantillon clean prêt pour l'auto 4 : courtier + mail, RS pas encore envoyée.
+  const ready = audit.rows
+    .filter((r) => r.bucket === "vert" && !r.rsSent)
+    .map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, assureur: r.assureur, courtier: r.courtier, mail: r.mail }));
+  return NextResponse.json({ counts: audit.counts, total: audit.total, fillable: audit.fillable, orange, ready });
 }
