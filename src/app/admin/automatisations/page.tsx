@@ -274,10 +274,15 @@ export default async function AutomatisationsPage() {
                       <p style={{ fontSize: 13, color: "#656576", margin: "0 0 4px" }}>
                         <strong>{courtierState.courtiers}</strong> courtier{courtierState.courtiers > 1 ? "s" : ""} · <strong style={{ color: "#13762C" }}>{courtierState.courtiersAvecMail}</strong> avec mail type, {courtierState.courtiersSansMail} sans.
                       </p>
-                      <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
+                      <p style={{ fontSize: 13, color: "#656576", margin: "0 0 4px" }}>
                         <strong>{courtierState.assureurs}</strong> compagnie{courtierState.assureurs > 1 ? "s" : ""} d&apos;assurance — garde-fou : on ne demande pas le RS à une compagnie, elle renvoie vers le courtier.
                         {courtierState.total === 0 && " Base vide — à alimenter : (1) import, (2) scraping Front."}
                       </p>
+                      {courtierState.decouverts > 0 && (
+                        <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
+                          dont <strong style={{ color: "#B4690E" }}>{courtierState.decouverts}</strong> découvert{courtierState.decouverts > 1 ? "s" : ""} via Front (destinataires réels des demandes de RS) — <em>à vérifier</em>, dont les cas « agent général » (GAN, Allianz, MMA…).
+                        </p>
+                      )}
                       {courtierState.total > 0 && (
                         <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 300, border: "1px solid #E8E8EC", borderRadius: 8 }}>
                           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
@@ -294,7 +299,10 @@ export default async function AutomatisationsPage() {
                                 const estAssureur = c.type === "assureur";
                                 return (
                                   <tr key={c.id} style={{ borderTop: "1px solid #F1F1F4" }}>
-                                    <td style={{ padding: "6px 12px", color: "#26262C", fontWeight: estAssureur ? 400 : 600 }}>{c.nom}</td>
+                                    <td style={{ padding: "6px 12px", color: "#26262C", fontWeight: estAssureur ? 400 : 600 }}>
+                                      {c.nom}
+                                      {c.source === "front" && <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 600, padding: "1px 6px", borderRadius: 999, background: "#FDF0D5", color: "#B4690E" }}>à vérifier</span>}
+                                    </td>
                                     <td style={{ padding: "6px 12px" }}>
                                       <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 999, background: estAssureur ? "#FDECEA" : "#EAF3FE", color: estAssureur ? "#CA1E12" : "#1F6FE0" }}>{estAssureur ? "assureur" : "courtier"}</span>
                                     </td>
