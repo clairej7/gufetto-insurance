@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AutofillFrontButton } from "@/components/copro/autofill-front-button";
+import { CourtierFicheControl } from "@/components/copro/courtier-fiche-control";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -889,6 +890,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                 )}
                 <InfoRow label="Mail courtier/assureur" value={pipeline.copro.contactCourtierEmail} />
                 <InfoRow label="N° téléphone courtier/assureur" value={pipeline.copro.contactCourtierTel} />
+                {pipeline.statut === "rs_en_cours" && <CourtierFicheControl pipelineId={pipeline.id} />}
               </dl>
             )}
           </Card>
