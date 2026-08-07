@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
   // Échantillon clean prêt pour l'auto 4 : courtier + mail, RS pas encore envoyée.
   const ready = audit.rows
     .filter((r) => r.bucket === "vert" && !r.rsSent)
-    .map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, assureur: r.assureur, courtier: r.courtier, mail: r.mail }));
+    // mail nettoyé (domaine courtier uniquement) — c'est ce qui sera envoyé.
+    .map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, assureur: r.assureur, courtier: r.courtier, mail: r.cleanMail ?? r.mail }));
   const history = await getRsBatchHistory();
   return NextResponse.json({ counts: audit.counts, total: audit.total, fillable: audit.fillable, orange, ready, history });
 }
