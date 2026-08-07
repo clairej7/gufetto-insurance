@@ -26,9 +26,13 @@ export type Rs4Sample = {
   incompleteRows: Rs4Row[];
 };
 
+// Périmètre du Volet 1 = échantillon chargé par l'auto 3 (rsBatchAt) pas encore
+// passé au Volet 2 (rs4Volet2At null).
+const VOLET1_WHERE = { statut: "rs_en_cours" as const, rsBatchAt: { not: null }, rs4Volet2At: null, copro: { archivedAt: null } };
+
 export async function getRs4Sample(): Promise<Rs4Sample> {
   const ps = await prisma.insurancePipeline.findMany({
-    where: { statut: "rs_en_cours", rsBatchAt: { not: null }, copro: { archivedAt: null } },
+    where: VOLET1_WHERE,
     select: { id: true, rsBatchAt: true, copro: { select: { nom: true, assureurActuel: true, numeroContrat: true, courtierActuel: true, contactCourtierEmail: true } } },
     orderBy: { rsBatchAt: "desc" },
   });
@@ -49,4 +53,29 @@ export async function getRs4Sample(): Promise<Rs4Sample> {
   }
 
   return { total: ps.length, complete: completeRows.length, incomplete: incompleteRows.length, completeRows, incompleteRows };
+}
+
+// Nb de dossiers encore au Volet 1 (échantillon à vérifier, pas encore passé au 2).
+export async function getRs4Volet1Count(): Promise<number> {
+  return prisma.insurancePipeline.count({ where: VOLET1_WHERE });
+}
+
+// Nb de dossiers passés au Volet 2 (envoi des mails).
+export async function getRs4Volet2Count(): Promise<number> {
+  return prisma.insurancePipeline.count({ where: { statut: "rs_en_cours", rs4Volet2At: { not: null }, copro: { archivedAt: null } } });
+}
+
+// Passe les dossiers « infos complètes » du Volet 1 au Volet 2 (pose rs4Volet2At).
+export async function moveCompleteToVolet2(actorEmail: string): Promise<{ moved: number; volet2Total: number }> {
+  const sample = await getRs4Sample();
+  const now = new Date();
+  for (const r of sample.completeRows) {
+    await prisma.insurancePipeline.update({ where: { id: r.pipelineId }, data: { rs4Volet2At: now } });
+  }
+  if (sample.completeRows.length) {
+    await prisma.pipelineEvent.createMany({
+      data: sample.completeRows.map((r) => ({ pipelineId: r.pipelineId, type: "action_manuelle" as const, description: "Auto 4 — infos complètes, passé au volet 2 (envoi du mail courtier)", metadata: { auto: "rs4_to_volet2" }, createdBy: actorEmail })),
+    });
+  }
+  return { moved: sample.completeRows.length, volet2Total: await getRs4Volet2Count() };
 }
