@@ -129,7 +129,11 @@ export function CourtierAuditControls() {
                           </td>
                           <td style={{ padding: "6px 10px" }}>
                             {r.fillable ? (
-                              <span style={{ color: "#13762C" }}>proposé : {r.fillEmail}</span>
+                              r.mail ? (
+                                <span><span style={{ color: "#B4690E", textDecoration: "line-through" }}>{r.mail}</span> <span style={{ color: "#13762C" }}>→ {r.fillEmail}</span></span>
+                              ) : (
+                                <span style={{ color: "#13762C" }}>proposé : {r.fillEmail}</span>
+                              )
                             ) : r.mail ? (
                               <span style={{ color: "#B4690E" }}>{r.mail}</span>
                             ) : (
