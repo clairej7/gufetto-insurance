@@ -26,11 +26,12 @@ export async function GET(req: NextRequest) {
     }))
     // remplissables d'abord (ce qu'on s'apprête à écrire), puis les incohérents.
     .sort((a, b) => Number(b.fillable) - Number(a.fillable));
-  // Échantillon clean prêt pour l'auto 4 : courtier + mail, RS pas encore envoyée.
+  // Échantillon clean pour l'auto 4 : TOUS les verts (courtier + mail), déjà-envoyés
+  // inclus (l'auto 4 triera nouvel envoi vs relance via draft_sent).
   const ready = audit.rows
-    .filter((r) => r.bucket === "vert" && !r.rsSent)
+    .filter((r) => r.bucket === "vert")
     // mail nettoyé (domaine courtier uniquement) — c'est ce qui sera envoyé.
-    .map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, assureur: r.assureur, courtier: r.courtier, mail: r.cleanMail ?? r.mail }));
+    .map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, assureur: r.assureur, courtier: r.courtier, mail: r.cleanMail ?? r.mail, rsSent: r.rsSent }));
   const history = await getRsBatchHistory();
   // Total de l'étape (dossiers déjà envoyés à l'auto 4 inclus) vs. encore à vérifier.
   const stepTotal = audit.total + (await getRsBatchCount());
