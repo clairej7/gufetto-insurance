@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { getDaysUntilEcheance, categoriseDossier } from "@/lib/pipeline";
+import type { PrimeStageRow } from "@/lib/prime";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { gestionnaireLabel } from "@/lib/gestionnaire";
 import { EvolutionChart } from "./evolution-chart";
@@ -39,6 +40,8 @@ interface AdminBoardProps {
   // Dossiers perdus (abandonné/refusé/non assurable) : dataset séparé, passé EN
   // ENTIER pour la carte "Perdus" cliquable et le filtre échéance.
   lostPipelines: Pipeline[];
+  // Complétude des primes par étape (miroir des montants) — calculée côté serveur.
+  primeStages: PrimeStageRow[];
 }
 
 
@@ -135,7 +138,7 @@ const TD_RIGHT: React.CSSProperties = { ...TD, textAlign: "right" };
 
 type KpiFilter = "actifs" | "gagnes" | "perdus" | null;
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
@@ -427,11 +430,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
 
       {/* ── Revenus — montants en jeu ── */}
       <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
-        <div style={{ marginBottom: 6 }}>
+        <div style={{ marginBottom: 20 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Revenus — montants en jeu</span>
-        </div>
-        <div style={{ fontSize: 12, color: "#955804", background: "#FFF7EB", border: "1px solid #F5E0B0", borderRadius: 6, padding: "6px 10px", marginBottom: 20 }}>
-          ⚠️ Certains montants de prime sont mal renseignés dans les données — chiffres indicatifs.
         </div>
 
         {/* Sous-partie 1 : montant (somme des primes) par étape, mêmes 4 zones */}
@@ -478,6 +478,22 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines }: 
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Complétude des primes par étape (part de montants connus/inconnus) */}
+        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginTop: 20, marginBottom: 12 }}>Complétude des primes par étape</div>
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+          {primeStages.map((s) => {
+            const c = `hsl(${Math.round((1 - s.tauxInconnu) * 125)}, 62%, 42%)`;
+            return (
+              <div key={s.label} style={{ flex: "0 0 128px", border: "1px solid #E8E8EC", borderTop: `3px solid ${c}`, borderRadius: 8, padding: "8px 10px", background: "#fff" }}>
+                <div style={{ fontSize: 11, color: "#656576", lineHeight: "14px", minHeight: 28 }}>{s.label}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#26262C", marginTop: 4 }}>{s.montant > 0 ? fmtEurC(s.montant) : "—"}</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: c, marginTop: 2 }}>{Math.round(s.tauxInconnu * 100)}% inconnu</div>
+                <div style={{ fontSize: 10.5, color: "#A2A1AF", marginTop: 1 }}>{s.sansPrime}/{s.total} sans prime</div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
