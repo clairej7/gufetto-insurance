@@ -23,8 +23,9 @@ export function Devis5Controls({ data }: { data: Data }) {
 
   return (
     <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C", margin: "0 0 8px" }}>
-        <span style={{ color: "#A2A1AF" }}>Volet 1 — </span>Dossiers concernés
+      <div style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 1</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Dossiers concernés</span>
       </div>
       <p style={{ fontSize: 13, color: "#656576", margin: "0 0 10px" }}>
         <strong>{data.total}</strong> dossier{data.total > 1 ? "s" : ""} à traiter · {data.demande} en « Demande de devis » · {data.comparaison} en « Comparaison des devis » (hors comparaisons déjà lancées).

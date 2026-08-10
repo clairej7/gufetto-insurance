@@ -69,8 +69,9 @@ const btn = (color: string, bg: string, border: string): React.CSSProperties => 
 
 function VoletTitle({ n, children }: { n: number; children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C", margin: "0 0 8px" }}>
-      <span style={{ color: "#A2A1AF" }}>Volet {n} — </span>{children}
+    <div style={{ borderTop: n > 1 ? "1px solid #E8E8EC" : undefined, paddingTop: n > 1 ? 26 : 0, marginTop: n > 1 ? 10 : 0, marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>
+      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET {n}</span>
+      <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>{children}</span>
     </div>
   );
 }
@@ -318,7 +319,7 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
   const orderIndex = new Map(volet2.rows.map((r, i) => [r.pipelineId, i]));
 
   return (
-    <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC", display: "flex", flexDirection: "column", gap: 22 }}>
+    <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC", display: "flex", flexDirection: "column", gap: 14 }}>
       {/* ── Volet 1 ── */}
       <div>
         <VoletTitle n={1}>Vérification de l&apos;échantillon</VoletTitle>
