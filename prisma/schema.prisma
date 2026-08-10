@@ -231,6 +231,12 @@ model InsurancePipeline {
   // sans doc lors du chargement en masse (ils sortent de la file « à charger »).
   docsCheckedAt DateTime?
 
+  // Garde-fou boucle de relances : commentaire interne humain repéré sur la conv
+  // Front (ex. « Pour info : … »). Posé par le scan « Vérifier les commentaires ».
+  rs4CommentAt   DateTime?
+  rs4CommentText String?
+  rs4CommentBy   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
