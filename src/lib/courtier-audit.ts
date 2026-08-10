@@ -184,8 +184,12 @@ function mailCoherent(field: string, res: Resolution, idx: CourtierIndex): boole
   if (res.kind === "courtier" && res.ref) {
     const doms = expandDomains((res.ref.emailsAll ?? res.ref.email ?? "").split(";").map((s) => domainOf(s.trim())).filter(Boolean));
     if (domains.some((d) => doms.has(d))) return true; // le bon cabinet (ou son groupe) est présent
-    if (domains.every((d) => GENERIC_DOM.has(d))) return true; // seulement du générique → toléré
-    return false; // que d'autres cabinets/compagnies → incohérent
+    // AVANT on tolérait un mail 100 % générique — ça a laissé passer un mail perso
+    // (membre du CS) pour un courtier connu. Désormais : si le courtier a un VRAI
+    // domaine connu, un mail générique/autre est INCOHÉRENT (à écraser par le vrai).
+    const aRealDomain = [...doms].some((d) => !GENERIC_DOM.has(d));
+    if (!aRealDomain && domains.every((d) => GENERIC_DOM.has(d))) return true; // courtier dont le mail de base EST générique (ex. SCABD wanadoo)
+    return false;
   }
   // courtier hors base : cohérent si au moins un mail n'appartient PAS à une compagnie connue.
   return domains.some((d) => { const o = idx.byDomain.get(d); return GENERIC_DOM.has(d) || !o || o.type !== "assureur"; });
@@ -202,6 +206,31 @@ function keepCourtierDomainMails(field: string, res: Resolution, idx: CourtierIn
   const kept = mails.filter((m) => doms.has(domainOf(m)));
   if (kept.length === 0 || kept.length === mails.length) return field;
   return kept.join(", ");
+}
+
+// Charge la base + construit l'index (pour les gardes-fou hors du module audit).
+export async function getCourtierIndex(): Promise<CourtierIndex> {
+  const base = await prisma.courtierRef.findMany({ select: { id: true, nom: true, type: true, email: true, emailsAll: true } });
+  return buildCourtierIndex(base);
+}
+
+// Garde-fou à l'ENVOI, resserré sur le VRAI risque : écrire à un INDIVIDU.
+// Suspect UNIQUEMENT si : courtier connu avec un vrai domaine (non générique),
+// AUCUN mail à ce domaine, ET au moins un destinataire sur un domaine PERSO
+// (gmail/yahoo/free…). On NE bloque PAS un mail pro d'un autre cabinet/compagnie
+// (ce n'est pas le risque « membre du CS »), ni un courtier hors base, ni un
+// courtier dont le mail de base est lui-même générique (ex. SCABD wanadoo).
+export function recipientSuspect(courtierName: string | null, mailField: string | null, idx: CourtierIndex): boolean {
+  const emails = (mailField ?? "").split(/[;,]/).map((s) => s.trim().toLowerCase()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s));
+  if (!emails.length) return true; // pas de mail exploitable → ne pas envoyer
+  const res = resolveCourtier(courtierName, idx);
+  const ref = res.kind === "courtier" ? res.ref : null;
+  if (!ref) return false; // hors base / assureur / vide → on ne tranche pas ici
+  const doms = expandDomains((ref.emailsAll ?? ref.email ?? "").split(";").map((s) => domainOf(s.trim())).filter(Boolean));
+  const aRealDomain = [...doms].some((d) => !GENERIC_DOM.has(d));
+  if (!aRealDomain) return false; // le courtier utilise vraiment un générique → on ne peut pas juger
+  if (emails.some((e) => doms.has(domainOf(e)))) return false; // un mail est bien au domaine du courtier → OK
+  return emails.some((e) => GENERIC_DOM.has(domainOf(e))); // suspect seulement s'il y a un domaine perso
 }
 
 export function classify(
