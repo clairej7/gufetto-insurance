@@ -226,6 +226,11 @@ model InsurancePipeline {
   rs4ReplySnippet String?
   rs4ReplyScanAt  DateTime?
 
+  // Auto 5 : date de dernière tentative de récupération des docs (RS/contrat) depuis
+  // Front. Posé même si rien trouvé → évite de repasser en boucle sur les dossiers
+  // sans doc lors du chargement en masse (ils sortent de la file « à charger »).
+  docsCheckedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

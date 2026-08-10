@@ -117,14 +117,17 @@ export async function captureReplyDocs(opts: { pipelineId: string; coproId: stri
 export async function captureDocsForPipeline(pipelineId: string, createdBy?: string): Promise<{ created: number; docs: { kind: DocKind; fileName: string }[]; noReply?: boolean }> {
   const p = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, select: { coproId: true, rs4SentAt: true, copro: { select: { nom: true, adresse: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } } });
   if (!p) return { created: 0, docs: [] };
+  // Marque la tentative (même si rien trouvé) → le dossier sort de la file « à charger ».
+  const markChecked = () => prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { docsCheckedAt: new Date() } }).catch(() => {});
   const cid = p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop();
-  if (!cid || !FRONT_TOKEN) return { created: 0, docs: [], noReply: true };
+  if (!cid || !FRONT_TOKEN) { await markChecked(); return { created: 0, docs: [], noReply: true }; }
   const res = await fetch(`${FRONT_API_URL}/conversations/${cid}/messages?limit=20`, { headers: { Authorization: `Bearer ${FRONT_TOKEN}` } });
   const list = res.ok ? await res.json() : null;
   const sentMs = p.rs4SentAt ? new Date(p.rs4SentAt).getTime() : 0;
   const inbound = ((list?._results as { id: string; is_inbound: boolean; created_at: number }[]) ?? []).filter((m) => m.is_inbound && m.created_at * 1000 > sentMs);
-  if (!inbound.length) return { created: 0, docs: [], noReply: true };
+  if (!inbound.length) { await markChecked(); return { created: 0, docs: [], noReply: true }; }
   const r = await captureReplyDocs({ pipelineId, coproId: p.coproId, adresse: p.copro.adresse || p.copro.nom, msgIds: inbound.map((m) => m.id), createdBy });
+  await markChecked();
   return r;
 }
 
