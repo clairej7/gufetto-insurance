@@ -224,7 +224,6 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
   }
 
   async function scanReplies() {
-    if (detector.total === 0) return;
     setScanning(true);
     setScanProg({ done: 0, total: detector.total });
     try {
@@ -295,6 +294,23 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
   // Ordre d'affichage du détecteur : réponses détectées d'abord, « pas de réponse » / non scanné en bas.
   const KIND_ORDER = ["rs_recu", "pj", "bounce", "redirect", "info", "attente", "autre", "sans_reponse", "non_scanne"];
   const detSorted = [...detFiltered].sort((a, b) => (KIND_ORDER.indexOf(a.replyKind ?? "non_scanne") - KIND_ORDER.indexOf(b.replyKind ?? "non_scanne")));
+
+  // Bouton de scan Front + barre de progression, réutilisés en V3 et V4.
+  const scanButton = (
+    <Button onClick={scanReplies} disabled={scanning} size="sm">
+      {scanning ? <Loader2 size={15} className="animate-spin" /> : <Radar size={15} />} Vérifier les réponses (Front)
+    </Button>
+  );
+  const scanBarEl = scanning && scanProg ? (
+    <div style={{ margin: "10px 0 0", maxWidth: 460 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#656576", marginBottom: 4 }}>
+        <span>Scan Front en cours…</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{scanProg.done} / {scanProg.total}</span>
+      </div>
+      <div style={{ height: 8, borderRadius: 999, background: "#E8E8EC", overflow: "hidden" }}>
+        <div style={{ width: `${scanProg.total ? Math.round((scanProg.done / scanProg.total) * 100) : 0}%`, height: "100%", background: "#4E49FC", transition: "width 200ms" }} />
+      </div>
+    </div>
+  ) : null;
   const v2Filtered = v2Search.trim()
     ? volet2.rows.filter((r) => `${r.adresse ?? ""} ${r.nom} ${r.assureur ?? ""} ${r.courtier ?? ""} ${r.numeroContrat ?? ""} ${r.mail ?? ""}`.toLowerCase().includes(v2Search.trim().toLowerCase()))
     : volet2.rows;
@@ -504,34 +520,23 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
       {/* ── Volet 3 — Détecteur de réponses ── */}
       <div>
         <VoletTitle n={3}>Détecteur de réponses</VoletTitle>
-        {detector.total === 0 ? (
-          <p style={{ fontSize: 12, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun dossier à trier. Les envois du volet 2 arrivent ici pour être analysés, puis routés vers la boucle de relances (V4), « RS en cours » (V5), le devis ou l&apos;auto 3.</p>
-        ) : (
+        <p style={{ fontSize: 13, color: "#656576", margin: "0 0 8px" }}>
+          {detector.total === 0
+            ? <>Aucun dossier à trier pour l&apos;instant. Le scan analyse aussi les dossiers en relance (V4) et en récupère toute nouvelle réponse.</>
+            : <><strong>{detector.total}</strong> dossier{detector.total > 1 ? "s" : ""} à trier · {detector.scanned} scanné{detector.scanned > 1 ? "s" : ""}</>}
+          {detector.lastScanAt && <span style={{ color: "#A2A1AF" }}> · dernier scan {new Date(detector.lastScanAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>}
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          {scanButton}
+          {detector.sansReponse > 0 && (
+            <Button onClick={moveAllNoReply} disabled={routing !== null} variant="outline" size="sm">
+              {routing === "all" ? <Loader2 size={15} className="animate-spin" /> : <ArrowRight size={15} />} Passer les {detector.sansReponse} sans réponse en relances
+            </Button>
+          )}
+        </div>
+        {scanBarEl}
+        {detector.total > 0 && (
           <>
-            <p style={{ fontSize: 13, color: "#656576", margin: "0 0 8px" }}>
-              <strong>{detector.total}</strong> dossier{detector.total > 1 ? "s" : ""} à trier · {detector.scanned} scanné{detector.scanned > 1 ? "s" : ""}
-              {detector.lastScanAt && <span style={{ color: "#A2A1AF" }}> · dernier scan {new Date(detector.lastScanAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>}
-            </p>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <Button onClick={scanReplies} disabled={scanning} size="sm">
-                {scanning ? <Loader2 size={15} className="animate-spin" /> : <Radar size={15} />} Vérifier les réponses (Front)
-              </Button>
-              {detector.sansReponse > 0 && (
-                <Button onClick={moveAllNoReply} disabled={routing !== null} variant="outline" size="sm">
-                  {routing === "all" ? <Loader2 size={15} className="animate-spin" /> : <ArrowRight size={15} />} Passer les {detector.sansReponse} sans réponse en relances
-                </Button>
-              )}
-            </div>
-            {scanning && scanProg && (
-              <div style={{ margin: "10px 0 0", maxWidth: 460 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#656576", marginBottom: 4 }}>
-                  <span>Scan Front en cours…</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{scanProg.done} / {scanProg.total}</span>
-                </div>
-                <div style={{ height: 8, borderRadius: 999, background: "#E8E8EC", overflow: "hidden" }}>
-                  <div style={{ width: `${scanProg.total ? Math.round((scanProg.done / scanProg.total) * 100) : 0}%`, height: "100%", background: "#4E49FC", transition: "width 200ms" }} />
-                </div>
-              </div>
-            )}
             {/* Compteurs par catégorie */}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
               {KIND_ORDER.filter((k) => (detector.replyCounts[k] ?? 0) > 0).map((k) => (
@@ -605,10 +610,15 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
           <p style={{ fontSize: 12, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun dossier en relance. Ils arrivent ici depuis le détecteur (V3), bouton « Relances ».</p>
         ) : (
           <>
-            <p style={{ fontSize: 13, color: "#656576", margin: "0 0 10px" }}>
+            <p style={{ fontSize: 13, color: "#656576", margin: "0 0 8px" }}>
               <strong>{volet3.total}</strong> dossier{volet3.total > 1 ? "s" : ""} en relance. Dès qu&apos;un scan détecte une réponse, le dossier <strong>repart automatiquement au détecteur (V3)</strong> pour re-tri.
             </p>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+              {scanButton}
+              <span style={{ fontSize: 11.5, color: "#A2A1AF" }}>À lancer avant de relancer : exclut les dossiers ayant répondu.</span>
+            </div>
+            {scanBarEl}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
               {volet3.stages.map((s) => (
                 <Button key={s.num} onClick={() => sendRelance(s.num, s.eligibles)} disabled={relancing !== null || s.eligibles === 0} variant="outline" size="sm">
                   {relancing === s.num ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />} J+{s.day} : relance {s.num} ({s.eligibles})
