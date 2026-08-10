@@ -210,6 +210,21 @@ model InsurancePipeline {
   // cours de récupération ». Reste jusqu'au RS reçu (→ devis_demandes).
   rs4EnCoursAt DateTime?
 
+  // Auto 4 Volet 3 (Détecteur) → Volet 4 (boucle de relances) : le dossier a été
+  // trié depuis le détecteur et envoyé dans la boucle de relances via un clic.
+  // Tant que null (et rs4EnCoursAt null), le dossier reste au Détecteur.
+  rs4RelanceAt DateTime?
+
+  // Détecteur de réponses (auto 4 Volet 3) : dernier verdict du scan Front.
+  // Kind ∈ rs_recu | attente | info | redirect | pj | bounce | autre.
+  // Écrit par scanReplies() ; sert à afficher un badge + le bon aiguillage.
+  // Aucun mouvement de dossier n'est déclenché par le scan (clic manuel requis).
+  rs4ReplyAt      DateTime?
+  rs4ReplyKind    String?
+  rs4ReplyMsgId   String?
+  rs4ReplySnippet String?
+  rs4ReplyScanAt  DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
