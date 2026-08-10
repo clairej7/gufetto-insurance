@@ -251,6 +251,29 @@ export async function sendVolet2(actorEmail: string, subjectTpl: string, bodyTpl
   return { sent, failed, movedExisting, errors: errors.slice(0, 20) };
 }
 
+// Ré-archive les conversations RS de l'auto 4 restées « ouvertes » SANS réponse
+// entrante. Nécessaire car une règle Front asynchrone rouvre parfois la conv juste
+// après notre archivage à l'envoi (course). Idempotent, à lancer après un lot.
+// On NE touche PAS aux conversations ayant reçu une vraie réponse (elles doivent
+// rester ouvertes pour être traitées).
+export async function archiveOpenNoReply(): Promise<{ scanned: number; archived: number }> {
+  if (!FRONT_TOKEN) return { scanned: 0, archived: 0 };
+  const ev = await prisma.pipelineEvent.findMany({ where: { OR: [{ metadata: { path: ["auto"], equals: "rs4_send" } }, { metadata: { path: ["auto"], equals: "rs4_relance" } }] }, select: { metadata: true } });
+  const cids = [...new Set(ev.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean) as string[])];
+  const H = (u: string) => fetch(u.startsWith("http") ? u : `${FRONT_API_URL}${u}`, { headers: { Authorization: `Bearer ${FRONT_TOKEN}` } });
+  let archived = 0;
+  for (const cid of cids) {
+    const cv = await (await H(`/conversations/${cid}`)).json().catch(() => null);
+    if (!cv || cv.status === "archived") continue;
+    const msgs = await (await H(`/conversations/${cid}/messages?limit=10`)).json().catch(() => null);
+    const hasInbound = (msgs?._results ?? []).some((m: { is_inbound?: boolean }) => m.is_inbound);
+    if (hasInbound) continue; // vraie réponse → on laisse ouvert
+    const r = await fetch(`${FRONT_API_URL}/conversations/${cid}`, { method: "PATCH", headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: "archived" }) });
+    if (r.ok) archived++;
+  }
+  return { scanned: cids.length, archived };
+}
+
 // Historique daté des envois auto 4 (demandes de RS + relances), plus récent d'abord.
 export async function getRs4SendHistory(limit = 20): Promise<{ sentAt: string; kind: string; relanceNum: number | null; count: number; failed: number }[]> {
   const rows = await prisma.rs4SendLog.findMany({ orderBy: { sentAt: "desc" }, take: limit, select: { sentAt: true, kind: true, relanceNum: true, count: true, failed: true } });
