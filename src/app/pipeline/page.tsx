@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { PipelineBoard } from "@/components/pipeline/pipeline-board";
+import { getExcludedCoproIds } from "@/lib/exclusions";
 
 export default async function PipelinePage() {
   const session = await auth();
@@ -51,6 +52,7 @@ export default async function PipelinePage() {
           taskTemplates={taskTemplates}
           gestionnaires={gestionnaires}
           currentUserEmail={user.email ?? ""}
+          excludedCoproIds={await getExcludedCoproIds()}
         />
       </main>
     </div>

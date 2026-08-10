@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { CoproDetail } from "@/components/copro/copro-detail";
+import { getExcludedCoproIds } from "@/lib/exclusions";
 
 export default async function CoproDetailPage({
   params,
@@ -54,6 +55,7 @@ export default async function CoproDetailPage({
           taskTemplates={taskTemplates}
           userEmail={user.email ?? ""}
           pipelineTasks={pipelineTasks}
+          excluded={(await getExcludedCoproIds()).includes(pipeline.coproId)}
         />
       </main>
     </div>

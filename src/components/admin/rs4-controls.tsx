@@ -88,6 +88,8 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
   const [sample, setSample] = useState<Sample | null>(null);
   const [loading, setLoading] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [perso, setPerso] = useState<{ total: number; perso: number; csMatch: number; rows: { pipelineId: string; nom: string; courtier: string | null; mail: string | null; motif: string }[] } | null>(null);
+  const [checkingPerso, setCheckingPerso] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
   const [showIncomplete, setShowIncomplete] = useState(false);
   // Volet 2
@@ -110,6 +112,15 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
       setSample(await res.json());
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setLoading(false); }
+  }
+
+  async function checkPerso() {
+    setCheckingPerso(true);
+    try {
+      const res = await fetch("/api/rs4/check-perso");
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      setPerso(await res.json());
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setCheckingPerso(false); }
   }
 
   async function moveToVolet2() {
@@ -194,6 +205,8 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
   const v2Filtered = v2Search.trim()
     ? volet2.rows.filter((r) => `${r.adresse ?? ""} ${r.nom} ${r.assureur ?? ""} ${r.courtier ?? ""} ${r.numeroContrat ?? ""} ${r.mail ?? ""}`.toLowerCase().includes(v2Search.trim().toLowerCase()))
     : volet2.rows;
+  // Rang dans l'ordre d'envoi (= ordre de volet2.rows) pour surligner les 50 prochains.
+  const orderIndex = new Map(volet2.rows.map((r, i) => [r.pipelineId, i]));
 
   return (
     <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC", display: "flex", flexDirection: "column", gap: 22 }}>
@@ -203,9 +216,32 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
         <p style={{ fontSize: 13, color: "#656576", margin: "0 0 10px" }}>
           Échantillon à date : <strong>{volet1Count}</strong> dossier{volet1Count > 1 ? "s" : ""} chargé{volet1Count > 1 ? "s" : ""} depuis l&apos;auto 3, à vérifier.
         </p>
-        <Button onClick={verify} disabled={loading} variant="outline" size="sm">
-          {loading ? <Loader2 size={15} className="animate-spin" /> : <ListChecks size={15} />} Vérifier l&apos;échantillon
-        </Button>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Button onClick={verify} disabled={loading} variant="outline" size="sm">
+            {loading ? <Loader2 size={15} className="animate-spin" /> : <ListChecks size={15} />} Vérifier l&apos;échantillon
+          </Button>
+          <Button onClick={checkPerso} disabled={checkingPerso} variant="outline" size="sm">
+            {checkingPerso ? <Loader2 size={15} className="animate-spin" /> : <AlertTriangle size={15} />} Vérifier adresses perso
+          </Button>
+        </div>
+        {perso && (
+          <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, border: `1px solid ${perso.rows.length === 0 ? "#B7E4C4" : "#F5C6C0"}`, background: perso.rows.length === 0 ? "#EAF7EE" : "#FDECEA" }}>
+            {perso.rows.length === 0 ? (
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#13762C" }}>✓ Aucune adresse perso ni mail de CS sur les {perso.total} dossiers de l&apos;échantillon.</span>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#CA1E12", marginBottom: 6 }}>⚠️ {perso.rows.length} dossier(s) à risque ({perso.perso} perso, {perso.csMatch} = mail du CS) — à corriger avant d&apos;envoyer</div>
+                <div style={{ maxHeight: 240, overflowY: "auto" }}>
+                  {perso.rows.map((r) => (
+                    <div key={r.pipelineId} style={{ fontSize: 12, color: "#656576", padding: "3px 0" }}>
+                      <a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none", fontWeight: 600 }}>{r.nom}</a> · {r.courtier ?? "?"} · <span style={{ color: "#CA1E12" }}>{r.mail}</span> <em style={{ color: "#B4690E" }}>({r.motif})</em>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
         {sample && (
           <div style={{ marginTop: 14 }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
@@ -272,26 +308,34 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
                       <Search size={14} style={{ position: "absolute", left: 10, top: 9, color: "#A2A1AF" }} />
                       <input value={v2Search} onChange={(e) => setV2Search(e.target.value)} placeholder="Rechercher une copro / assureur / courtier…" style={{ width: "100%", fontSize: 12, padding: "7px 10px 7px 30px", border: "1px solid #E8E8EC", borderRadius: 8 }} />
                     </div>
+                    <p style={{ fontSize: 11, color: "#A2A1AF", margin: "0 0 6px" }}>
+                      Ordre d&apos;envoi. <span style={{ background: "#EAF3FE", padding: "0 4px", borderRadius: 3, color: "#1F6FE0", fontWeight: 600 }}>Surlignés = les 50 prochains</span> (dont les <strong>5</strong> premiers en gras = prochain « lot de 5 »).
+                    </p>
                     <div style={{ maxHeight: 360, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                         <thead>
                           <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-                            {["Copropriété", "Assureur", "N° contrat", "Courtier", "Mail courtier"].map((h) => (
+                            {["#", "Copropriété", "Assureur", "N° contrat", "Courtier", "Mail courtier"].map((h) => (
                               <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
-                          {v2Filtered.map((r) => (
-                            <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
-                              <td style={{ padding: "6px 10px", color: "#26262C" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
-                              <td style={{ padding: "6px 10px", color: "#656576" }}>{r.assureur || "—"}</td>
-                              <td style={{ padding: "6px 10px", color: "#656576" }}>{r.numeroContrat || "—"}</td>
-                              <td style={{ padding: "6px 10px", color: "#656576" }}>{r.courtier || "—"}</td>
-                              <td style={{ padding: "6px 10px", color: "#13762C" }}>{r.mail || "—"}</td>
-                            </tr>
-                          ))}
-                          {v2Filtered.length === 0 && <tr><td colSpan={5} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>}
+                          {v2Filtered.map((r) => {
+                            const rank = orderIndex.get(r.pipelineId) ?? 999999;
+                            const top50 = rank < 50, top5 = rank < 5;
+                            return (
+                              <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4", background: top50 ? "#EFF5FE" : undefined }}>
+                                <td style={{ padding: "6px 10px", color: "#A2A1AF", fontVariantNumeric: "tabular-nums" }}>{rank + 1}</td>
+                                <td style={{ padding: "6px 10px", color: "#26262C", fontWeight: top5 ? 700 : 400 }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
+                                <td style={{ padding: "6px 10px", color: "#656576" }}>{r.assureur || "—"}</td>
+                                <td style={{ padding: "6px 10px", color: "#656576" }}>{r.numeroContrat || "—"}</td>
+                                <td style={{ padding: "6px 10px", color: "#656576" }}>{r.courtier || "—"}</td>
+                                <td style={{ padding: "6px 10px", color: "#13762C" }}>{r.mail || "—"}</td>
+                              </tr>
+                            );
+                          })}
+                          {v2Filtered.length === 0 && <tr><td colSpan={6} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>}
                         </tbody>
                       </table>
                     </div>

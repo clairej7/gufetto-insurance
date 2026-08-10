@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { applyAutofill } from "@/lib/rs-autofill-core";
+import { getExcludedCoproIds } from "@/lib/exclusions";
 
 // Batch de l'automatisation 1 : passe les dossiers "Aucune action" (identifie)
 // dans l'autofill Front → aiguille chacun (ODR / RS en cours / reste).
@@ -33,9 +34,11 @@ export async function POST(req: NextRequest) {
   // RETRY_APRES_JOURS. Comme on marque chaque lot AVANT traitement (ci-dessous),
   // les non-fiables ne réapparaissent plus au lot/clic suivant → le batch avance.
   const cooldown = new Date(Date.now() - RETRY_APRES_JOURS * 24 * 60 * 60 * 1000);
+  const excludedIds = await getExcludedCoproIds();
   const pipelines = await prisma.insurancePipeline.findMany({
     where: {
       statut: "identifie",
+      coproId: { notIn: excludedIds }, // dossiers exclus de toute automatisation
       copro: {
         archivedAt: null,
         // On ne prospecte QUE des "identifié" réellement actifs : on exclut les
