@@ -113,6 +113,8 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
   const [showDet, setShowDet] = useState(false);
   const [detSearch, setDetSearch] = useState("");
   const [routing, setRouting] = useState<string | null>(null);
+  const [showV5, setShowV5] = useState(false);
+  const [v5Search, setV5Search] = useState("");
   // Volet 1
   const [sample, setSample] = useState<Sample | null>(null);
   const [loading, setLoading] = useState(false);
@@ -287,6 +289,9 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
   const detFiltered = detSearch.trim()
     ? detector.rows.filter((r) => `${r.adresse ?? ""} ${r.nom} ${r.courtier ?? ""} ${r.mail ?? ""} ${r.replySnippet ?? ""}`.toLowerCase().includes(detSearch.trim().toLowerCase()))
     : detector.rows;
+  const v5Filtered = v5Search.trim()
+    ? volet4.rows.filter((r) => `${r.adresse ?? ""} ${r.nom} ${r.courtier ?? ""} ${r.mail ?? ""} ${r.replySnippet ?? ""}`.toLowerCase().includes(v5Search.trim().toLowerCase()))
+    : volet4.rows;
   // Ordre d'affichage du détecteur : réponses détectées d'abord, « pas de réponse » / non scanné en bas.
   const KIND_ORDER = ["rs_recu", "pj", "bounce", "redirect", "info", "attente", "autre", "sans_reponse", "non_scanne"];
   const detSorted = [...detFiltered].sort((a, b) => (KIND_ORDER.indexOf(a.replyKind ?? "non_scanne") - KIND_ORDER.indexOf(b.replyKind ?? "non_scanne")));
@@ -665,42 +670,60 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
           <p style={{ fontSize: 12, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun dossier ici. Le bouton « Traitement manuel » (détecteur V3) place ici les dossiers à traiter à la main : réponse en cours, redirection, erreur, demande d&apos;info… (pas de changement d&apos;étape).</p>
         ) : (
           <>
-            <p style={{ fontSize: 13, color: "#656576", margin: "0 0 10px" }}>
+            <p style={{ fontSize: 13, color: "#656576", margin: "0 0 8px" }}>
               <strong>{volet4.total}</strong> dossier{volet4.total > 1 ? "s" : ""} à traiter à la main (réponse en cours, redirection, erreur, info…) — hors relances, sans changement d&apos;étape. Clique « RS reçu » dès réception du relevé.
             </p>
-            <div style={{ maxHeight: 340, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                <thead>
-                  <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-                    {["Copropriété", "J+", "Verdict", "Extrait", "Mail courtier", "Actions"].map((h) => (
-                      <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {volet4.rows.map((r) => (
-                    <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
-                      <td style={{ padding: "6px 10px", color: "#26262C" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
-                      <td style={{ padding: "6px 10px", color: "#656576", fontWeight: 600 }}>J+{r.joursDepuisEnvoi}</td>
-                      <td style={{ padding: "6px 10px" }}>{r.replyKind && r.replyKind !== "non_scanne" ? <Badge kind={r.replyKind} /> : <span style={{ color: "#C7C7D1" }}>—</span>}</td>
-                      <td style={{ padding: "6px 10px", maxWidth: 240 }}>
-                        {r.replyConvUrl ? (
-                          <a href={r.replyConvUrl} target="_blank" rel="noreferrer" title="Ouvrir la conversation dans Front" style={{ color: "#4E49FC", textDecoration: "none" }}>{r.replySnippet || "Voir la conversation"} ↗</a>
-                        ) : (
-                          <span style={{ color: "#656576", fontStyle: r.replySnippet ? "normal" : "italic" }}>{r.replySnippet || "—"}</span>
-                        )}
-                      </td>
-                      <td style={{ padding: "6px 10px", color: "#656576" }}>{r.mail || "—"}</td>
-                      <td style={{ padding: "6px 10px", textAlign: "right" }}>
-                        <button onClick={() => rsRecu(r.pipelineId)} style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, border: "1px solid #B7E4C4", background: "#EAF7EE", color: "#13762C", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                          <Check size={12} /> RS reçu
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <button onClick={() => setShowV5((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#656576", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+              {showV5 ? "▾" : "▸"} Détail des {volet4.total} dossiers à traiter
+            </button>
+            {showV5 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ position: "relative", marginBottom: 8, maxWidth: 380 }}>
+                  <Search size={14} style={{ position: "absolute", left: 10, top: 9, color: "#A2A1AF" }} />
+                  <input value={v5Search} onChange={(e) => setV5Search(e.target.value)} placeholder="Rechercher une copro / courtier / extrait…" style={{ width: "100%", fontSize: 12, padding: "7px 10px 7px 30px", border: "1px solid #E8E8EC", borderRadius: 8 }} />
+                </div>
+                <div style={{ maxHeight: 360, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                        {["Copropriété", "J+", "Verdict", "Extrait", "Mail courtier", "Actions"].map((h) => (
+                          <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {v5Filtered.map((r) => {
+                        const busy = routing === r.pipelineId;
+                        return (
+                          <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
+                            <td style={{ padding: "6px 10px", color: "#26262C" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
+                            <td style={{ padding: "6px 10px", color: "#656576", fontWeight: 600 }}>J+{r.joursDepuisEnvoi}</td>
+                            <td style={{ padding: "6px 10px" }}>{r.replyKind && r.replyKind !== "non_scanne" ? <Badge kind={r.replyKind} /> : <span style={{ color: "#C7C7D1" }}>—</span>}</td>
+                            <td style={{ padding: "6px 10px", maxWidth: 240 }}>
+                              {r.replyConvUrl ? (
+                                <a href={r.replyConvUrl} target="_blank" rel="noreferrer" title="Ouvrir la conversation dans Front" style={{ color: "#4E49FC", textDecoration: "none" }}>{r.replySnippet || "Voir la conversation"} ↗</a>
+                              ) : (
+                                <span style={{ color: "#656576", fontStyle: r.replySnippet ? "normal" : "italic" }}>{r.replySnippet || "—"}</span>
+                              )}
+                            </td>
+                            <td style={{ padding: "6px 10px", color: "#656576" }}>{r.mail || "—"}</td>
+                            <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap" }}>
+                              {busy ? <Loader2 size={14} className="animate-spin" style={{ color: "#A2A1AF" }} /> : (
+                                <div style={{ display: "inline-flex", gap: 5, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                  <button onClick={() => route("/api/rs4/to-detector", r.pipelineId, "Dossier renvoyé au détecteur de réponses (V3).")} disabled={routing !== null} title="Renvoyer au détecteur pour re-tri" style={btn("#4E49FC", "#EEF0FF", "#D9D9F5")}><Radar size={11} /> Renvoyer au détecteur</button>
+                                  <button onClick={() => rsRecu(r.pipelineId)} disabled={routing !== null} style={btn("#13762C", "#EAF7EE", "#B7E4C4")}><Check size={11} /> RS reçu</button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {v5Filtered.length === 0 && <tr><td colSpan={6} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
