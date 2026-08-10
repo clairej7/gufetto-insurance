@@ -187,11 +187,13 @@ async function volet2Candidates() {
 }
 
 export type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; sendMail: string | null; hold: boolean; holdReason: string };
-export type Volet2Data = { total: number; nouveaux: number; dejaEnvoyes: number; rows: Volet2Row[] };
+export type Volet2Data = { total: number; nouveaux: number; dejaEnvoyes: number; sent: number; rows: Volet2Row[] };
 export async function getRs4Volet2Data(): Promise<Volet2Data> {
   const ps = await volet2Candidates();
   const idx = await getCourtierIndex();
   const dejaEnvoyes = ps.filter((p) => p.events.length > 0).length;
+  // Nb de demandes de RS déjà ENVOYÉES par l'auto 4 (pour la barre de progression).
+  const sent = (await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "rs4_send" } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
   // rows = les « nouveaux » (ceux qui partiront), avec le DESTINATAIRE RÉEL (mail
   // nettoyé par prepareSendMails) pour que le détail reflète ce qui sera envoyé.
   const rows: Volet2Row[] = ps
@@ -200,7 +202,7 @@ export async function getRs4Volet2Data(): Promise<Volet2Data> {
       const plan = prepareSendMails(p.copro.courtierActuel, p.copro.contactCourtierEmail, idx);
       return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, assureur: p.copro.assureurActuel, numeroContrat: p.copro.numeroContrat, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, sendMail: plan.hold ? null : plan.mails.join(", "), hold: plan.hold, holdReason: plan.reason };
     });
-  return { total: ps.length, nouveaux: ps.length - dejaEnvoyes, dejaEnvoyes, rows };
+  return { total: ps.length, nouveaux: ps.length - dejaEnvoyes, dejaEnvoyes, sent, rows };
 }
 
 // Envoie la demande de RS aux « nouveaux » (jamais envoyée) et fait passer au
