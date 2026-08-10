@@ -15,8 +15,10 @@ import { GhcApplyButton } from "@/components/admin/ghc-apply-button";
 import { computeGhcState, getGhcImportHistory, getGhcReviews } from "@/lib/ghc";
 import { getCourtierRefState, getCourtierRefSample } from "@/lib/courtier-ref";
 import { CourtierAuditControls } from "@/components/admin/courtier-audit-controls";
-import { getRs4Volet1Count, getRs4Volet2Data, getRs4Volet3Data } from "@/lib/rs4";
+import { getRs4Volet1Count, getRs4Volet2Data, getRs4Volet3Data, getRs4Volet4Data } from "@/lib/rs4";
 import { Rs4Controls } from "@/components/admin/rs4-controls";
+import { getDevis5Volet1Data } from "@/lib/devis5";
+import { Devis5Controls } from "@/components/admin/devis5-controls";
 import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 
 type Etat = "deploye" | "encours" | "attente";
@@ -90,6 +92,8 @@ export default async function AutomatisationsPage() {
   const rs4Volet1Count = await getRs4Volet1Count();
   const rs4Volet2 = await getRs4Volet2Data();
   const rs4Volet3 = await getRs4Volet3Data(Date.now());
+  const rs4Volet4 = await getRs4Volet4Data(Date.now());
+  const devis5Volet1 = await getDevis5Volet1Data();
   const ghcReviewLabel: Record<string, string> = { prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
 
@@ -243,7 +247,8 @@ export default async function AutomatisationsPage() {
                 </details>
 
                 {/* Auto 4 : volets (vérification échantillon, envoi, relances). */}
-                {a.n === 4 && <Rs4Controls volet1Count={rs4Volet1Count} volet2={rs4Volet2} volet3={rs4Volet3} />}
+                {a.n === 4 && <Rs4Controls volet1Count={rs4Volet1Count} volet2={rs4Volet2} volet3={rs4Volet3} volet4={rs4Volet4} />}
+                {a.n === 5 && <Devis5Controls data={devis5Volet1} />}
 
                 {/* Contrôles admin — pour l'instant uniquement l'auto 1 (le batch). */}
                 {a.n === 1 && (

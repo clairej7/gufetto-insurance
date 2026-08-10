@@ -205,6 +205,10 @@ model InsurancePipeline {
   // « X jours depuis l'envoi » et à l'éligibilité des relances. Sortie de la boucle
   // quand le RS est reçu (le dossier quitte rs_en_cours).
   rs4SentAt DateTime?
+  // Auto 4 Volet 3 → Volet 4 : le courtier a répondu mais le RS n'est pas encore
+  // reçu (demande d'info, etc.) → sorti de la boucle de relance, placé en « RS en
+  // cours de récupération ». Reste jusqu'au RS reçu (→ devis_demandes).
+  rs4EnCoursAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

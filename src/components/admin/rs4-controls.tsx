@@ -7,7 +7,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ListChecks, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Send, Mail, Check } from "lucide-react";
+import { ListChecks, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Send, Mail, Check, Search, PauseCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -16,6 +16,8 @@ type Sample = { total: number; complete: number; incomplete: number; completeRow
 type Volet2 = { total: number; nouveaux: number; dejaEnvoyes: number };
 type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number };
 type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[] };
+type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number };
+type Volet4 = { total: number; rows: Volet4Row[] };
 
 // ── Templates par défaut (éditables). Placeholders : {adresse} {assureur} {numeroContrat} {jours} ──
 const DEFAULT_SUBJECT = "Demande de relevé de sinistralité — {adresse} — contrat n° {numeroContrat}";
@@ -78,7 +80,7 @@ function V1Table({ rows, showManque }: { rows: Row[]; showManque?: boolean }) {
   );
 }
 
-export function Rs4Controls({ volet1Count, volet2, volet3 }: { volet1Count: number; volet2: Volet2; volet3: Volet3 }) {
+export function Rs4Controls({ volet1Count, volet2, volet3, volet4 }: { volet1Count: number; volet2: Volet2; volet3: Volet3; volet4: Volet4 }) {
   const router = useRouter();
   // Volet 1
   const [sample, setSample] = useState<Sample | null>(null);
@@ -94,6 +96,7 @@ export function Rs4Controls({ volet1Count, volet2, volet3 }: { volet1Count: numb
   // Volet 3
   const [relancing, setRelancing] = useState<number | null>(null);
   const [showV3, setShowV3] = useState(false);
+  const [v3Search, setV3Search] = useState("");
 
   async function verify() {
     setLoading(true);
@@ -170,6 +173,19 @@ export function Rs4Controls({ volet1Count, volet2, volet3 }: { volet1Count: numb
       router.refresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); }
   }
+
+  async function enCours(pipelineId: string) {
+    try {
+      const res = await fetch("/api/rs4/en-cours", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      toast.success("Dossier placé en « RS en cours de récupération » (sorti de la relance).");
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); }
+  }
+
+  const v3Filtered = v3Search.trim()
+    ? volet3.rows.filter((r) => `${r.adresse ?? ""} ${r.nom} ${r.courtier ?? ""} ${r.mail ?? ""}`.toLowerCase().includes(v3Search.trim().toLowerCase()))
+    : volet3.rows;
 
   return (
     <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC", display: "flex", flexDirection: "column", gap: 22 }}>
@@ -275,33 +291,85 @@ export function Rs4Controls({ volet1Count, volet2, volet3 }: { volet1Count: numb
               {showV3 ? "▾" : "▸"} Détail des {volet3.total} dossiers en cours
             </button>
             {showV3 && (
-              <div style={{ marginTop: 8, maxHeight: 360, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                  <thead>
-                    <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-                      {["Copropriété", "Jours depuis l'envoi", "Relances", "Mail courtier", ""].map((h) => (
-                        <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {volet3.rows.map((r) => (
-                      <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
-                        <td style={{ padding: "6px 10px", color: "#26262C" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
-                        <td style={{ padding: "6px 10px", color: r.joursDepuisEnvoi >= 8 ? "#CA1E12" : r.joursDepuisEnvoi >= 4 ? "#B4690E" : "#656576", fontWeight: 600 }}>J+{r.joursDepuisEnvoi}</td>
-                        <td style={{ padding: "6px 10px", color: "#656576" }}>{r.relances}</td>
-                        <td style={{ padding: "6px 10px", color: "#656576" }}>{r.mail || "—"}</td>
-                        <td style={{ padding: "6px 10px", textAlign: "right" }}>
-                          <button onClick={() => rsRecu(r.pipelineId)} style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, border: "1px solid #B7E4C4", background: "#EAF7EE", color: "#13762C", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                            <Check size={12} /> RS reçu
-                          </button>
-                        </td>
+              <div style={{ marginTop: 8 }}>
+                <div style={{ position: "relative", marginBottom: 8, maxWidth: 380 }}>
+                  <Search size={14} style={{ position: "absolute", left: 10, top: 9, color: "#A2A1AF" }} />
+                  <input value={v3Search} onChange={(e) => setV3Search(e.target.value)} placeholder="Rechercher une copro (où j'ai reçu le RS)…" style={{ width: "100%", fontSize: 12, padding: "7px 10px 7px 30px", border: "1px solid #E8E8EC", borderRadius: 8 }} />
+                </div>
+                <div style={{ maxHeight: 360, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                        {["Copropriété", "J+", "Relances", "Mail courtier", "Actions"].map((h) => (
+                          <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {v3Filtered.map((r) => (
+                        <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
+                          <td style={{ padding: "6px 10px", color: "#26262C" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
+                          <td style={{ padding: "6px 10px", color: r.joursDepuisEnvoi >= 8 ? "#CA1E12" : r.joursDepuisEnvoi >= 4 ? "#B4690E" : "#656576", fontWeight: 600 }}>J+{r.joursDepuisEnvoi}</td>
+                          <td style={{ padding: "6px 10px", color: "#656576" }}>{r.relances}</td>
+                          <td style={{ padding: "6px 10px", color: "#656576" }}>{r.mail || "—"}</td>
+                          <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap" }}>
+                            <button onClick={() => enCours(r.pipelineId)} title="Le courtier a répondu mais pas de RS → sortir de la relance" style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, border: "1px solid #F3D9A6", background: "#FDF0D5", color: "#B4690E", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, marginRight: 6 }}>
+                              <PauseCircle size={12} /> RS en cours de réception
+                            </button>
+                            <button onClick={() => rsRecu(r.pipelineId)} style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, border: "1px solid #B7E4C4", background: "#EAF7EE", color: "#13762C", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                              <Check size={12} /> RS reçu
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {v3Filtered.length === 0 && (
+                        <tr><td colSpan={5} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
+          </>
+        )}
+      </div>
+
+      {/* ── Volet 4 ── */}
+      <div>
+        <VoletTitle n={4}>RS en cours de récupération</VoletTitle>
+        {volet4.total === 0 ? (
+          <p style={{ fontSize: 12, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun dossier ici. Depuis le volet 3, « RS en cours de réception » place ici les dossiers où le courtier a répondu sans encore fournir le RS (sortis de la boucle de relance).</p>
+        ) : (
+          <>
+            <p style={{ fontSize: 13, color: "#656576", margin: "0 0 10px" }}>
+              <strong>{volet4.total}</strong> dossier{volet4.total > 1 ? "s" : ""} — courtier a répondu, RS pas encore reçu (hors relances). Clique « RS reçu » dès réception.
+            </p>
+            <div style={{ maxHeight: 340, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                    {["Copropriété", "J+", "Courtier", "Mail courtier", "Actions"].map((h) => (
+                      <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {volet4.rows.map((r) => (
+                    <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
+                      <td style={{ padding: "6px 10px", color: "#26262C" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
+                      <td style={{ padding: "6px 10px", color: "#656576", fontWeight: 600 }}>J+{r.joursDepuisEnvoi}</td>
+                      <td style={{ padding: "6px 10px", color: "#656576" }}>{r.courtier || "—"}</td>
+                      <td style={{ padding: "6px 10px", color: "#656576" }}>{r.mail || "—"}</td>
+                      <td style={{ padding: "6px 10px", textAlign: "right" }}>
+                        <button onClick={() => rsRecu(r.pipelineId)} style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, border: "1px solid #B7E4C4", background: "#EAF7EE", color: "#13762C", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          <Check size={12} /> RS reçu
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </div>
