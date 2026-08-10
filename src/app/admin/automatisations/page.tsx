@@ -142,7 +142,7 @@ export default async function AutomatisationsPage() {
     {
       n: 4,
       nom: "Envoi des demandes de RS",
-      etat: "encours",
+      etat: "deploye",
       description: [
         "Envoie automatiquement les demandes de relevé de sinistralité (RS) aux courtiers / assureurs via Front, à partir des infos remplies par l'automatisation 1.",
         "Gère le cycle complet : relances automatiques en l'absence de réponse, puis traitement des réponses entrantes — remercier, enregistrer le RS reçu, faire avancer le dossier à l'étape suivante, et archiver l'échange.",
