@@ -288,6 +288,11 @@ export function prepareSendMails(courtierName: string | null, mailField: string 
   if (byName.length) return { mails: byName, hold: false, reason: "" };
   const nonGeneric = new Set(mails.map(dom).filter((d) => !GENERIC_DOM.has(d)));
   if (nonGeneric.size >= 2) return { mails: [], hold: true, reason: "multi-cabinet ambigu (plusieurs domaines, aucun ne matche le courtier)" };
+  // GARDE-FOU perso : hors base, aucun mail ne matche le courtier, et il ne reste
+  // QUE du perso/générique (gmail/wanadoo/…) → BLOQUER. Un mail perso seul non
+  // identifié est le plus souvent un individu / membre du CS, pas un courtier
+  // (cf. incident audrey.thory@yahoo). Faux négatif (ne pas envoyer) assumé.
+  if (mails.every((m) => GENERIC_DOM.has(dom(m)))) return { mails: [], hold: true, reason: "mail perso/générique seul, courtier non identifié — à vérifier" };
   return { mails, hold: false, reason: "" };
 }
 
