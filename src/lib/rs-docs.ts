@@ -73,7 +73,7 @@ function docName(adresse: string, kind: DocKind, part: number | null): string {
 
 // Capture toutes les PJ PDF des messages entrants donnés → Supabase + PipelineDocument.
 // Idempotent (skip si frontAttachmentId déjà stocké). Renvoie le nombre de docs créés.
-export async function captureReplyDocs(opts: { pipelineId: string; coproId: string; adresse: string; msgIds: string[]; createdBy?: string }): Promise<{ created: number; docs: { kind: DocKind; fileName: string }[] }> {
+export async function captureReplyDocs(opts: { pipelineId: string; coproId: string; adresse: string; msgIds: string[]; createdBy?: string; onlyRsContrat?: boolean }): Promise<{ created: number; docs: { kind: DocKind; fileName: string }[] }> {
   if (!FRONT_TOKEN) return { created: 0, docs: [] };
   const existing = await prisma.pipelineDocument.findMany({ where: { pipelineId: opts.pipelineId }, select: { frontAttachmentId: true, kind: true } });
   const seen = new Set(existing.map((d) => d.frontAttachmentId).filter(Boolean) as string[]);
@@ -99,6 +99,7 @@ export async function captureReplyDocs(opts: { pipelineId: string; coproId: stri
 
   const created: { kind: DocKind; fileName: string }[] = [];
   for (const c of classified) {
+    if (opts.onlyRsContrat && c.kind === "autre") continue; // ignore devis/propositions/AG
     let part: number | null = null;
     if (c.kind === "rs" && totalRs > 1) part = ++rsCount;
     const fileName = docName(opts.adresse, c.kind, part);
@@ -115,27 +116,47 @@ export async function captureReplyDocs(opts: { pipelineId: string; coproId: stri
 // donc marche aussi sur les dossiers déjà avancés (devis/comparaison). Retrouve la
 // conversation d'envoi + les entrants, puis délègue à captureReplyDocs.
 export async function captureDocsForPipeline(pipelineId: string, createdBy?: string): Promise<{ created: number; docs: { kind: DocKind; fileName: string }[]; noReply?: boolean }> {
-  const p = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, select: { coproId: true, rs4SentAt: true, copro: { select: { nom: true, adresse: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } } });
+  const p = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, select: { coproId: true, rs4SentAt: true, copro: { select: { nom: true, adresse: true } } } });
   if (!p) return { created: 0, docs: [] };
-  // Marque la tentative (même si rien trouvé) → le dossier sort de la file « à charger ».
   const markChecked = () => prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { docsCheckedAt: new Date() } }).catch(() => {});
-  const cid = p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop();
-  if (!cid || !FRONT_TOKEN) { await markChecked(); return { created: 0, docs: [], noReply: true }; }
-  const res = await fetch(`${FRONT_API_URL}/conversations/${cid}/messages?limit=20`, { headers: { Authorization: `Bearer ${FRONT_TOKEN}` } });
-  const list = res.ok ? await res.json() : null;
+  if (!FRONT_TOKEN) { await markChecked(); return { created: 0, docs: [], noReply: true }; }
+  const adresse = p.copro.adresse || p.copro.nom;
   const sentMs = p.rs4SentAt ? new Date(p.rs4SentAt).getTime() : 0;
-  const inbound = ((list?._results as { id: string; is_inbound: boolean; created_at: number }[]) ?? []).filter((m) => m.is_inbound && m.created_at * 1000 > sentMs);
-  if (!inbound.length) { await markChecked(); return { created: 0, docs: [], noReply: true }; }
-  const r = await captureReplyDocs({ pipelineId, coproId: p.coproId, adresse: p.copro.adresse || p.copro.nom, msgIds: inbound.map((m) => m.id), createdBy });
+  const convMsgs = async (cid: string) => {
+    const res = await fetch(`${FRONT_API_URL}/conversations/${cid}/messages?limit=25`, { headers: { Authorization: `Bearer ${FRONT_TOKEN}` } });
+    return res.ok ? (((await res.json())._results as { id: string; is_inbound: boolean; created_at: number }[]) ?? []) : [];
+  };
+  const cidsFrom = (evs: { metadata: unknown }[]) => [...new Set(evs.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean) as string[])];
+
+  const draftEv = await prisma.pipelineEvent.findMany({ where: { pipelineId, metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } });
+  const devisEv = await prisma.pipelineEvent.findMany({ where: { pipelineId, metadata: { path: ["devisType"], equals: "devis_sent" } }, select: { metadata: true } });
+  const draftCids = cidsFrom(draftEv), devisCids = cidsFrom(devisEv);
+
+  let created = 0; const docs: { kind: DocKind; fileName: string }[] = [];
+  // 1) Demandes de RS envoyées via Gufetto → PJ ENTRANTES (réponse courtier).
+  for (const cid of draftCids) {
+    const inbound = (await convMsgs(cid)).filter((m) => m.is_inbound && m.created_at * 1000 > sentMs);
+    if (!inbound.length) continue;
+    const r = await captureReplyDocs({ pipelineId, coproId: p.coproId, adresse, msgIds: inbound.map((m) => m.id), createdBy });
+    created += r.created; docs.push(...r.docs);
+  }
+  // 2) Demandes de devis envoyées via Gufetto → PJ SORTANTES (RS/contrat qu'on a joints).
+  for (const cid of devisCids) {
+    const outbound = (await convMsgs(cid)).filter((m) => !m.is_inbound);
+    if (!outbound.length) continue;
+    const r = await captureReplyDocs({ pipelineId, coproId: p.coproId, adresse, msgIds: outbound.map((m) => m.id), createdBy, onlyRsContrat: true });
+    created += r.created; docs.push(...r.docs);
+  }
   await markChecked();
-  return r;
+  return { created, docs, noReply: draftCids.length === 0 && devisCids.length === 0 };
 }
 
 // Compteur global : nb de dossiers ayant au moins un RS / un contrat MRI récupéré.
+// EXCLUT les dossiers en ODR (parcours distinct).
 export async function getDocsStats(): Promise<{ rs: number; contrat: number }> {
-  const rs = (await prisma.pipelineDocument.findMany({ where: { kind: "rs" }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
-  const contrat = (await prisma.pipelineDocument.findMany({ where: { kind: "contrat_mri" }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
-  return { rs, contrat };
+  const distinctPipes = async (kind: DocKind) =>
+    (await prisma.pipelineDocument.findMany({ where: { kind, pipeline: { statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] } } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
+  return { rs: await distinctPipes("rs"), contrat: await distinctPipes("contrat_mri") };
 }
 
 // Ajout MANUEL d'un document (upload depuis le Drive). Typé automatiquement par
