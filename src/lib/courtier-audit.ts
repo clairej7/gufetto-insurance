@@ -234,6 +234,53 @@ export function recipientSuspect(courtierName: string | null, mailField: string 
   return emails.some((e) => GENERIC_DOM.has(domainOf(e))); // suspect seulement s'il y a un domaine perso
 }
 
+// Domaine « nu » (sans TLD ni ponctuation) pour rapprocher avec le nom du courtier.
+function domainBase(d: string): string {
+  return d.replace(/\.(fr|com|net|org|eu|be|io)$/i, "").replace(/[.-]/g, " ").trim();
+}
+// Le nom du courtier correspond-il au domaine du mail ? (ex. « Top Bridging » ~ topbridging.com)
+function nameMatchesDomain(nameTokens: string[], domain: string): boolean {
+  const db = domainBase(domain).replace(/\s/g, "");
+  return nameTokens.some((t) => t.length >= 4 && (db.includes(t) || t.includes(db)));
+}
+
+// Prépare les destinataires d'un envoi : nettoie les mails et décide s'il faut
+// BLOQUER (hold) plutôt qu'envoyer. Source unique pour l'auto 4.
+//  - courtier connu (vrai domaine) : ne garder que ses mails ; si aucun et un
+//    mail perso présent → hold (risque individu/CS).
+//  - courtier hors base : si le NOM matche un domaine → ne garder que ce domaine
+//    (ex. Top Bridging → topbridging.com) ; sinon si plusieurs cabinets distincts
+//    (≥2 domaines non génériques, aucun ne matchant le nom) → hold (ambigu).
+export type SendMailPlan = { mails: string[]; hold: boolean; reason: string };
+export function prepareSendMails(courtierName: string | null, mailField: string | null, idx: CourtierIndex): SendMailPlan {
+  const mails = (mailField ?? "").split(/[;,]/).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s));
+  if (!mails.length) return { mails: [], hold: true, reason: "pas de mail exploitable" };
+  const dom = (m: string) => domainOf(m.toLowerCase());
+  const res = resolveCourtier(courtierName, idx);
+  const ref = res.kind === "courtier" ? res.ref : null;
+
+  if (ref) {
+    const doms = expandDomains((ref.emailsAll ?? ref.email ?? "").split(";").map((s) => domainOf(s.trim())).filter(Boolean));
+    const aReal = [...doms].some((d) => !GENERIC_DOM.has(d));
+    if (aReal) {
+      const kept = mails.filter((m) => doms.has(dom(m)));
+      if (kept.length) return { mails: kept, hold: false, reason: "" }; // ne garder que le domaine du courtier
+      if (mails.some((m) => GENERIC_DOM.has(dom(m)))) return { mails: [], hold: true, reason: "mail perso pour un courtier connu" };
+      return { mails: [], hold: true, reason: `aucun mail au domaine de ${ref.nom}` };
+    }
+    return { mails, hold: false, reason: "" }; // courtier dont le mail de base est générique
+  }
+
+  // Hors base : heuristique nom↔domaine.
+  const nameTokens = tokensOf(normNom(courtierName ?? ""));
+  const byName = mails.filter((m) => nameMatchesDomain(nameTokens, dom(m)));
+  if (byName.length && byName.length < mails.length) return { mails: byName, hold: false, reason: "" };
+  if (byName.length) return { mails: byName, hold: false, reason: "" };
+  const nonGeneric = new Set(mails.map(dom).filter((d) => !GENERIC_DOM.has(d)));
+  if (nonGeneric.size >= 2) return { mails: [], hold: true, reason: "multi-cabinet ambigu (plusieurs domaines, aucun ne matche le courtier)" };
+  return { mails, hold: false, reason: "" };
+}
+
 export function classify(
   row: { pipelineId: string; courtier: string | null; mail: string | null; assureur: string | null; rsSent: boolean; nom: string; buildingId: string; adresse: string | null },
   idx: CourtierIndex,

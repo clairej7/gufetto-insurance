@@ -8,7 +8,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSignatureHtml, tagConversation, assignConversation, resolveTeammateId } from "@/lib/front";
-import { getCourtierIndex, recipientSuspect } from "@/lib/courtier-audit";
+import { getCourtierIndex, prepareSendMails } from "@/lib/courtier-audit";
 import { getExcludedCoproIds } from "@/lib/exclusions";
 
 const FRONT_API_URL = "https://api2.frontapp.com";
@@ -216,11 +216,9 @@ export async function sendVolet2(actorEmail: string, subjectTpl: string, bodyTpl
 
   for (const p of toSend) {
     const c = p.copro;
-    const toList = parseEmails(c.contactCourtierEmail);
-    if (!toList.length) { failed++; errors.push(`${c.nom} : pas de mail`); continue; }
-    // Garde-fou : ne pas envoyer si le destinataire est suspect (courtier connu à
-    // vrai domaine mais mail perso/autre) → évite d'écrire à un tiers (ex. CS).
-    if (recipientSuspect(c.courtierActuel, c.contactCourtierEmail, idx)) { failed++; errors.push(`${c.nom} : destinataire suspect (${c.contactCourtierEmail}) — non envoyé`); continue; }
+    const plan = prepareSendMails(c.courtierActuel, c.contactCourtierEmail, idx);
+    if (plan.hold) { failed++; errors.push(`${c.nom} : ${plan.reason} (${c.contactCourtierEmail}) — non envoyé`); continue; }
+    const toList = plan.mails;
     const to = toList.join(", ");
     const vars = { adresse: c.adresse || c.nom, assureur: c.assureurActuel || "", numeroContrat: c.numeroContrat || "", nom: c.nom };
     const subject = fillTemplate(subjectTpl, vars);
@@ -315,9 +313,9 @@ export async function sendRelance(actorEmail: string, relanceNum: number, subjec
     const jours = Math.floor((nowMs - new Date(p.rs4SentAt!).getTime()) / 86400000);
     if (jours < stage.day || relanceCountOf(p.events) >= relanceNum) continue;
     const c = p.copro;
-    const toList = parseEmails(c.contactCourtierEmail);
-    if (!toList.length) { failed++; errors.push(`${c.nom} : pas de mail`); continue; }
-    if (recipientSuspect(c.courtierActuel, c.contactCourtierEmail, idx)) { failed++; errors.push(`${c.nom} : destinataire suspect (${c.contactCourtierEmail}) — non relancé`); continue; }
+    const plan = prepareSendMails(c.courtierActuel, c.contactCourtierEmail, idx);
+    if (plan.hold) { failed++; errors.push(`${c.nom} : ${plan.reason} — non relancé`); continue; }
+    const toList = plan.mails;
     const to = toList.join(", ");
     const vars = { adresse: c.adresse || c.nom, assureur: c.assureurActuel || "", numeroContrat: c.numeroContrat || "", nom: c.nom, jours: String(jours) };
     const subject = fillTemplate(subjectTpl, vars);
