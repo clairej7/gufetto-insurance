@@ -420,7 +420,7 @@ export async function scanReplies(offset: number, limit: number): Promise<{ tota
   const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({
     where: { statut: "rs_en_cours", rs4SentAt: { not: null }, rs4EnCoursAt: null, coproId: { notIn: excl }, copro: { archivedAt: null } },
-    select: { id: true, rs4SentAt: true, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } },
+    select: { id: true, rs4SentAt: true, rs4RelanceAt: true, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } },
     orderBy: { rs4SentAt: "asc" },
   });
   const slice = ps.slice(offset, offset + limit);
@@ -444,7 +444,11 @@ export async function scanReplies(offset: number, limit: number): Promise<{ tota
       if (full?.attachments && realDoc(full.attachments)) hasDoc = true;
     }
     const kind = classifyReply(body, hasDoc, bounce && !inbound.length);
-    await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: kind, rs4ReplyAt: last ? new Date(last.created_at * 1000) : now, rs4ReplySnippet: snippet || (bounce ? "Échec de remise (bounce)" : null), rs4ReplyMsgId: last?.id ?? null, rs4ReplyConvId: cid } });
+    // Réponse détectée sur un dossier en boucle de relances (V4) → retour auto au
+    // détecteur (V3) pour re-tri : on efface rs4RelanceAt.
+    const backToDetector = !!p.rs4RelanceAt;
+    await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: kind, rs4ReplyAt: last ? new Date(last.created_at * 1000) : now, rs4ReplySnippet: snippet || (bounce ? "Échec de remise (bounce)" : null), rs4ReplyMsgId: last?.id ?? null, rs4ReplyConvId: cid, ...(backToDetector ? { rs4RelanceAt: null } : {}) } });
+    if (backToDetector) await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Réponse détectée (${kind}) — dossier renvoyé de la boucle de relances (V4) au détecteur (V3)`, metadata: { auto: "rs4_reply_back_to_detector", kind }, createdBy: "auto:scan_replies" } });
     counts[kind] = (counts[kind] ?? 0) + 1;
   }
   const nextOffset = offset + slice.length;

@@ -606,7 +606,7 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
         ) : (
           <>
             <p style={{ fontSize: 13, color: "#656576", margin: "0 0 10px" }}>
-              <strong>{volet3.total}</strong> dossier{volet3.total > 1 ? "s" : ""} en relance (arrivés du détecteur ; restent ici jusqu&apos;à réception ou re-tri).
+              <strong>{volet3.total}</strong> dossier{volet3.total > 1 ? "s" : ""} en relance. Dès qu&apos;un scan détecte une réponse, le dossier <strong>repart automatiquement au détecteur (V3)</strong> pour re-tri.
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {volet3.stages.map((s) => (
@@ -628,7 +628,7 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
                       <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-                        {["Copropriété", "J+", "Relances", "Réponse", "Mail courtier", "Actions"].map((h) => (
+                        {["Copropriété", "J+", "Relances", "Mail courtier", "Actions"].map((h) => (
                           <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
                         ))}
                       </tr>
@@ -639,7 +639,6 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
                           <td style={{ padding: "6px 10px", color: "#26262C" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
                           <td style={{ padding: "6px 10px", color: r.joursDepuisEnvoi >= 8 ? "#CA1E12" : r.joursDepuisEnvoi >= 4 ? "#B4690E" : "#656576", fontWeight: 600 }}>J+{r.joursDepuisEnvoi}</td>
                           <td style={{ padding: "6px 10px", color: "#656576" }}>{r.relances}</td>
-                          <td style={{ padding: "6px 10px" }}>{r.replyKind && r.replyKind !== "sans_reponse" && r.replyKind !== "non_scanne" ? <Badge kind={r.replyKind} /> : <span style={{ color: "#C7C7D1" }}>—</span>}</td>
                           <td style={{ padding: "6px 10px", color: "#656576" }}>{r.mail || "—"}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap" }}>
                             <button onClick={() => enCours(r.pipelineId)} title="Le courtier a répondu mais pas de RS → sortir de la relance" style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, border: "1px solid #F3D9A6", background: "#FDF0D5", color: "#B4690E", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, marginRight: 6 }}>
@@ -652,7 +651,7 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
                         </tr>
                       ))}
                       {v3Filtered.length === 0 && (
-                        <tr><td colSpan={6} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>
+                        <tr><td colSpan={5} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>
                       )}
                     </tbody>
                   </table>
