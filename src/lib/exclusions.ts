@@ -25,9 +25,12 @@ export async function getExcludedCoproIds(): Promise<string[]> {
   return [...coproIds];
 }
 
-// Compteur par type pour l'affichage admin.
-export async function getExclusionState(): Promise<{ gestionnaires: number; copros: number; totalCopros: number; rows: ExclusionRow[] }> {
+export type ExcludedCopro = { id: string; nom: string; adresse: string | null; gestionnaireNom: string | null };
+
+// Compteur + liste des copros concernées pour l'affichage admin.
+export async function getExclusionState(): Promise<{ gestionnaires: number; copros: number; totalCopros: number; rows: ExclusionRow[]; coproList: ExcludedCopro[] }> {
   const rows = await getExclusions();
   const ids = await getExcludedCoproIds();
-  return { gestionnaires: rows.filter((r) => r.kind === "gestionnaire").length, copros: rows.filter((r) => r.kind === "copro").length, totalCopros: ids.length, rows };
+  const coproList = await prisma.copro.findMany({ where: { id: { in: ids } }, select: { id: true, nom: true, adresse: true, gestionnaireNom: true }, orderBy: [{ gestionnaireNom: "asc" }, { nom: "asc" }] });
+  return { gestionnaires: rows.filter((r) => r.kind === "gestionnaire").length, copros: rows.filter((r) => r.kind === "copro").length, totalCopros: ids.length, rows, coproList };
 }
