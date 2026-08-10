@@ -247,8 +247,18 @@ export default async function AutomatisationsPage() {
                 </details>
 
                 {/* Auto 4 : volets (vérification échantillon, envoi, relances). */}
-                {a.n === 4 && <Rs4Controls volet1Count={rs4Volet1Count} volet2={rs4Volet2} volet3={rs4Volet3} volet4={rs4Volet4} />}
-                {a.n === 5 && <Devis5Controls data={devis5Volet1} />}
+                {a.n === 4 && (
+                  <details style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                    <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content" }}>Contrôles admin</summary>
+                    <Rs4Controls volet1Count={rs4Volet1Count} volet2={rs4Volet2} volet3={rs4Volet3} volet4={rs4Volet4} />
+                  </details>
+                )}
+                {a.n === 5 && (
+                  <details style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                    <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content" }}>Contrôles admin</summary>
+                    <Devis5Controls data={devis5Volet1} />
+                  </details>
+                )}
 
                 {/* Contrôles admin — pour l'instant uniquement l'auto 1 (le batch). */}
                 {a.n === 1 && (
