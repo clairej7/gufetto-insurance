@@ -608,6 +608,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
   }
 
   const [editingCarac, setEditingCarac] = useState(false);
+  const [showInfosCopro, setShowInfosCopro] = useState(false);
   const [activitesChecked, setActivitesChecked] = useState<string[]>([]);
   const [activitesAutre, setActivitesAutre] = useState("");
   const [caracsChecked, setCaracsChecked] = useState<string[]>([]);
@@ -873,11 +874,14 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
         </div>
       )}
 
-      {/* 3-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* 3-column layout — centre élargi (sauf vue comparaison devis_recus) */}
+      <div className={pipeline.statut === "devis_recus" ? "grid grid-cols-1 lg:grid-cols-3 gap-6" : "grid grid-cols-1 lg:grid-cols-[1fr_1.7fr_1fr] gap-6"}>
 
         {/* Col 1: Contrat actuel (toujours visible) + Infos copro (masqué pour devis_recus qui a sa propre col) */}
         <div className="space-y-4">
+          {pipeline.statut !== "devis_recus" && (
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#A2A1AF", padding: "0 2px" }}>Informations sur la copro</div>
+          )}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C" }}>
@@ -946,10 +950,11 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
           {pipeline.statut !== "devis_recus" && (
             <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C" }}>
+                <button onClick={() => setShowInfosCopro((v) => !v)} className="text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
                   <Building2 className="h-4 w-4" />
                   Infos copropriété
-                </h3>
+                  <span style={{ color: "#A2A1AF", fontSize: 12 }}>{showInfosCopro || editingCarac ? "▾" : "▸"}</span>
+                </button>
                 {editingCarac ? (
                   <div className="flex gap-1">
                     <button onClick={handleSaveCarac} disabled={isPending} className="transition-colors" style={{ color: "#4E49FC" }}>
@@ -973,7 +978,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                   caracsChecked={caracsChecked} setCaracsChecked={setCaracsChecked}
                   caracsAutre={caracsAutre} setCaracsAutre={setCaracsAutre}
                 />
-              ) : (
+              ) : !showInfosCopro ? null : (
                 <dl className="space-y-2">
                   <InfoRow label="Surface développée" value={pipeline.copro.surfaceDeveloppee ? `${pipeline.copro.surfaceDeveloppee} m²` : null} />
                   <InfoRow label="Période de construction" value={PERIODE_LABELS[pipeline.copro.periodeConstruction ?? ""] ?? null} />
@@ -998,27 +1003,9 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
 
           {/* Documents assurance récupérés (relevé de sinistralité, contrat MRI…) */}
           <Card className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C" }}>
-                  📎 Documents assurance
-                </h3>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={pickDoc}
-                    disabled={uploadingDoc}
-                    className="text-[11px] font-semibold px-2 py-1 rounded-md border disabled:opacity-60"
-                    style={{ color: "#13762C", background: "#EFFBF2", borderColor: "#B7E4C4" }}
-                    title="Ajouter un document manuellement (PDF depuis ton Drive)"
-                  >{uploadingDoc ? "Ajout…" : "＋ Ajouter (PDF)"}</button>
-                  <button
-                    onClick={captureDocs}
-                    disabled={capturingDocs}
-                    className="text-[11px] font-semibold px-2 py-1 rounded-md border disabled:opacity-60"
-                    style={{ color: "#4E49FC", background: "#F5F5FF", borderColor: "#D9D9F5" }}
-                    title="Récupérer les PJ (RS / contrat MRI) de la réponse courtier depuis Front"
-                  >{capturingDocs ? "Récupération…" : "↻ Récupérer"}</button>
-                </div>
-              </div>
+              <h3 className="text-sm font-semibold whitespace-nowrap mb-3" style={{ color: "#26262C" }}>
+                📎 Documents assurance
+              </h3>
               {documents.length === 0 && (
                 <p className="text-xs" style={{ color: "#A2A1AF" }}>Aucun document. « Récupérer » importe le relevé / contrat MRI depuis la réponse du courtier (Front) ; « Ajouter (PDF) » permet de charger un fichier manuellement (depuis ton Drive).</p>
               )}
@@ -1068,11 +1055,30 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                   );
                 })}
               </div>
+              <div className="flex justify-center gap-2 mt-3 pt-3" style={{ borderTop: "1px solid #F1F1F4" }}>
+                <button
+                  onClick={pickDoc}
+                  disabled={uploadingDoc}
+                  className="text-[11px] font-semibold px-3 py-1.5 rounded-md border disabled:opacity-60"
+                  style={{ color: "#13762C", background: "#EFFBF2", borderColor: "#B7E4C4" }}
+                  title="Ajouter un document manuellement (PDF depuis ton Drive)"
+                >{uploadingDoc ? "Ajout…" : "＋ Ajouter (PDF)"}</button>
+                <button
+                  onClick={captureDocs}
+                  disabled={capturingDocs}
+                  className="text-[11px] font-semibold px-3 py-1.5 rounded-md border disabled:opacity-60"
+                  style={{ color: "#4E49FC", background: "#F5F5FF", borderColor: "#D9D9F5" }}
+                  title="Récupérer les PJ (RS / contrat MRI) de la réponse courtier depuis Front"
+                >{capturingDocs ? "Récupération…" : "↻ Récupérer"}</button>
+              </div>
           </Card>
         </div>
 
         {/* Col 2: action centrale */}
         <div className="space-y-4">
+          {pipeline.statut !== "devis_recus" && (
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#4E49FC", padding: "0 2px" }}>Prochaine action</div>
+          )}
           {(() => {
             const FINALE_TASKS = [
               { key: "update_duomo_contrat", label: "Va dans \"Mes contrats\" et mets à jour le nouveau contrat d'assurance" },
@@ -1643,6 +1649,9 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
 
         {/* Col 3: deal perdu + échéance + ODR + notes + historique */}
         <div className="space-y-4">
+          {pipeline.statut !== "devis_recus" && (
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#A2A1AF", padding: "0 2px" }}>Autres actions</div>
+          )}
           {/* Deal perdu */}
           {!isTerminal && (
             <div className="relative" ref={dealPerduRef}>
