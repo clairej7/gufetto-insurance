@@ -505,19 +505,20 @@ export async function sendRelance(actorEmail: string, relanceNum: number, subjec
 // (RS reçu = réutilise l'action existante marquerRSRecu → rs_en_cours → devis_demandes.)
 
 // ─── Volet 4 : « RS en cours de récupération » (courtier a répondu, RS pas reçu) ──
-export type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number };
+export type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; replyKind: string | null; replySnippet: string | null };
 export type Volet4Data = { total: number; rows: Volet4Row[] };
 
 export async function getRs4Volet4Data(nowMs: number): Promise<Volet4Data> {
   const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({
     where: { statut: "rs_en_cours", rs4EnCoursAt: { not: null }, coproId: { notIn: excl }, copro: { archivedAt: null } },
-    select: { id: true, rs4SentAt: true, rs4EnCoursAt: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true } } },
+    select: { id: true, rs4SentAt: true, rs4EnCoursAt: true, rs4ReplyKind: true, rs4ReplySnippet: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true } } },
     orderBy: { rs4EnCoursAt: "desc" },
   });
   const rows: Volet4Row[] = ps.map((p) => ({
     pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail,
     joursDepuisEnvoi: p.rs4SentAt ? Math.floor((nowMs - new Date(p.rs4SentAt).getTime()) / 86400000) : 0,
+    replyKind: p.rs4ReplyKind, replySnippet: p.rs4ReplySnippet,
   }));
   return { total: rows.length, rows };
 }

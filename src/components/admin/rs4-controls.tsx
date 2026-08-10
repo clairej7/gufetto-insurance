@@ -9,7 +9,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ListChecks, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Send, Mail, Check, Search, PauseCircle, Archive, Radar, CornerUpLeft } from "lucide-react";
+import { ListChecks, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Send, Mail, Check, Search, PauseCircle, Archive, Radar } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -20,7 +20,7 @@ type Volet2 = { total: number; nouveaux: number; dejaEnvoyes: number; sent: numb
 type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null };
 type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null };
 type Detector = { total: number; scanned: number; nonScanne: number; sansReponse: number; replyCounts: Record<string, number>; lastScanAt: string | null; rows: Volet3Row[] };
-type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number };
+type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; replyKind: string | null; replySnippet: string | null };
 type Volet4 = { total: number; rows: Volet4Row[] };
 type SendHist = { sentAt: string; kind: string; relanceNum: number | null; count: number; failed: number };
 
@@ -562,14 +562,17 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
                             <td style={{ padding: "6px 10px" }}><Badge kind={r.replyKind} /></td>
                             <td style={{ padding: "6px 10px", color: "#656576", maxWidth: 280, fontStyle: r.replySnippet ? "normal" : "italic" }}>{r.replySnippet || "—"}</td>
                             <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>
-                              {busy ? <Loader2 size={14} className="animate-spin" style={{ color: "#A2A1AF" }} /> : (
-                                <div style={{ display: "inline-flex", gap: 5, flexWrap: "wrap" }}>
-                                  <button onClick={() => route("/api/rs4/rs-recu", r.pipelineId, "RS reçu → demande de devis.")} disabled={routing !== null} title="RS reçu → devis" style={btn("#13762C", "#EAF7EE", "#B7E4C4")}><Check size={11} /> RS reçu</button>
-                                  <button onClick={() => route("/api/rs4/en-cours", r.pipelineId, "→ RS en cours de récupération (V5).")} disabled={routing !== null} title="Courtier a répondu, doc à venir → V5" style={btn("#1F6FE0", "#EAF3FE", "#C7DEF9")}><PauseCircle size={11} /> En cours</button>
-                                  <button onClick={() => route("/api/rs4/move-to-relance", r.pipelineId, "→ boucle de relances (V4).")} disabled={routing !== null} title="Pas de réponse → relancer (V4)" style={btn("#656576", "#F1F1F4", "#E8E8EC")}><Mail size={11} /> Relances</button>
-                                  <button onClick={() => route("/api/rs4/renvoi-auto3", r.pipelineId, "→ Volet 1 (mail à corriger).", { clearMail: r.replyKind !== "pj" })} disabled={routing !== null} title={r.replyKind === "pj" ? "Mauvais n° → Volet 1 (garde le mail)" : "Mail KO → Volet 1 (efface le mail)"} style={btn("#B4690E", "#FDF0D5", "#F3D9A6")}><CornerUpLeft size={11} /> Corriger</button>
-                                </div>
-                              )}
+                              {busy ? <Loader2 size={14} className="animate-spin" style={{ color: "#A2A1AF" }} /> : (() => {
+                                const rec = r.replyKind === "rs_recu" ? "recu" : r.replyKind === "sans_reponse" ? "relance" : "manuel";
+                                const em = (k: string): React.CSSProperties => rec === k ? { boxShadow: "0 0 0 2px rgba(78,73,252,0.18)", fontWeight: 700 } : { opacity: 0.6 };
+                                return (
+                                  <div style={{ display: "inline-flex", gap: 5, flexWrap: "wrap" }}>
+                                    <button onClick={() => route("/api/rs4/rs-recu", r.pipelineId, "RS reçu → passage à l'automatisation 5 (demande de devis).")} disabled={routing !== null} title="RS reçu → auto 5, étape « demande de devis »" style={{ ...btn("#13762C", "#EAF7EE", "#B7E4C4"), ...em("recu") }}><Check size={11} /> RS reçu</button>
+                                    <button onClick={() => route("/api/rs4/en-cours", r.pipelineId, "→ Traitement manuel (Volet 5), pas de changement d'étape.")} disabled={routing !== null} title="Redirection / erreur / info → Volet 5 (traitement manuel), pas de changement d'étape" style={{ ...btn("#B4690E", "#FDF0D5", "#F3D9A6"), ...em("manuel") }}><PauseCircle size={11} /> Traitement manuel</button>
+                                    <button onClick={() => route("/api/rs4/move-to-relance", r.pipelineId, "→ boucle de relances (Volet 4), pas de changement d'étape.")} disabled={routing !== null} title="Pas de réponse → boucle de relances (Volet 4)" style={{ ...btn("#656576", "#F1F1F4", "#E8E8EC"), ...em("relance") }}><Mail size={11} /> Pas de réponse</button>
+                                  </div>
+                                );
+                              })()}
                             </td>
                           </tr>
                         );
@@ -651,19 +654,19 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
 
       {/* ── Volet 5 — RS en cours de récupération ── */}
       <div>
-        <VoletTitle n={5}>RS en cours de récupération</VoletTitle>
+        <VoletTitle n={5}>RS en cours · traitement manuel</VoletTitle>
         {volet4.total === 0 ? (
-          <p style={{ fontSize: 12, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun dossier ici. Le bouton « En cours » (détecteur V3 ou relances V4) place ici les dossiers où le courtier a répondu sans encore fournir le RS.</p>
+          <p style={{ fontSize: 12, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun dossier ici. Le bouton « Traitement manuel » (détecteur V3) place ici les dossiers à traiter à la main : réponse en cours, redirection, erreur, demande d&apos;info… (pas de changement d&apos;étape).</p>
         ) : (
           <>
             <p style={{ fontSize: 13, color: "#656576", margin: "0 0 10px" }}>
-              <strong>{volet4.total}</strong> dossier{volet4.total > 1 ? "s" : ""} — courtier a répondu, RS pas encore reçu (hors relances). Clique « RS reçu » dès réception.
+              <strong>{volet4.total}</strong> dossier{volet4.total > 1 ? "s" : ""} à traiter à la main (réponse en cours, redirection, erreur, info…) — hors relances, sans changement d&apos;étape. Clique « RS reçu » dès réception du relevé.
             </p>
             <div style={{ maxHeight: 340, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
                   <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-                    {["Copropriété", "J+", "Courtier", "Mail courtier", "Actions"].map((h) => (
+                    {["Copropriété", "J+", "Verdict", "Extrait", "Mail courtier", "Actions"].map((h) => (
                       <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
                     ))}
                   </tr>
@@ -673,7 +676,8 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
                     <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
                       <td style={{ padding: "6px 10px", color: "#26262C" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
                       <td style={{ padding: "6px 10px", color: "#656576", fontWeight: 600 }}>J+{r.joursDepuisEnvoi}</td>
-                      <td style={{ padding: "6px 10px", color: "#656576" }}>{r.courtier || "—"}</td>
+                      <td style={{ padding: "6px 10px" }}>{r.replyKind && r.replyKind !== "non_scanne" ? <Badge kind={r.replyKind} /> : <span style={{ color: "#C7C7D1" }}>—</span>}</td>
+                      <td style={{ padding: "6px 10px", color: "#656576", maxWidth: 240, fontStyle: r.replySnippet ? "normal" : "italic" }}>{r.replySnippet || "—"}</td>
                       <td style={{ padding: "6px 10px", color: "#656576" }}>{r.mail || "—"}</td>
                       <td style={{ padding: "6px 10px", textAlign: "right" }}>
                         <button onClick={() => rsRecu(r.pipelineId)} style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, border: "1px solid #B7E4C4", background: "#EAF7EE", color: "#13762C", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
