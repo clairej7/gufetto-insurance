@@ -210,7 +210,9 @@ export type Volet3Data = { total: number; rows: Volet3Row[]; stages: { num: numb
 
 async function volet3Pipelines() {
   return prisma.insurancePipeline.findMany({
-    where: { statut: "rs_en_cours", rs4SentAt: { not: null }, copro: { archivedAt: null } },
+    // Volet 3 = RS envoyée, en attente ; on EXCLUT ceux passés en « RS en cours de
+    // récupération » (volet 4) qui sont sortis de la boucle de relance.
+    where: { statut: "rs_en_cours", rs4SentAt: { not: null }, rs4EnCoursAt: null, copro: { archivedAt: null } },
     select: { id: true, rs4SentAt: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true, numeroContrat: true, assureurActuel: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } },
     orderBy: { rs4SentAt: "asc" },
   });
@@ -257,6 +259,37 @@ export async function sendRelance(actorEmail: string, relanceNum: number, subjec
 }
 
 // (RS reçu = réutilise l'action existante marquerRSRecu → rs_en_cours → devis_demandes.)
+
+// ─── Volet 4 : « RS en cours de récupération » (courtier a répondu, RS pas reçu) ──
+export type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number };
+export type Volet4Data = { total: number; rows: Volet4Row[] };
+
+export async function getRs4Volet4Data(nowMs: number): Promise<Volet4Data> {
+  const ps = await prisma.insurancePipeline.findMany({
+    where: { statut: "rs_en_cours", rs4EnCoursAt: { not: null }, copro: { archivedAt: null } },
+    select: { id: true, rs4SentAt: true, rs4EnCoursAt: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true } } },
+    orderBy: { rs4EnCoursAt: "desc" },
+  });
+  const rows: Volet4Row[] = ps.map((p) => ({
+    pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail,
+    joursDepuisEnvoi: p.rs4SentAt ? Math.floor((nowMs - new Date(p.rs4SentAt).getTime()) / 86400000) : 0,
+  }));
+  return { total: rows.length, rows };
+}
+
+export async function getRs4Volet4Count(): Promise<number> {
+  return prisma.insurancePipeline.count({ where: { statut: "rs_en_cours", rs4EnCoursAt: { not: null }, copro: { archivedAt: null } } });
+}
+
+// Volet 3 → Volet 4 : le courtier a répondu (info manquante…) mais pas le RS →
+// sortir de la boucle de relance. Réversible (on peut le remettre en relance).
+export async function moveToEnCours(actorEmail: string, pipelineId: string): Promise<{ ok: boolean }> {
+  const p = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, select: { statut: true } });
+  if (!p || p.statut !== "rs_en_cours") return { ok: false };
+  await prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { rs4EnCoursAt: new Date() } });
+  await prisma.pipelineEvent.create({ data: { pipelineId, type: "action_manuelle", description: "RS en cours de récupération (courtier a répondu, RS pas encore reçu) — sorti de la boucle de relance", metadata: { auto: "rs4_en_cours" }, createdBy: actorEmail } });
+  return { ok: true };
+}
 
 // Passe les dossiers « infos complètes » du Volet 1 au Volet 2 (pose rs4Volet2At).
 export async function moveCompleteToVolet2(actorEmail: string): Promise<{ moved: number; volet2Total: number }> {

@@ -1,0 +1,50 @@
+// Automatisation 5 « Demande de devis » — Volet 1 : centralise les dossiers
+// concernés dans une base défilable.
+//
+// Périmètre : dossiers à l'étape « Demande de devis » (devis_demandes) ou
+// « Comparaison des devis » (devis_recus), MAIS on EXCLUT ceux dont la
+// comparaison/demande est déjà lancée = un devis a déjà été envoyé
+// (event devisType=devis_sent). Objectif : ne lister que ce qu'il reste à traiter.
+
+import { prisma } from "@/lib/prisma";
+
+export type Devis5Row = {
+  pipelineId: string;
+  nom: string;
+  adresse: string | null;
+  statut: "devis_demandes" | "devis_recus";
+  assureur: string | null;
+  numeroContrat: string | null;
+  prime: number | null;
+  courtier: string | null;
+  mail: string | null;
+};
+
+export type Devis5Data = { total: number; demande: number; comparaison: number; rows: Devis5Row[] };
+
+export async function getDevis5Volet1Data(): Promise<Devis5Data> {
+  const ps = await prisma.insurancePipeline.findMany({
+    where: { statut: { in: ["devis_demandes", "devis_recus"] }, copro: { archivedAt: null } },
+    select: {
+      id: true, statut: true,
+      copro: { select: { nom: true, adresse: true, assureurActuel: true, numeroContrat: true, primeActuelle: true, courtierActuel: true, contactCourtierEmail: true } },
+      events: { where: { metadata: { path: ["devisType"], equals: "devis_sent" } }, select: { id: true } },
+    },
+    orderBy: { copro: { dateEcheance: "asc" } },
+  });
+  // Exclut les dossiers dont la demande/comparaison de devis est déjà lancée.
+  const rows: Devis5Row[] = ps
+    .filter((p) => p.events.length === 0)
+    .map((p) => ({
+      pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse,
+      statut: p.statut as Devis5Row["statut"],
+      assureur: p.copro.assureurActuel, numeroContrat: p.copro.numeroContrat, prime: p.copro.primeActuelle,
+      courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail,
+    }));
+  return {
+    total: rows.length,
+    demande: rows.filter((r) => r.statut === "devis_demandes").length,
+    comparaison: rows.filter((r) => r.statut === "devis_recus").length,
+    rows,
+  };
+}
