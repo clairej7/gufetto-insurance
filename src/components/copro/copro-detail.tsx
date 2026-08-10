@@ -462,6 +462,13 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
   const [signatureFile, setSignatureFile] = useState<File | null | undefined>(undefined);
   const [isSigning, setIsSigning] = useState(false);
   const [signedPdfPath, setSignedPdfPath] = useState<string | null>(null);
+  // Aperçu inline d'un document d'assurance (id du doc + URL signée Supabase).
+  const [docPreview, setDocPreview] = useState<{ id: string; url: string } | null>(null);
+  async function toggleDocPreview(id: string, storagePath: string) {
+    if (docPreview?.id === id) { setDocPreview(null); return; }
+    const url = await getPdfSignedUrl(storagePath);
+    if (url) setDocPreview({ id, url }); else toast.error("PDF indisponible");
+  }
   const router = useRouter();
   const [editingContrat, setEditingContrat] = useState(false);
   const [verifPrime, setVerifPrime] = useState(false);
@@ -965,34 +972,45 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
               <div className="space-y-2.5">
                 {documents.map((d) => {
                   const meta = d.kind === "rs" ? { l: "RS", c: "#13762C", bg: "#EAF7EE", bd: "#B7E4C4" } : d.kind === "contrat_mri" ? { l: "Contrat MRI", c: "#4E49FC", bg: "#EEF0FF", bd: "#D9D9F5" } : { l: "Document", c: "#656576", bg: "#F1F1F4", bd: "#E8E8EC" };
+                  const isOpen = docPreview?.id === d.id;
                   return (
-                    <div key={d.id} className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-xs font-medium truncate" style={{ color: "#26262C" }} title={d.fileName}>{d.fileName}</div>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 999, color: meta.c, background: meta.bg, border: `1px solid ${meta.bd}` }}>{meta.l}{d.part ? ` · partie ${d.part}` : ""}</span>
-                          {d.source === "front" && <span style={{ fontSize: 10, color: "#A2A1AF" }}>récupéré du courtier</span>}
+                    <div key={d.id} style={{ border: "1px solid #EFEFF3", borderRadius: 10, padding: 8, background: isOpen ? "#FBFBFE" : "transparent" }}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium truncate" style={{ color: "#26262C" }} title={d.fileName}>{d.fileName}</div>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 999, color: meta.c, background: meta.bg, border: `1px solid ${meta.bd}` }}>{meta.l}{d.part ? ` · partie ${d.part}` : ""}</span>
+                            {d.source === "front" && <span style={{ fontSize: 10, color: "#A2A1AF" }}>récupéré du courtier</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => toggleDocPreview(d.id, d.storagePath)}
+                            className="text-[11px] font-semibold px-2 py-1 rounded-md border"
+                            style={{ color: isOpen ? "#26262C" : "#4E49FC", background: isOpen ? "#ECECF3" : "#F5F5FF", borderColor: "#D9D9F5" }}
+                          >{isOpen ? "▾ Masquer" : "▸ Aperçu"}</button>
+                          <select
+                            value={d.kind}
+                            onChange={(e) => startTransition(async () => { await retypeDocumentAction(d.id, e.target.value as "rs" | "contrat_mri" | "autre", pipeline.id); toast.success("Type du document corrigé"); })}
+                            disabled={isPending}
+                            className="text-[11px] border rounded-md px-1.5 py-1 bg-white"
+                            style={{ borderColor: "#E4E4EB", color: "#656576" }}
+                            title="Corriger le type"
+                          >
+                            <option value="rs">RS</option>
+                            <option value="contrat_mri">Contrat MRI</option>
+                            <option value="autre">Autre</option>
+                          </select>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          onClick={async () => { const url = await getPdfSignedUrl(d.storagePath); if (url) window.open(url, "_blank"); else toast.error("PDF indisponible"); }}
-                          className="text-[11px] font-semibold px-2 py-1 rounded-md border"
-                          style={{ color: "#4E49FC", background: "#F5F5FF", borderColor: "#D9D9F5" }}
-                        >Voir</button>
-                        <select
-                          value={d.kind}
-                          onChange={(e) => startTransition(async () => { await retypeDocumentAction(d.id, e.target.value as "rs" | "contrat_mri" | "autre", pipeline.id); toast.success("Type du document corrigé"); })}
-                          disabled={isPending}
-                          className="text-[11px] border rounded-md px-1.5 py-1 bg-white"
-                          style={{ borderColor: "#E4E4EB", color: "#656576" }}
-                          title="Corriger le type"
-                        >
-                          <option value="rs">RS</option>
-                          <option value="contrat_mri">Contrat MRI</option>
-                          <option value="autre">Autre</option>
-                        </select>
-                      </div>
+                      {isOpen && docPreview && (
+                        <div className="mt-2">
+                          <iframe src={docPreview.url} title={d.fileName} style={{ width: "100%", height: 460, border: "1px solid #E8E8EC", borderRadius: 8, background: "#fff" }} />
+                          <div className="mt-1 text-right">
+                            <a href={docPreview.url} target="_blank" rel="noreferrer" className="text-[11px] font-semibold" style={{ color: "#4E49FC" }}>Ouvrir en plein écran ↗</a>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
