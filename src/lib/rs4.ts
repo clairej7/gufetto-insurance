@@ -184,6 +184,26 @@ export async function sendVolet2(actorEmail: string, subjectTpl: string, bodyTpl
   return { sent, failed, movedExisting, errors: errors.slice(0, 20) };
 }
 
+// Bascule au Volet 3 les dossiers DÉJÀ envoyés à la main (event draft_sent) mais
+// pas encore dans le suivi (rs4SentAt null) — SANS envoyer de mail. rs4SentAt =
+// date du 1er envoi réel → compteur « J+X » exact. Couvre aussi ceux pas encore
+// montés au Volet 2. Idempotent.
+export async function moveSentToVolet3(actorEmail: string): Promise<{ moved: number }> {
+  const ps = await prisma.insurancePipeline.findMany({
+    where: { statut: "rs_en_cours", rs4SentAt: null, copro: { archivedAt: null }, events: { some: { metadata: { path: ["rsType"], equals: "draft_sent" } } } },
+    select: { id: true, rs4Volet2At: true, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { createdAt: true } } },
+  });
+  let moved = 0;
+  for (const p of ps) {
+    if (!p.events.length) continue;
+    const first = p.events.reduce((a, e) => (e.createdAt < a ? e.createdAt : a), p.events[0].createdAt);
+    await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4SentAt: first, rs4Volet2At: p.rs4Volet2At ?? first } });
+    await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Demande de RS déjà envoyée à la main (${first.toLocaleDateString("fr-FR")}) → placée au suivi des relances (volet 3)`, metadata: { auto: "rs4_already_sent_to_v3", sentAt: first.toISOString() }, createdBy: actorEmail } });
+    moved++;
+  }
+  return { moved };
+}
+
 // ─── Volet 3 : suivi + boucle de relances ────────────────────────────────────
 export type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number };
 export type Volet3Data = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[] };
