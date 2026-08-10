@@ -12,6 +12,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { normNom } from "@/lib/courtier-ref";
+import { getExcludedCoproIds } from "@/lib/exclusions";
 
 export const RS_STATUT = "rs_en_cours";
 
@@ -278,7 +279,7 @@ async function loadRsDossiers(excludeBatched: boolean) {
     prisma.insurancePipeline.findMany({
       // On exclut les dossiers déjà chargés dans l'auto 4 (rsBatchAt) : ils ne
       // repassent plus dans l'audit (pas de re-traitement des copros validées).
-      where: { statut: RS_STATUT, copro: { archivedAt: null }, ...(excludeBatched ? { rsBatchAt: null } : {}) },
+      where: { statut: RS_STATUT, coproId: { notIn: await getExcludedCoproIds() }, copro: { archivedAt: null }, ...(excludeBatched ? { rsBatchAt: null } : {}) },
       select: { id: true, copro: { select: { nom: true, buildingId: true, adresse: true, courtierActuel: true, contactCourtierEmail: true, assureurActuel: true } } },
     }),
     prisma.pipelineEvent.findMany({ where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { pipelineId: true }, distinct: ["pipelineId"] }),

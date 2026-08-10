@@ -7,6 +7,7 @@
 // (event devisType=devis_sent). Objectif : ne lister que ce qu'il reste à traiter.
 
 import { prisma } from "@/lib/prisma";
+import { getExcludedCoproIds } from "@/lib/exclusions";
 
 export type Devis5Row = {
   pipelineId: string;
@@ -24,7 +25,7 @@ export type Devis5Data = { total: number; demande: number; comparaison: number; 
 
 export async function getDevis5Volet1Data(): Promise<Devis5Data> {
   const ps = await prisma.insurancePipeline.findMany({
-    where: { statut: { in: ["devis_demandes", "devis_recus"] }, copro: { archivedAt: null } },
+    where: { statut: { in: ["devis_demandes", "devis_recus"] }, coproId: { notIn: await getExcludedCoproIds() }, copro: { archivedAt: null } },
     select: {
       id: true, statut: true,
       copro: { select: { nom: true, adresse: true, assureurActuel: true, numeroContrat: true, primeActuelle: true, courtierActuel: true, contactCourtierEmail: true } },

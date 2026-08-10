@@ -19,6 +19,8 @@ import { getRs4Volet1Count, getRs4Volet2Data, getRs4Volet3Data, getRs4Volet4Data
 import { Rs4Controls } from "@/components/admin/rs4-controls";
 import { getDevis5Volet1Data } from "@/lib/devis5";
 import { Devis5Controls } from "@/components/admin/devis5-controls";
+import { getExclusionState } from "@/lib/exclusions";
+import { ExclusionsPanel } from "@/components/admin/exclusions-panel";
 import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 
 type Etat = "deploye" | "encours" | "attente";
@@ -95,6 +97,7 @@ export default async function AutomatisationsPage() {
   const rs4Volet4 = await getRs4Volet4Data(Date.now());
   const rs4SendHistory = await getRs4SendHistory();
   const devis5Volet1 = await getDevis5Volet1Data();
+  const exclusionState = await getExclusionState();
   const ghcReviewLabel: Record<string, string> = { prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
 
@@ -551,6 +554,7 @@ export default async function AutomatisationsPage() {
             );
           })}
         </div>
+        <ExclusionsPanel state={{ ...exclusionState, rows: exclusionState.rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })) }} />
       </main>
     </div>
   );

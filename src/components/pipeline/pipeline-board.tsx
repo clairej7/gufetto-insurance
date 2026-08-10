@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, createContext, useContext } from "react";
 import Link from "next/link";
 import { PIPELINE_STEPS, getDaysUntilEcheance, getUrgenceBadge, categoriseDossier } from "@/lib/pipeline";
 import { X, Search, ChevronUp, ChevronDown } from "lucide-react";
@@ -41,6 +41,14 @@ interface PipelineBoardProps {
   pipelines: PipelineWithCopro[];
   taskTemplates: TaskTemplate[];
   gestionnaires: string[];
+  excludedCoproIds?: string[];
+}
+
+// Copros exclues de toute automatisation → badge 🚫. Fourni par PipelineBoard.
+const ExcludedCtx = createContext<Set<string>>(new Set());
+function Excl({ id }: { id: string }) {
+  const set = useContext(ExcludedCtx);
+  return set.has(id) ? <span title="Exclu de toute automatisation" style={{ flexShrink: 0 }}>🚫</span> : null;
 }
 
 type TagVariant = "primary" | "warning" | "success" | "success-filled" | "error" | "neutral" | "info";
@@ -184,6 +192,7 @@ function PipelineRow({ pipeline, taskTemplates, cloture = false, odr = false }: 
             <span style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {pipeline.copro.nom}
             </span>
+            <Excl id={pipeline.copro.id} />
             {(pipeline.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
           </span>
           {pipeline.copro.adresse && (
@@ -248,7 +257,8 @@ type SavedFilters = {
   search: string;
 };
 
-export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, currentUserEmail }: PipelineBoardProps) {
+export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, currentUserEmail, excludedCoproIds = [] }: PipelineBoardProps) {
+  const excludedSet = new Set(excludedCoproIds);
   const defaultGestionnaire = currentUserEmail && gestionnaires.includes(currentUserEmail) ? [currentUserEmail] : [];
   // Libellé d'affichage par email (nom Omni si présent, sinon dérivation).
   const gestioNomByEmail = new Map<string, string | null>();
@@ -508,7 +518,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                   onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    {(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
+                    <Excl id={p.copro.id} />{(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
                     <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.copro.nom}</div>
                   </div>
                   <div style={{ marginTop: "auto", paddingTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
@@ -536,6 +546,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
   };
 
   return (
+    <ExcludedCtx.Provider value={excludedSet}>
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
@@ -742,7 +753,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                             onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                           >
                             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                              {(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
+                              <Excl id={p.copro.id} />{(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
                               <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {p.copro.nom}
                               </div>
@@ -784,7 +795,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                             onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                           >
                             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                              {(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
+                              <Excl id={p.copro.id} />{(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
                               <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {p.copro.nom}
                               </div>
@@ -827,7 +838,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                             onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                           >
                             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                              {(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
+                              <Excl id={p.copro.id} />{(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
                               <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {p.copro.nom}
                               </div>
@@ -869,7 +880,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                             onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                           >
                             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                              {(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
+                              <Excl id={p.copro.id} />{(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
                               <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {p.copro.nom}
                               </div>
@@ -912,7 +923,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
                             onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
                           >
                             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                              {(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
+                              <Excl id={p.copro.id} />{(p.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
                               <div style={{ fontSize: 13, fontWeight: 500, color: "#4E49FC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {p.copro.nom}
                               </div>
@@ -937,5 +948,6 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
         )}
       </div>
     </div>
+    </ExcludedCtx.Provider>
   );
 }

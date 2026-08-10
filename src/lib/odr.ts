@@ -10,6 +10,7 @@ import { PDFDocument, StandardFonts, PDFFont, PDFPage } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
 import { matchPartner, extractInsuranceInfoFromFront } from "@/lib/front-insurance";
 import { ODR_SENT_DOCS, OdrSentRecord } from "@/lib/odr-sent-data";
+import { getExcludedCoproIds } from "@/lib/exclusions";
 import { ODR_MANUAL_SENDS_DOCS } from "@/lib/odr-manual-sends-data";
 
 export const ODR_PARTNERS = [
@@ -58,7 +59,7 @@ function isFlagged(events: { description: string | null }[]): boolean {
 // copro active, groupés par assureur, et scindés prêts / sans-n° / flaggés.
 export async function getOdrByPartner(): Promise<OdrPartnerBucket[]> {
   const rows = await prisma.insurancePipeline.findMany({
-    where: { statut: "odr_en_cours", copro: { archivedAt: null } },
+    where: { statut: "odr_en_cours", coproId: { notIn: await getExcludedCoproIds() }, copro: { archivedAt: null } },
     select: {
       id: true,
       odrPartenaire: true,
@@ -349,7 +350,7 @@ export async function verifyOdrDossiers(
   limit = 1000,
 ): Promise<{ total: number; count: number; unflagged: number; issues: OdrIssue[]; done: boolean }> {
   const rows = await prisma.insurancePipeline.findMany({
-    where: { statut: "odr_en_cours", odrPartenaire: partner, copro: { archivedAt: null } },
+    where: { statut: "odr_en_cours", odrPartenaire: partner, coproId: { notIn: await getExcludedCoproIds() }, copro: { archivedAt: null } },
     select: {
       id: true,
       copro: { select: { nom: true, numeroContrat: true, assureurActuel: true, buildingId: true } },

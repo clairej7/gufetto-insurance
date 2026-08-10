@@ -9,6 +9,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSignatureHtml, tagConversation, assignConversation, resolveTeammateId } from "@/lib/front";
 import { getCourtierIndex, recipientSuspect } from "@/lib/courtier-audit";
+import { getExcludedCoproIds } from "@/lib/exclusions";
 
 const FRONT_API_URL = "https://api2.frontapp.com";
 const FRONT_TOKEN = process.env.FRONT_API_TOKEN;
@@ -108,11 +109,12 @@ export type Rs4Sample = {
 
 // Périmètre du Volet 1 = échantillon chargé par l'auto 3 (rsBatchAt) pas encore
 // passé au Volet 2 (rs4Volet2At null).
-const VOLET1_WHERE = { statut: "rs_en_cours" as const, rsBatchAt: { not: null }, rs4Volet2At: null, copro: { archivedAt: null } };
+const volet1Where = (excl: string[]) => ({ statut: "rs_en_cours" as const, rsBatchAt: { not: null }, rs4Volet2At: null, coproId: { notIn: excl }, copro: { archivedAt: null } });
 
 export async function getRs4Sample(): Promise<Rs4Sample> {
+  const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({
-    where: VOLET1_WHERE,
+    where: volet1Where(excl),
     select: { id: true, rsBatchAt: true, copro: { select: { nom: true, assureurActuel: true, numeroContrat: true, courtierActuel: true, contactCourtierEmail: true } } },
     orderBy: { rsBatchAt: "desc" },
   });
@@ -137,7 +139,7 @@ export async function getRs4Sample(): Promise<Rs4Sample> {
 
 // Nb de dossiers encore au Volet 1 (échantillon à vérifier, pas encore passé au 2).
 export async function getRs4Volet1Count(): Promise<number> {
-  return prisma.insurancePipeline.count({ where: VOLET1_WHERE });
+  return prisma.insurancePipeline.count({ where: volet1Where(await getExcludedCoproIds()) });
 }
 
 // Nb de dossiers passés au Volet 2 (envoi des mails).
@@ -145,11 +147,39 @@ export async function getRs4Volet2Count(): Promise<number> {
   return prisma.insurancePipeline.count({ where: { statut: "rs_en_cours", rs4Volet2At: { not: null }, copro: { archivedAt: null } } });
 }
 
+// Vérif « adresses perso » : repasse tous les mails de l'échantillon (volet 2 à
+// envoyer) et remonte tout mail sur domaine PERSO ou correspondant au mail du CS.
+const PERSO_DOM = /@(yahoo|gmail|hotmail|free|orange|wanadoo|sfr|laposte|outlook|live|bbox|icloud|gmx|neuf|aol|hey)\./i;
+export type PersoCheck = { total: number; perso: number; csMatch: number; rows: { pipelineId: string; nom: string; courtier: string | null; mail: string | null; motif: string }[] };
+export async function checkPersoAddresses(): Promise<PersoCheck> {
+  const ps = await volet2Candidates();
+  const rows: PersoCheck["rows"] = [];
+  let perso = 0, csMatch = 0;
+  // besoin du mail CS : volet2Candidates ne le sélectionne pas → requête ciblée
+  const cs = new Map<string, string>();
+  const coproMails = await prisma.insurancePipeline.findMany({ where: { id: { in: ps.map((p) => p.id) } }, select: { id: true, copro: { select: { contactCsEmail: true } } } });
+  for (const c of coproMails) if (c.copro.contactCsEmail) cs.set(c.id, c.copro.contactCsEmail.toLowerCase().trim());
+  for (const p of ps) {
+    const field = (p.copro.contactCourtierEmail ?? "").trim();
+    if (!field) continue;
+    const mails = field.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
+    const isPerso = mails.some((m) => PERSO_DOM.test(m));
+    const csMail = cs.get(p.id);
+    const isCs = !!csMail && mails.some((m) => m.toLowerCase() === csMail);
+    if (!isPerso && !isCs) continue;
+    if (isPerso) perso++;
+    if (isCs) csMatch++;
+    rows.push({ pipelineId: p.id, nom: p.copro.nom, courtier: p.copro.courtierActuel, mail: field, motif: isCs ? "= mail du CS" : "domaine perso" });
+  }
+  return { total: ps.length, perso, csMatch, rows };
+}
+
 // ─── Volet 2 : envoi des demandes de RS ──────────────────────────────────────
 // Candidats = passés au volet 2 (rs4Volet2At) mais RS pas encore envoyée (rs4SentAt null).
 async function volet2Candidates() {
+  const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({
-    where: { statut: "rs_en_cours", rs4Volet2At: { not: null }, rs4SentAt: null, copro: { archivedAt: null } },
+    where: { statut: "rs_en_cours", rs4Volet2At: { not: null }, rs4SentAt: null, coproId: { notIn: excl }, copro: { archivedAt: null } },
     select: { id: true, copro: { select: { nom: true, adresse: true, assureurActuel: true, numeroContrat: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { id: true, createdAt: true } } },
     orderBy: { rs4Volet2At: "desc" },
   });
@@ -228,7 +258,7 @@ export async function getRs4SendHistory(limit = 20): Promise<{ sentAt: string; k
 // montés au Volet 2. Idempotent.
 export async function moveSentToVolet3(actorEmail: string): Promise<{ moved: number }> {
   const ps = await prisma.insurancePipeline.findMany({
-    where: { statut: "rs_en_cours", rs4SentAt: null, copro: { archivedAt: null }, events: { some: { metadata: { path: ["rsType"], equals: "draft_sent" } } } },
+    where: { statut: "rs_en_cours", rs4SentAt: null, coproId: { notIn: await getExcludedCoproIds() }, copro: { archivedAt: null }, events: { some: { metadata: { path: ["rsType"], equals: "draft_sent" } } } },
     select: { id: true, rs4Volet2At: true, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { createdAt: true } } },
   });
   let moved = 0;
@@ -247,10 +277,11 @@ export type Volet3Row = { pipelineId: string; nom: string; adresse: string | nul
 export type Volet3Data = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[] };
 
 async function volet3Pipelines() {
+  const excl = await getExcludedCoproIds();
   return prisma.insurancePipeline.findMany({
     // Volet 3 = RS envoyée, en attente ; on EXCLUT ceux passés en « RS en cours de
     // récupération » (volet 4) qui sont sortis de la boucle de relance.
-    where: { statut: "rs_en_cours", rs4SentAt: { not: null }, rs4EnCoursAt: null, copro: { archivedAt: null } },
+    where: { statut: "rs_en_cours", rs4SentAt: { not: null }, rs4EnCoursAt: null, coproId: { notIn: excl }, copro: { archivedAt: null } },
     select: { id: true, rs4SentAt: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true, numeroContrat: true, assureurActuel: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } },
     orderBy: { rs4SentAt: "asc" },
   });
@@ -307,8 +338,9 @@ export type Volet4Row = { pipelineId: string; nom: string; adresse: string | nul
 export type Volet4Data = { total: number; rows: Volet4Row[] };
 
 export async function getRs4Volet4Data(nowMs: number): Promise<Volet4Data> {
+  const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({
-    where: { statut: "rs_en_cours", rs4EnCoursAt: { not: null }, copro: { archivedAt: null } },
+    where: { statut: "rs_en_cours", rs4EnCoursAt: { not: null }, coproId: { notIn: excl }, copro: { archivedAt: null } },
     select: { id: true, rs4SentAt: true, rs4EnCoursAt: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true } } },
     orderBy: { rs4EnCoursAt: "desc" },
   });
@@ -320,7 +352,7 @@ export async function getRs4Volet4Data(nowMs: number): Promise<Volet4Data> {
 }
 
 export async function getRs4Volet4Count(): Promise<number> {
-  return prisma.insurancePipeline.count({ where: { statut: "rs_en_cours", rs4EnCoursAt: { not: null }, copro: { archivedAt: null } } });
+  return prisma.insurancePipeline.count({ where: { statut: "rs_en_cours", rs4EnCoursAt: { not: null }, coproId: { notIn: await getExcludedCoproIds() }, copro: { archivedAt: null } } });
 }
 
 // Volet 3 → Volet 4 : le courtier a répondu (info manquante…) mais pas le RS →

@@ -442,6 +442,19 @@ model RsBatchLog {
   actorEmail String?
 }
 
+// Dossiers/gestionnaires EXCLUS de toute automatisation (ne jamais toucher, ne
+// jamais mailer). Ex. gestionnaires ayant demandé qu'on n'y touche pas.
+model AutomationExclusion {
+  id        String   @id @default(cuid())
+  kind      String // "gestionnaire" | "copro"
+  value     String // email gestionnaire (minuscule) OU coproId
+  label     String? // libellé lisible (nom gestionnaire / adresse copro)
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  @@unique([kind, value])
+}
+
 // Automatisation 4 : historique des envois de mails (demandes de RS + relances)
 // aux courtiers, pour garder une trace datée.
 model Rs4SendLog {
