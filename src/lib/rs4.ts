@@ -38,13 +38,26 @@ function renderHtml(text: string, signatureHtml: string | null, hiddenRef: strin
 
 // Envoi d'UN mail via Front (channel messages = envoi réel). Best-effort tag +
 // assignation au gestionnaire. Renvoie le conversationId ou null si échec.
-async function frontSend(opts: { to: string; subject: string; html: string; pipelineId: string; gestionnaireEmail: string | null; authorEmail: string }): Promise<{ ok: boolean; conversationId: string | null; error?: string }> {
+// Extrait tous les mails valides d'un champ (séparés par , ou ;), sans doublon.
+export function parseEmails(field: string | null | undefined): string[] {
+  const out: string[] = [];
+  for (const raw of (field ?? "").split(/[;,]/)) {
+    const e = raw.trim();
+    if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) && !out.some((x) => x.toLowerCase() === e.toLowerCase())) out.push(e);
+  }
+  return out;
+}
+
+async function frontSend(opts: { toList: string[]; subject: string; html: string; pipelineId: string; gestionnaireEmail: string | null; authorEmail: string }): Promise<{ ok: boolean; conversationId: string | null; error?: string }> {
   if (!FRONT_TOKEN || !FRONT_CHANNEL_ID) return { ok: false, conversationId: null, error: "Front non configuré" };
+  if (!opts.toList.length) return { ok: false, conversationId: null, error: "aucun destinataire" };
   const form = new FormData();
   // Auteur = teammate qui déclenche l'envoi → nom d'expéditeur correct + sa
   // signature (une adresse partagée non-teammate afficherait le nom du channel).
   form.append("author_id", `alt:email:${opts.authorEmail || FRONT_AUTHOR_EMAIL}`);
-  form.append("to[]", opts.to);
+  // UN seul mail, adressé à TOUS les destinataires (plusieurs to[] = plusieurs
+  // destinataires du même message, pas plusieurs mails).
+  for (const to of opts.toList) form.append("to[]", to);
   form.append("subject", opts.subject);
   form.append("body", opts.html);
   form.append("type", "email");
@@ -164,12 +177,13 @@ export async function sendVolet2(actorEmail: string, subjectTpl: string, bodyTpl
 
   for (const p of toSend) {
     const c = p.copro;
-    const to = c.contactCourtierEmail?.split(/[;,]/)[0]?.trim() || "";
-    if (!to) { failed++; errors.push(`${c.nom} : pas de mail`); continue; }
+    const toList = parseEmails(c.contactCourtierEmail);
+    if (!toList.length) { failed++; errors.push(`${c.nom} : pas de mail`); continue; }
+    const to = toList.join(", ");
     const vars = { adresse: c.adresse || c.nom, assureur: c.assureurActuel || "", numeroContrat: c.numeroContrat || "", nom: c.nom };
     const subject = fillTemplate(subjectTpl, vars);
     const html = renderHtml(fillTemplate(bodyTpl, vars), signature, `<span style="display:none;font-size:0;line-height:0;color:transparent">gufetto-ref:${p.id}:rs</span>`);
-    const r = await frontSend({ to, subject, html, pipelineId: p.id, gestionnaireEmail: c.gestionnaireEmail, authorEmail: actorEmail });
+    const r = await frontSend({ toList, subject, html, pipelineId: p.id, gestionnaireEmail: c.gestionnaireEmail, authorEmail: actorEmail });
     if (!r.ok) { failed++; errors.push(`${c.nom} : ${r.error ?? "échec"}`); continue; }
     await prisma.$transaction([
       prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4SentAt: now } }),
@@ -250,12 +264,13 @@ export async function sendRelance(actorEmail: string, relanceNum: number, subjec
     const jours = Math.floor((nowMs - new Date(p.rs4SentAt!).getTime()) / 86400000);
     if (jours < stage.day || relanceCountOf(p.events) >= relanceNum) continue;
     const c = p.copro;
-    const to = c.contactCourtierEmail?.split(/[;,]/)[0]?.trim() || "";
-    if (!to) { failed++; errors.push(`${c.nom} : pas de mail`); continue; }
+    const toList = parseEmails(c.contactCourtierEmail);
+    if (!toList.length) { failed++; errors.push(`${c.nom} : pas de mail`); continue; }
+    const to = toList.join(", ");
     const vars = { adresse: c.adresse || c.nom, assureur: c.assureurActuel || "", numeroContrat: c.numeroContrat || "", nom: c.nom, jours: String(jours) };
     const subject = fillTemplate(subjectTpl, vars);
     const html = renderHtml(fillTemplate(bodyTpl, vars), signature, `<span style="display:none;font-size:0;line-height:0;color:transparent">gufetto-ref:${p.id}:rs_relance</span>`);
-    const r = await frontSend({ to, subject, html, pipelineId: p.id, gestionnaireEmail: c.gestionnaireEmail, authorEmail: actorEmail });
+    const r = await frontSend({ toList, subject, html, pipelineId: p.id, gestionnaireEmail: c.gestionnaireEmail, authorEmail: actorEmail });
     if (!r.ok) { failed++; errors.push(`${c.nom} : ${r.error ?? "échec"}`); continue; }
     await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Relance ${relanceNum} de la demande de RS envoyée (${to})`, metadata: { rsType: "draft_sent", relanceNum, to, conversationId: r.conversationId, auto: "rs4_relance" }, createdBy: actorEmail } });
     sent++;
