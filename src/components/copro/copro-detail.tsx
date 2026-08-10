@@ -469,6 +469,19 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
     const url = await getPdfSignedUrl(storagePath);
     if (url) setDocPreview({ id, url }); else toast.error("PDF indisponible");
   }
+  const [capturingDocs, setCapturingDocs] = useState(false);
+  async function captureDocs() {
+    setCapturingDocs(true);
+    try {
+      const res = await fetch("/api/rs4/capture-docs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId: pipeline.id }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      const data = await res.json();
+      if (data.created > 0) toast.success(`${data.created} document(s) récupéré(s).`);
+      else if (data.noReply) toast.info("Aucune réponse courtier avec pièce jointe trouvée sur Front.");
+      else toast.info("Aucun nouveau document (déjà récupérés).");
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setCapturingDocs(false); }
+  }
   const router = useRouter();
   const [editingContrat, setEditingContrat] = useState(false);
   const [verifPrime, setVerifPrime] = useState(false);
@@ -964,11 +977,22 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
           )}
 
           {/* Documents assurance récupérés (relevé de sinistralité, contrat MRI…) */}
-          {documents.length > 0 && (
-            <Card className="p-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2 mb-3" style={{ color: "#26262C" }}>
-                📎 Documents assurance
-              </h3>
+          <Card className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C" }}>
+                  📎 Documents assurance
+                </h3>
+                <button
+                  onClick={captureDocs}
+                  disabled={capturingDocs}
+                  className="text-[11px] font-semibold px-2 py-1 rounded-md border disabled:opacity-60"
+                  style={{ color: "#4E49FC", background: "#F5F5FF", borderColor: "#D9D9F5" }}
+                  title="Récupérer les PJ (RS / contrat MRI) de la réponse courtier depuis Front"
+                >{capturingDocs ? "Récupération…" : "↻ Récupérer"}</button>
+              </div>
+              {documents.length === 0 && (
+                <p className="text-xs" style={{ color: "#A2A1AF" }}>Aucun document. Clique « Récupérer » pour importer le relevé / contrat MRI depuis la réponse du courtier (Front).</p>
+              )}
               <div className="space-y-2.5">
                 {documents.map((d) => {
                   const meta = d.kind === "rs" ? { l: "RS", c: "#13762C", bg: "#EAF7EE", bd: "#B7E4C4" } : d.kind === "contrat_mri" ? { l: "Contrat MRI", c: "#4E49FC", bg: "#EEF0FF", bd: "#D9D9F5" } : { l: "Document", c: "#656576", bg: "#F1F1F4", bd: "#E8E8EC" };
@@ -1015,8 +1039,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                   );
                 })}
               </div>
-            </Card>
-          )}
+          </Card>
         </div>
 
         {/* Col 2: action centrale */}

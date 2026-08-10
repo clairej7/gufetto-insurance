@@ -111,6 +111,23 @@ export async function captureReplyDocs(opts: { pipelineId: string; coproId: stri
   return { created: created.length, docs: created };
 }
 
+// Capture à la demande pour UN dossier (bouton fiche) — indépendante du statut,
+// donc marche aussi sur les dossiers déjà avancés (devis/comparaison). Retrouve la
+// conversation d'envoi + les entrants, puis délègue à captureReplyDocs.
+export async function captureDocsForPipeline(pipelineId: string, createdBy?: string): Promise<{ created: number; docs: { kind: DocKind; fileName: string }[]; noReply?: boolean }> {
+  const p = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, select: { coproId: true, rs4SentAt: true, copro: { select: { nom: true, adresse: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } } });
+  if (!p) return { created: 0, docs: [] };
+  const cid = p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop();
+  if (!cid || !FRONT_TOKEN) return { created: 0, docs: [], noReply: true };
+  const res = await fetch(`${FRONT_API_URL}/conversations/${cid}/messages?limit=20`, { headers: { Authorization: `Bearer ${FRONT_TOKEN}` } });
+  const list = res.ok ? await res.json() : null;
+  const sentMs = p.rs4SentAt ? new Date(p.rs4SentAt).getTime() : 0;
+  const inbound = ((list?._results as { id: string; is_inbound: boolean; created_at: number }[]) ?? []).filter((m) => m.is_inbound && m.created_at * 1000 > sentMs);
+  if (!inbound.length) return { created: 0, docs: [], noReply: true };
+  const r = await captureReplyDocs({ pipelineId, coproId: p.coproId, adresse: p.copro.adresse || p.copro.nom, msgIds: inbound.map((m) => m.id), createdBy });
+  return r;
+}
+
 export type PipelineDoc = { id: string; kind: DocKind; part: number | null; fileName: string; storagePath: string; source: string; createdAt: string };
 export async function getPipelineDocuments(pipelineId: string): Promise<PipelineDoc[]> {
   const rows = await prisma.pipelineDocument.findMany({ where: { pipelineId }, orderBy: [{ kind: "asc" }, { part: "asc" }, { createdAt: "asc" }] });
