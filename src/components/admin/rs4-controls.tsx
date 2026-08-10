@@ -19,6 +19,7 @@ type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; cour
 type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[] };
 type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number };
 type Volet4 = { total: number; rows: Volet4Row[] };
+type SendHist = { sentAt: string; kind: string; relanceNum: number | null; count: number; failed: number };
 
 // ── Templates par défaut (éditables). Placeholders : {adresse} {assureur} {numeroContrat} {jours} ──
 const DEFAULT_SUBJECT = "Demande de relevé de sinistralité — {adresse} — contrat n° {numeroContrat}";
@@ -81,7 +82,7 @@ function V1Table({ rows, showManque }: { rows: Row[]; showManque?: boolean }) {
   );
 }
 
-export function Rs4Controls({ volet1Count, volet2, volet3, volet4 }: { volet1Count: number; volet2: Volet2; volet3: Volet3; volet4: Volet4 }) {
+export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }: { volet1Count: number; volet2: Volet2; volet3: Volet3; volet4: Volet4; sendHistory: SendHist[] }) {
   const router = useRouter();
   // Volet 1
   const [sample, setSample] = useState<Sample | null>(null);
@@ -94,6 +95,7 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4 }: { volet1Cou
   const [body, setBody] = useState(DEFAULT_BODY);
   const [showTpl, setShowTpl] = useState(false);
   const [showV2, setShowV2] = useState(false);
+  const [showHist, setShowHist] = useState(false);
   const [v2Search, setV2Search] = useState("");
   const [sending, setSending] = useState(false);
   // Volet 3
@@ -315,6 +317,24 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4 }: { volet1Cou
               )}
             </div>
           </>
+        )}
+
+        {sendHistory.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <button onClick={() => setShowHist((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#656576", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+              {showHist ? "▾" : "▸"} Historique des envois ({sendHistory.length})
+            </button>
+            {showHist && (
+              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 2 }}>
+                {sendHistory.map((h, i) => (
+                  <div key={i} style={{ fontSize: 12, color: "#656576", display: "flex", gap: 8 }}>
+                    <span style={{ color: "#26262C", fontVariantNumeric: "tabular-nums" }}>{new Date(h.sentAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                    <span>→ {h.kind === "relance" ? `Relance ${h.relanceNum} : ` : ""}<strong>{h.count}</strong> mail{h.count > 1 ? "s" : ""} envoyé{h.count > 1 ? "s" : ""}{h.failed > 0 ? ` · ${h.failed} échec(s)` : ""}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
 

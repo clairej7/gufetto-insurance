@@ -15,7 +15,7 @@ import { GhcApplyButton } from "@/components/admin/ghc-apply-button";
 import { computeGhcState, getGhcImportHistory, getGhcReviews } from "@/lib/ghc";
 import { getCourtierRefState, getCourtierRefSample } from "@/lib/courtier-ref";
 import { CourtierAuditControls } from "@/components/admin/courtier-audit-controls";
-import { getRs4Volet1Count, getRs4Volet2Data, getRs4Volet3Data, getRs4Volet4Data } from "@/lib/rs4";
+import { getRs4Volet1Count, getRs4Volet2Data, getRs4Volet3Data, getRs4Volet4Data, getRs4SendHistory } from "@/lib/rs4";
 import { Rs4Controls } from "@/components/admin/rs4-controls";
 import { getDevis5Volet1Data } from "@/lib/devis5";
 import { Devis5Controls } from "@/components/admin/devis5-controls";
@@ -93,6 +93,7 @@ export default async function AutomatisationsPage() {
   const rs4Volet2 = await getRs4Volet2Data();
   const rs4Volet3 = await getRs4Volet3Data(Date.now());
   const rs4Volet4 = await getRs4Volet4Data(Date.now());
+  const rs4SendHistory = await getRs4SendHistory();
   const devis5Volet1 = await getDevis5Volet1Data();
   const ghcReviewLabel: Record<string, string> = { prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
@@ -250,7 +251,7 @@ export default async function AutomatisationsPage() {
                 {a.n === 4 && (
                   <details style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
                     <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content" }}>Contrôles admin</summary>
-                    <Rs4Controls volet1Count={rs4Volet1Count} volet2={rs4Volet2} volet3={rs4Volet3} volet4={rs4Volet4} />
+                    <Rs4Controls volet1Count={rs4Volet1Count} volet2={rs4Volet2} volet3={rs4Volet3} volet4={rs4Volet4} sendHistory={rs4SendHistory} />
                   </details>
                 )}
                 {a.n === 5 && (
