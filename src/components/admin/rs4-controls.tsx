@@ -535,6 +535,12 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
             </Button>
           )}
         </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: "#F5F5FF", border: "1px dashed #D9D9F5", borderRadius: 8, padding: "8px 12px", margin: "10px 0 0", maxWidth: 560 }}>
+          <span style={{ fontSize: 14, lineHeight: "18px" }}>🌙</span>
+          <span style={{ fontSize: 12, color: "#5A57B0" }}>
+            <strong>À venir :</strong> ce scan tournera <strong>automatiquement chaque nuit</strong> (cron). Pour l&apos;instant on le lance à la main, le temps de valider chaque automatisation — on câblera l&apos;automatisation complète de bout en bout plus tard.
+          </span>
+        </div>
         {scanBarEl}
         {detector.total > 0 && (
           <>
