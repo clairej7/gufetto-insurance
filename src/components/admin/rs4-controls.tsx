@@ -7,7 +7,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ListChecks, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Send, Mail, Check, Search, PauseCircle } from "lucide-react";
+import { ListChecks, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Send, Mail, Check, Search, PauseCircle, Archive } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -100,6 +100,7 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
   const [showHist, setShowHist] = useState(false);
   const [v2Search, setV2Search] = useState("");
   const [sending, setSending] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   // Volet 3
   const [relancing, setRelancing] = useState<number | null>(null);
   const [showV3, setShowV3] = useState(false);
@@ -153,6 +154,16 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
       if (data.errors?.length) console.warn("[rs4/send] erreurs:", data.errors);
       router.refresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec de l'envoi"); } finally { setSending(false); }
+  }
+
+  async function archiveOpen() {
+    setArchiving(true);
+    try {
+      const res = await fetch("/api/rs4/archive-open", { method: "POST" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      const data = await res.json();
+      toast.success(`${data.archived} conversation(s) ré-archivée(s) (sur ${data.scanned}).`);
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setArchiving(false); }
   }
 
   async function moveSentToV3() {
@@ -382,6 +393,9 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
                   {sending ? <Loader2 size={15} className="animate-spin" /> : <ArrowRight size={15} />} Basculer les {volet2.dejaEnvoyes} déjà-envoyés au suivi (sans mail)
                 </Button>
               )}
+              <Button onClick={archiveOpen} disabled={archiving} variant="outline" size="sm" title="Ré-archive les RS restées ouvertes sans réponse (à lancer après un lot)">
+                {archiving ? <Loader2 size={15} className="animate-spin" /> : <Archive size={15} />} Archiver les RS restées ouvertes
+              </Button>
             </div>
           </>
         )}
