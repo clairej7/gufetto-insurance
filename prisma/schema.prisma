@@ -505,3 +505,12 @@ model Rs4SendLog {
   failed     Int    @default(0) // échecs
   actorEmail String?
 }
+
+// Historique des chargements en masse de documents (auto 5 Volet 1).
+model DocLoadLog {
+  id         String   @id @default(cuid())
+  loadedAt   DateTime @default(now())
+  dossiers   Int // dossiers parcourus
+  created    Int // documents créés
+  actorEmail String?
+}
