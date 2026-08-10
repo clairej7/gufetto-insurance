@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 type Row = { pipelineId: string; nom: string; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; manque: string[] };
 type Sample = { total: number; complete: number; incomplete: number; completeRows: Row[]; incompleteRows: Row[] };
 type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; sendMail: string | null; hold: boolean; holdReason: string };
-type Volet2 = { total: number; nouveaux: number; dejaEnvoyes: number; rows: Volet2Row[] };
+type Volet2 = { total: number; nouveaux: number; dejaEnvoyes: number; sent: number; rows: Volet2Row[] };
 type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number };
 type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[] };
 type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number };
@@ -287,6 +287,21 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
             <p style={{ fontSize: 13, color: "#656576", margin: "0 0 8px" }}>
               <strong style={{ color: "#4E49FC" }}>{volet2.nouveaux}</strong> demande{volet2.nouveaux > 1 ? "s" : ""} de RS à envoyer{volet2.dejaEnvoyes > 0 && <> · <strong>{volet2.dejaEnvoyes}</strong> déjà envoyée{volet2.dejaEnvoyes > 1 ? "s" : ""} (basculées au suivi sans nouveau mail)</>}.
             </p>
+            {(() => {
+              const tot = volet2.sent + volet2.nouveaux;
+              const pct = tot > 0 ? Math.round((volet2.sent / tot) * 100) : 0;
+              return (
+                <div style={{ margin: "0 0 12px", maxWidth: 460 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#656576", marginBottom: 4 }}>
+                    <span><strong style={{ color: "#13762C" }}>{volet2.sent}</strong> / {tot} demandes de RS envoyées</span>
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{pct}%</span>
+                  </div>
+                  <div style={{ height: 8, borderRadius: 999, background: "#E8E8EC", overflow: "hidden" }}>
+                    <div style={{ width: `${pct}%`, height: "100%", background: "#13762C", transition: "width 300ms" }} />
+                  </div>
+                </div>
+              );
+            })()}
             <button onClick={() => setShowTpl((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
               {showTpl ? "▾" : "▸"} Template du mail (éditable · placeholders {"{adresse} {assureur} {numeroContrat}"})
             </button>
