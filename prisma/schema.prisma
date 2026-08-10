@@ -222,6 +222,7 @@ model InsurancePipeline {
   rs4ReplyAt      DateTime?
   rs4ReplyKind    String?
   rs4ReplyMsgId   String?
+  rs4ReplyConvId  String?
   rs4ReplySnippet String?
   rs4ReplyScanAt  DateTime?
 

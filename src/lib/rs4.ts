@@ -308,10 +308,12 @@ export async function moveSentToVolet3(actorEmail: string): Promise<{ moved: num
 }
 
 // ─── Volet 3 : suivi + boucle de relances ────────────────────────────────────
-export type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null };
+export type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null };
 export type Volet3Data = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null };
 
-const RS4_SELECT = { id: true, rs4SentAt: true, rs4ReplyKind: true, rs4ReplyAt: true, rs4ReplySnippet: true, rs4ReplyScanAt: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true, numeroContrat: true, assureurActuel: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } } as const;
+// Lien profond vers une conversation Front (ouvre l'app Front sur la conv).
+const FRONT_CONV_URL = (cid: string | null) => (cid ? `https://app.frontapp.com/open/${cid}` : null);
+const RS4_SELECT = { id: true, rs4SentAt: true, rs4ReplyKind: true, rs4ReplyAt: true, rs4ReplySnippet: true, rs4ReplyConvId: true, rs4ReplyScanAt: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true, numeroContrat: true, assureurActuel: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } } as const;
 
 // UI Volet 4 = boucle de relances : dossiers TRIÉS depuis le détecteur (rs4RelanceAt
 // posé), pas encore passés en « RS en cours de récupération » (rs4EnCoursAt null).
@@ -342,7 +344,7 @@ function relanceCountOf(events: { metadata: unknown }[]): number {
 type Rs4Pipeline = Awaited<ReturnType<typeof volet3Pipelines>>[number];
 function toVolet3Row(p: Rs4Pipeline, nowMs: number): Volet3Row {
   const jours = Math.floor((nowMs - new Date(p.rs4SentAt!).getTime()) / 86400000);
-  return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events), replyKind: p.rs4ReplyKind, replyAt: p.rs4ReplyAt ? p.rs4ReplyAt.toISOString() : null, replySnippet: p.rs4ReplySnippet };
+  return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events), replyKind: p.rs4ReplyKind, replyAt: p.rs4ReplyAt ? p.rs4ReplyAt.toISOString() : null, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId) };
 }
 function replyCountsOf(ps: Rs4Pipeline[]): Record<string, number> {
   const c: Record<string, number> = {};
@@ -442,19 +444,34 @@ export async function scanReplies(offset: number, limit: number): Promise<{ tota
       if (full?.attachments && realDoc(full.attachments)) hasDoc = true;
     }
     const kind = classifyReply(body, hasDoc, bounce && !inbound.length);
-    await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: kind, rs4ReplyAt: last ? new Date(last.created_at * 1000) : now, rs4ReplySnippet: snippet || (bounce ? "Échec de remise (bounce)" : null), rs4ReplyMsgId: last?.id ?? null } });
+    await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: kind, rs4ReplyAt: last ? new Date(last.created_at * 1000) : now, rs4ReplySnippet: snippet || (bounce ? "Échec de remise (bounce)" : null), rs4ReplyMsgId: last?.id ?? null, rs4ReplyConvId: cid } });
     counts[kind] = (counts[kind] ?? 0) + 1;
   }
   const nextOffset = offset + slice.length;
   return { total: ps.length, scanned: slice.length, nextOffset, done: nextOffset >= ps.length, counts };
 }
 
+// Résout (archive) sur Front toutes les conversations d'envoi d'un dossier.
+// Best-effort : une conv déjà archivée ou introuvable est ignorée.
+async function archiveConversationsFor(pipelineId: string): Promise<number> {
+  if (!FRONT_TOKEN) return 0;
+  const ev = await prisma.pipelineEvent.findMany({ where: { pipelineId, metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } });
+  const cids = [...new Set(ev.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean) as string[])];
+  let n = 0;
+  for (const cid of cids) {
+    const r = await fetch(`${FRONT_API_URL}/conversations/${cid}`, { method: "PATCH", headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: "archived" }) });
+    if (r.ok) n++;
+  }
+  return n;
+}
+
 // Aiguillage depuis le détecteur — chaque action = un clic utilisateur.
-// → boucle de relances (Volet 4)
-export async function moveToRelance(actorEmail: string, pipelineId: string): Promise<{ ok: boolean }> {
+// → boucle de relances (Volet 4). Pas de réponse à traiter → on RÉSOUT la conv Front.
+export async function moveToRelance(actorEmail: string, pipelineId: string): Promise<{ ok: boolean; archived: number }> {
   await prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { rs4RelanceAt: new Date() } });
-  await prisma.pipelineEvent.create({ data: { pipelineId, type: "action_manuelle", description: "Dossier envoyé en boucle de relances (Volet 4) depuis le détecteur", metadata: { auto: "rs4_to_relance" }, createdBy: actorEmail } });
-  return { ok: true };
+  const archived = await archiveConversationsFor(pipelineId);
+  await prisma.pipelineEvent.create({ data: { pipelineId, type: "action_manuelle", description: `Dossier envoyé en boucle de relances (Volet 4) depuis le détecteur${archived ? " · conv Front résolue" : ""}`, metadata: { auto: "rs4_to_relance", archived }, createdBy: actorEmail } });
+  return { ok: true, archived };
 }
 // Bulk : tous les « sans réponse » du détecteur → boucle de relances.
 export async function moveAllNoReplyToRelance(actorEmail: string): Promise<{ moved: number }> {
@@ -505,20 +522,20 @@ export async function sendRelance(actorEmail: string, relanceNum: number, subjec
 // (RS reçu = réutilise l'action existante marquerRSRecu → rs_en_cours → devis_demandes.)
 
 // ─── Volet 4 : « RS en cours de récupération » (courtier a répondu, RS pas reçu) ──
-export type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; replyKind: string | null; replySnippet: string | null };
+export type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; replyKind: string | null; replySnippet: string | null; replyConvUrl: string | null };
 export type Volet4Data = { total: number; rows: Volet4Row[] };
 
 export async function getRs4Volet4Data(nowMs: number): Promise<Volet4Data> {
   const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({
     where: { statut: "rs_en_cours", rs4EnCoursAt: { not: null }, coproId: { notIn: excl }, copro: { archivedAt: null } },
-    select: { id: true, rs4SentAt: true, rs4EnCoursAt: true, rs4ReplyKind: true, rs4ReplySnippet: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true } } },
+    select: { id: true, rs4SentAt: true, rs4EnCoursAt: true, rs4ReplyKind: true, rs4ReplySnippet: true, rs4ReplyConvId: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true } } },
     orderBy: { rs4EnCoursAt: "desc" },
   });
   const rows: Volet4Row[] = ps.map((p) => ({
     pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail,
     joursDepuisEnvoi: p.rs4SentAt ? Math.floor((nowMs - new Date(p.rs4SentAt).getTime()) / 86400000) : 0,
-    replyKind: p.rs4ReplyKind, replySnippet: p.rs4ReplySnippet,
+    replyKind: p.rs4ReplyKind, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId),
   }));
   return { total: rows.length, rows };
 }

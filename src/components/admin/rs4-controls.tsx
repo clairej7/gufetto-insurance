@@ -17,10 +17,10 @@ type Row = { pipelineId: string; nom: string; assureur: string | null; numeroCon
 type Sample = { total: number; complete: number; incomplete: number; completeRows: Row[]; incompleteRows: Row[] };
 type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; sendMail: string | null; hold: boolean; holdReason: string };
 type Volet2 = { total: number; nouveaux: number; dejaEnvoyes: number; sent: number; rows: Volet2Row[] };
-type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null };
+type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null };
 type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null };
 type Detector = { total: number; scanned: number; nonScanne: number; sansReponse: number; replyCounts: Record<string, number>; lastScanAt: string | null; rows: Volet3Row[] };
-type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; replyKind: string | null; replySnippet: string | null };
+type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; replyKind: string | null; replySnippet: string | null; replyConvUrl: string | null };
 type Volet4 = { total: number; rows: Volet4Row[] };
 type SendHist = { sentAt: string; kind: string; relanceNum: number | null; count: number; failed: number };
 
@@ -560,7 +560,13 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
                           <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
                             <td style={{ padding: "6px 10px", color: "#26262C", maxWidth: 200 }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
                             <td style={{ padding: "6px 10px" }}><Badge kind={r.replyKind} /></td>
-                            <td style={{ padding: "6px 10px", color: "#656576", maxWidth: 280, fontStyle: r.replySnippet ? "normal" : "italic" }}>{r.replySnippet || "—"}</td>
+                            <td style={{ padding: "6px 10px", maxWidth: 280 }}>
+                              {r.replyConvUrl ? (
+                                <a href={r.replyConvUrl} target="_blank" rel="noreferrer" title="Ouvrir la conversation dans Front" style={{ color: "#4E49FC", textDecoration: "none" }}>{r.replySnippet || "Voir la conversation"} ↗</a>
+                              ) : (
+                                <span style={{ color: "#656576", fontStyle: r.replySnippet ? "normal" : "italic" }}>{r.replySnippet || "—"}</span>
+                              )}
+                            </td>
                             <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>
                               {busy ? <Loader2 size={14} className="animate-spin" style={{ color: "#A2A1AF" }} /> : (() => {
                                 const rec = r.replyKind === "rs_recu" ? "recu" : r.replyKind === "sans_reponse" ? "relance" : "manuel";
@@ -677,7 +683,13 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
                       <td style={{ padding: "6px 10px", color: "#26262C" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
                       <td style={{ padding: "6px 10px", color: "#656576", fontWeight: 600 }}>J+{r.joursDepuisEnvoi}</td>
                       <td style={{ padding: "6px 10px" }}>{r.replyKind && r.replyKind !== "non_scanne" ? <Badge kind={r.replyKind} /> : <span style={{ color: "#C7C7D1" }}>—</span>}</td>
-                      <td style={{ padding: "6px 10px", color: "#656576", maxWidth: 240, fontStyle: r.replySnippet ? "normal" : "italic" }}>{r.replySnippet || "—"}</td>
+                      <td style={{ padding: "6px 10px", maxWidth: 240 }}>
+                        {r.replyConvUrl ? (
+                          <a href={r.replyConvUrl} target="_blank" rel="noreferrer" title="Ouvrir la conversation dans Front" style={{ color: "#4E49FC", textDecoration: "none" }}>{r.replySnippet || "Voir la conversation"} ↗</a>
+                        ) : (
+                          <span style={{ color: "#656576", fontStyle: r.replySnippet ? "normal" : "italic" }}>{r.replySnippet || "—"}</span>
+                        )}
+                      </td>
                       <td style={{ padding: "6px 10px", color: "#656576" }}>{r.mail || "—"}</td>
                       <td style={{ padding: "6px 10px", textAlign: "right" }}>
                         <button onClick={() => rsRecu(r.pipelineId)} style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, border: "1px solid #B7E4C4", background: "#EAF7EE", color: "#13762C", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
