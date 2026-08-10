@@ -76,6 +76,13 @@ async function frontSend(opts: { toList: string[]; subject: string; html: string
       const tid = await resolveTeammateId(opts.gestionnaireEmail).catch(() => null);
       if (tid) await assignConversation(conversationId, tid).catch(() => {});
     }
+    // Force le statut « resolved » APRÈS le tag/assignation (sinon l'assignation
+    // laisse la conv « open »). Une réponse ultérieure du courtier la rouvrira.
+    await fetch(`${FRONT_API_URL}/conversations/${conversationId}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "archived" }),
+    }).catch(() => {});
   }
   return { ok: true, conversationId: conversationId || null };
 }
