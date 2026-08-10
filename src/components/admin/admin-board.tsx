@@ -44,6 +44,9 @@ interface AdminBoardProps {
   primeStages: PrimeStageRow[];
   // Nb de demandes de RS envoyées via Front (dossiers distincts).
   rsDemandes: number;
+  rsRecus: number;
+  contratsRecus: number;
+  devisDemandes: number;
 }
 
 
@@ -140,7 +143,7 @@ const TD_RIGHT: React.CSSProperties = { ...TD, textAlign: "right" };
 
 type KpiFilter = "actifs" | "gagnes" | "perdus" | null;
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRecus, contratsRecus, devisDemandes }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
@@ -678,7 +681,32 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                 {st.key === "rs_en_cours" && (
                   <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px dashed #E8E8EC" }}>
                     <div style={{ fontSize: 26, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsDemandes}</div>
-                    <div style={{ fontSize: 12, color: "#656576", marginTop: 3 }}>demandes de RS envoyées</div>
+                    <div style={{ fontSize: 12, color: "#656576", marginTop: 3 }}>demandes de RS/contrats envoyées</div>
+                    <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsRecus}</div>
+                        <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>RS reçus</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{contratsRecus}</div>
+                        <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>contrats reçus</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {st.key === "devis_demandes" && (
+                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px dashed #E8E8EC" }}>
+                    <div style={{ display: "flex", gap: 16 }}>
+                      <div>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisDemandes}</div>
+                        <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>devis demandés</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: "#A2A1AF", lineHeight: 1 }}>—</div>
+                        <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>devis reçus <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>à venir</span></div>
+                      </div>
+                    </div>
                   </div>
                 )}
 

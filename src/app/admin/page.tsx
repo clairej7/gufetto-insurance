@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { AdminBoard } from "@/components/admin/admin-board";
 import { getPrimeByStage } from "@/lib/prime";
+import { getDocsStats } from "@/lib/rs-docs";
 
 export default async function AdminPage() {
   const session = await auth();
@@ -42,6 +43,10 @@ export default async function AdminPage() {
   const primeStages = await getPrimeByStage();
   // Nb de dossiers pour lesquels une demande de RS a été envoyée via Front (event rsType=draft_sent).
   const rsDemandes = (await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
+  // RS / contrats MRI récupérés (docs rangés dans Gufetto) + nb de demandes de devis
+  // envoyées via Front (events devisType=devis_sent = clics « envoyer aux assureurs »).
+  const { rs: rsRecus, contrat: contratsRecus } = await getDocsStats();
+  const devisDemandes = await prisma.pipelineEvent.count({ where: { metadata: { path: ["devisType"], equals: "devis_sent" } } });
 
   const gestionnaires = [
     ...new Set(
@@ -87,6 +92,9 @@ export default async function AdminPage() {
           lostPipelines={lostPipelines as Parameters<typeof AdminBoard>[0]["lostPipelines"]}
           primeStages={primeStages}
           rsDemandes={rsDemandes}
+          rsRecus={rsRecus}
+          contratsRecus={contratsRecus}
+          devisDemandes={devisDemandes}
         />
       </main>
     </div>

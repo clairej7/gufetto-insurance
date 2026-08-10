@@ -131,6 +131,13 @@ export async function captureDocsForPipeline(pipelineId: string, createdBy?: str
   return r;
 }
 
+// Compteur global : nb de dossiers ayant au moins un RS / un contrat MRI récupéré.
+export async function getDocsStats(): Promise<{ rs: number; contrat: number }> {
+  const rs = (await prisma.pipelineDocument.findMany({ where: { kind: "rs" }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
+  const contrat = (await prisma.pipelineDocument.findMany({ where: { kind: "contrat_mri" }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
+  return { rs, contrat };
+}
+
 export type PipelineDoc = { id: string; kind: DocKind; part: number | null; fileName: string; storagePath: string; source: string; createdAt: string };
 export async function getPipelineDocuments(pipelineId: string): Promise<PipelineDoc[]> {
   const rows = await prisma.pipelineDocument.findMany({ where: { pipelineId }, orderBy: [{ kind: "asc" }, { part: "asc" }, { createdAt: "asc" }] });

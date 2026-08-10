@@ -18,7 +18,7 @@ const STATUT_LABEL: Record<Row["statut"], { label: string; bg: string; fg: strin
   devis_recus: { label: "Comparaison des devis", bg: "#F3EFFE", fg: "#6D3BEB" },
 };
 
-export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [] }: { data: Data; toLoad: number; docHistory?: DocHist[]; noDocs?: NoDoc[] }) {
+export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], docsStats }: { data: Data; toLoad: number; docHistory?: DocHist[]; noDocs?: NoDoc[]; docsStats?: { rs: number; contrat: number } }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -59,6 +59,13 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [] }: {
       <p style={{ fontSize: 13, color: "#656576", margin: "0 0 10px" }}>
         <strong>{data.total}</strong> dossier{data.total > 1 ? "s" : ""} à traiter · {data.demande} en « Demande de devis » · {data.comparaison} en « Comparaison des devis » (hors comparaisons déjà lancées).
       </p>
+      {docsStats && (
+        <div style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, color: "#13762C", background: "#EAF7EE", border: "1px solid #B7E4C4" }}>📄 {docsStats.rs} RS récupérés</span>
+          <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5" }}>📑 {docsStats.contrat} contrats MRI récupérés</span>
+          <span style={{ fontSize: 11, color: "#A2A1AF", alignSelf: "center" }}>depuis le début</span>
+        </div>
+      )}
       <button onClick={() => setOpen((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
         {open ? "▾" : "▸"} Parcourir les {data.total} dossiers
       </button>
