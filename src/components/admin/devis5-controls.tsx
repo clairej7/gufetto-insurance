@@ -176,6 +176,26 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
           </div>
         </div>
       )}
+
+      {/* ── Volet 2 — placeholder ── */}
+      <div style={{ marginTop: 22, paddingTop: 18, borderTop: "1px solid #E8E8EC" }}>
+        <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 2</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Récupération des infos nécessaires aux devis</span>
+          <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>Contenu à venir</span>
+        </div>
+        <p style={{ fontSize: 12.5, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>À construire : rassembler les informations requises par les assureurs pour chiffrer (surface, période de construction, activités, sinistralité…).</p>
+      </div>
+
+      {/* ── Volet 3 — placeholder ── */}
+      <div style={{ marginTop: 22, paddingTop: 18, borderTop: "1px solid #E8E8EC" }}>
+        <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 3</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Envoi des demandes aux assureurs</span>
+          <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>Contenu à venir</span>
+        </div>
+        <p style={{ fontSize: 12.5, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>À construire : envoi des demandes de devis aux assureurs (AXA / Mila) avec les infos et documents rattachés.</p>
+      </div>
     </div>
   );
 }
