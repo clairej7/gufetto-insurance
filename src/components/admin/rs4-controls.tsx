@@ -17,8 +17,8 @@ type Row = { pipelineId: string; nom: string; assureur: string | null; numeroCon
 type Sample = { total: number; complete: number; incomplete: number; completeRows: Row[]; incompleteRows: Row[] };
 type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; sendMail: string | null; hold: boolean; holdReason: string };
 type Volet2 = { total: number; nouveaux: number; dejaEnvoyes: number; sent: number; rows: Volet2Row[] };
-type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null };
-type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null };
+type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null; commentText: string | null; commentBy: string | null; commentAt: string | null; devisMixup: boolean };
+type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null; commentedCount: number; devisMixupCount: number };
 type Detector = { total: number; scanned: number; nonScanne: number; sansReponse: number; replyCounts: Record<string, number>; lastScanAt: string | null; rows: Volet3Row[] };
 type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; replyKind: string | null; replySnippet: string | null; replyConvUrl: string | null };
 type Volet4 = { total: number; rows: Volet4Row[] };
@@ -137,6 +137,38 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
   const [relancing, setRelancing] = useState<number | null>(null);
   const [showV3, setShowV3] = useState(false);
   const [v3Search, setV3Search] = useState("");
+  // Garde-fous boucle de relances : les 2 vérifs doivent être lancées avant d'envoyer.
+  const [check1Done, setCheck1Done] = useState(false); // absence de réponse (scan)
+  const [check2Done, setCheck2Done] = useState(false); // commentaires Front
+  const [check3Done, setCheck3Done] = useState(false); // pas de demande de devis
+  const [scanningComments, setScanningComments] = useState(false);
+  const [commentProg, setCommentProg] = useState<{ done: number; total: number } | null>(null);
+  const [showComments, setShowComments] = useState(true);
+  const [showMixups, setShowMixups] = useState(true);
+  const guardsOk = check1Done && check2Done && check3Done;
+
+  async function checkAbsenceReponse() {
+    await scanReplies();
+    setCheck1Done(true);
+  }
+  async function scanComments() {
+    setScanningComments(true);
+    setCommentProg({ done: 0, total: volet3.total });
+    try {
+      let offset = 0;
+      for (;;) {
+        const res = await fetch("/api/rs4/scan-comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offset, limit: 40 }) });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+        const data = await res.json();
+        offset = data.nextOffset;
+        setCommentProg({ done: Math.min(offset, data.total), total: data.total });
+        if (data.done) break;
+      }
+      setCheck2Done(true);
+      toast.success("Commentaires Front vérifiés.");
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec du scan"); } finally { setScanningComments(false); }
+  }
 
   async function verify() {
     setLoading(true);
@@ -620,14 +652,79 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
             <p style={{ fontSize: 13, color: "#656576", margin: "0 0 8px" }}>
               <strong>{volet3.total}</strong> dossier{volet3.total > 1 ? "s" : ""} en relance. Dès qu&apos;un scan détecte une réponse, le dossier <strong>repart automatiquement au détecteur (V3)</strong> pour re-tri.
             </p>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
-              {scanButton}
-              <span style={{ fontSize: 11.5, color: "#A2A1AF" }}>À lancer avant de relancer : exclut les dossiers ayant répondu.</span>
+            {/* ── 3 garde-fous obligatoires avant de relancer ── */}
+            <div style={{ border: "1px solid #E8E8EC", borderRadius: 10, padding: "12px 14px", marginBottom: 10, background: "#FBFBFE" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#26262C", marginBottom: 8 }}>Vérifications obligatoires avant relance</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <Button onClick={checkAbsenceReponse} disabled={scanning} variant={check1Done ? "outline" : "default"} size="sm">
+                  {scanning ? <Loader2 size={15} className="animate-spin" /> : check1Done ? <Check size={15} /> : <Radar size={15} />} 1. Vérifier l&apos;absence de réponse
+                </Button>
+                <Button onClick={scanComments} disabled={scanningComments} variant={check2Done ? "outline" : "default"} size="sm">
+                  {scanningComments ? <Loader2 size={15} className="animate-spin" /> : check2Done ? <Check size={15} /> : <Search size={15} />} 2. Vérifier les commentaires Front
+                </Button>
+                <Button onClick={() => setCheck3Done(true)} variant={check3Done ? "outline" : "default"} size="sm">
+                  {check3Done ? <Check size={15} /> : <AlertTriangle size={15} />} 3. Vérifier : pas de demande de devis
+                </Button>
+              </div>
+              {scanBarEl}
+              {scanningComments && commentProg && (
+                <div style={{ margin: "8px 0 0", maxWidth: 460 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#656576", marginBottom: 4 }}>
+                    <span>Scan des commentaires…</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{commentProg.done} / {commentProg.total}</span>
+                  </div>
+                  <div style={{ height: 8, borderRadius: 999, background: "#E8E8EC", overflow: "hidden" }}><div style={{ width: `${commentProg.total ? Math.round((commentProg.done / commentProg.total) * 100) : 0}%`, height: "100%", background: "#4E49FC", transition: "width 200ms" }} /></div>
+                </div>
+              )}
+
+              {/* Liste : dossiers avec un commentaire interne */}
+              {check2Done && volet3.commentedCount > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <button onClick={() => setShowComments((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#B4690E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                    {showComments ? "▾" : "▸"} 💬 {volet3.commentedCount} dossier(s) avec un commentaire interne — valider ou renvoyer au détecteur
+                  </button>
+                  {showComments && (
+                    <div style={{ marginTop: 6, maxHeight: 240, overflowY: "auto", border: "1px solid #F3D9A6", borderRadius: 8, background: "#FFFBF3" }}>
+                      {volet3.rows.filter((r) => r.commentText).map((r) => (
+                        <div key={r.pipelineId} style={{ padding: "7px 10px", borderTop: "1px solid #F6ECD5", fontSize: 12 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                            <a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none", fontWeight: 600 }}>{r.adresse || r.nom}</a>
+                            <button onClick={() => route("/api/rs4/to-detector", r.pipelineId, "Renvoyé au détecteur pour vérif manuelle.")} disabled={routing !== null} style={btn("#4E49FC", "#EEF0FF", "#D9D9F5")}>↩ Renvoyer au détecteur</button>
+                          </div>
+                          <div style={{ color: "#8A5A08", marginTop: 3 }}><em>{r.commentBy}</em> : « {r.commentText} »</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Liste : dossiers pointant vers une adresse de devis */}
+              {check3Done && volet3.devisMixupCount > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <button onClick={() => setShowMixups((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#CA1E12", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                    {showMixups ? "▾" : "▸"} ⚠️ {volet3.devisMixupCount} dossier(s) pointant vers une adresse de devis (AXA/Mila) — à sortir de la relance
+                  </button>
+                  {showMixups && (
+                    <div style={{ marginTop: 6, maxHeight: 240, overflowY: "auto", border: "1px solid #F5C6C0", borderRadius: 8, background: "#FDECEA" }}>
+                      {volet3.rows.filter((r) => r.devisMixup).map((r) => (
+                        <div key={r.pipelineId} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "7px 10px", borderTop: "1px solid #F6D5D0", fontSize: 12 }}>
+                          <a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom} <span style={{ color: "#CA1E12" }}>· {r.mail}</span></a>
+                          <button onClick={() => route("/api/rs4/to-detector", r.pipelineId, "Renvoyé au détecteur (confusion devis).")} disabled={routing !== null} style={btn("#4E49FC", "#EEF0FF", "#D9D9F5")}>↩ Renvoyer au détecteur</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {check3Done && volet3.devisMixupCount === 0 && <div style={{ fontSize: 11.5, color: "#13762C", marginTop: 8 }}>✓ Aucun dossier ne pointe vers une adresse de devis.</div>}
             </div>
-            {scanBarEl}
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+
+            {!guardsOk && (
+              <p style={{ fontSize: 12, color: "#B4690E", margin: "0 0 8px" }}>⚠️ Lance les 3 vérifications ci-dessus pour débloquer l&apos;envoi des relances.</p>
+            )}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
               {volet3.stages.map((s) => (
-                <Button key={s.num} onClick={() => sendRelance(s.num, s.eligibles)} disabled={relancing !== null || s.eligibles === 0} variant="outline" size="sm">
+                <Button key={s.num} onClick={() => sendRelance(s.num, s.eligibles)} disabled={!guardsOk || relancing !== null || s.eligibles === 0} variant="outline" size="sm">
                   {relancing === s.num ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />} J+{s.day} : relance {s.num} ({s.eligibles})
                 </Button>
               ))}

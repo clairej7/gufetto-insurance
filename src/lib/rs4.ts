@@ -309,12 +309,15 @@ export async function moveSentToVolet3(actorEmail: string): Promise<{ moved: num
 }
 
 // ─── Volet 3 : suivi + boucle de relances ────────────────────────────────────
-export type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null };
-export type Volet3Data = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null };
+export type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null; commentText: string | null; commentBy: string | null; commentAt: string | null; devisMixup: boolean };
+export type Volet3Data = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null; commentedCount: number; devisMixupCount: number };
+
+// Adresses de DEMANDE DE DEVIS (assureurs) — jamais un destinataire de relance RS.
+const DEVIS_ADDRESSES = ["achille.leboeuf@axa.fr", "souscription@mila.fr"];
 
 // Lien profond vers une conversation Front (ouvre l'app Front sur la conv).
 const FRONT_CONV_URL = (cid: string | null) => (cid ? `https://app.frontapp.com/open/${cid}` : null);
-const RS4_SELECT = { id: true, rs4SentAt: true, rs4ReplyKind: true, rs4ReplyAt: true, rs4ReplySnippet: true, rs4ReplyConvId: true, rs4ReplyScanAt: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true, numeroContrat: true, assureurActuel: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } } as const;
+const RS4_SELECT = { id: true, rs4SentAt: true, rs4ReplyKind: true, rs4ReplyAt: true, rs4ReplySnippet: true, rs4ReplyConvId: true, rs4ReplyScanAt: true, rs4CommentAt: true, rs4CommentText: true, rs4CommentBy: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true, numeroContrat: true, assureurActuel: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } } as const;
 
 // UI Volet 4 = boucle de relances : dossiers TRIÉS depuis le détecteur (rs4RelanceAt
 // posé), pas encore passés en « RS en cours de récupération » (rs4EnCoursAt null).
@@ -345,7 +348,9 @@ function relanceCountOf(events: { metadata: unknown }[]): number {
 type Rs4Pipeline = Awaited<ReturnType<typeof volet3Pipelines>>[number];
 function toVolet3Row(p: Rs4Pipeline, nowMs: number): Volet3Row {
   const jours = Math.floor((nowMs - new Date(p.rs4SentAt!).getTime()) / 86400000);
-  return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events), replyKind: p.rs4ReplyKind, replyAt: p.rs4ReplyAt ? p.rs4ReplyAt.toISOString() : null, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId) };
+  const recips = [p.copro.contactCourtierEmail ?? "", ...p.events.map((e) => (e.metadata as { to?: string } | null)?.to ?? "")].join(" ").toLowerCase();
+  const devisMixup = DEVIS_ADDRESSES.some((a) => recips.includes(a));
+  return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events), replyKind: p.rs4ReplyKind, replyAt: p.rs4ReplyAt ? p.rs4ReplyAt.toISOString() : null, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId), commentText: p.rs4CommentText, commentBy: p.rs4CommentBy, commentAt: p.rs4CommentAt ? p.rs4CommentAt.toISOString() : null, devisMixup };
 }
 function replyCountsOf(ps: Rs4Pipeline[]): Record<string, number> {
   const c: Record<string, number> = {};
@@ -362,7 +367,29 @@ export async function getRs4Volet3Data(nowMs: number): Promise<Volet3Data> {
   const ps = await volet3Pipelines();
   const rows = ps.map((p) => toVolet3Row(p, nowMs));
   const stages = RELANCE_STAGES.map((s) => ({ num: s.num, day: s.day, eligibles: rows.filter((r) => r.joursDepuisEnvoi >= s.day && r.relances < s.num).length }));
-  return { total: rows.length, rows, stages, replyCounts: replyCountsOf(ps), lastScanAt: lastScanOf(ps) };
+  return { total: rows.length, rows, stages, replyCounts: replyCountsOf(ps), lastScanAt: lastScanOf(ps), commentedCount: rows.filter((r) => r.commentText).length, devisMixupCount: rows.filter((r) => r.devisMixup).length };
+}
+
+// Garde-fou : scanne les commentaires internes (humains) sur les conversations
+// Front des dossiers en boucle de relances. Pose rs4Comment* si commentaire trouvé,
+// nettoie sinon. Exclut les commentaires automatiques (règles). Par lots.
+export async function scanFrontComments(offset: number, limit: number): Promise<{ total: number; scanned: number; nextOffset: number; done: boolean; flagged: number }> {
+  const ps = await volet3Pipelines();
+  const slice = ps.slice(offset, offset + limit);
+  let flagged = 0;
+  for (const p of slice) {
+    const cid = p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop();
+    if (!cid) { await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4CommentAt: null, rs4CommentText: null, rs4CommentBy: null } }); continue; }
+    const cm = await frontGet(`/conversations/${cid}/comments`);
+    const results = ((cm?._results as { author?: { email?: string; is_teammate?: boolean }; body?: string; posted_at?: number }[]) ?? [])
+      .filter((c) => (c.author?.email ?? "").includes("@") && !/associated to a project|marked as|custom field/i.test(c.body ?? ""));
+    if (!results.length) { await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4CommentAt: null, rs4CommentText: null, rs4CommentBy: null } }); continue; }
+    const last = results.sort((a, b) => (b.posted_at ?? 0) - (a.posted_at ?? 0))[0];
+    await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4CommentAt: last.posted_at ? new Date(last.posted_at * 1000) : new Date(), rs4CommentText: (last.body ?? "").replace(/\s+/g, " ").slice(0, 240), rs4CommentBy: last.author?.email ?? null } });
+    flagged++;
+  }
+  const nextOffset = offset + slice.length;
+  return { total: ps.length, scanned: slice.length, nextOffset, done: nextOffset >= ps.length, flagged };
 }
 
 // ─── Volet 3 : Détecteur de réponses ─────────────────────────────────────────
@@ -530,6 +557,8 @@ export async function sendRelance(actorEmail: string, relanceNum: number, subjec
     if (plan.hold) { failed++; errors.push(`${c.nom} : ${plan.reason} — non relancé`); continue; }
     const toList = plan.mails;
     const to = toList.join(", ");
+    // Garde-fou : jamais de relance RS vers une adresse de demande de devis (AXA/Mila).
+    if (DEVIS_ADDRESSES.some((a) => to.toLowerCase().includes(a))) { failed++; errors.push(`${c.nom} : destinataire = adresse de devis (AXA/Mila) — non relancé`); continue; }
     const vars = { adresse: c.adresse || c.nom, assureur: c.assureurActuel || "", numeroContrat: c.numeroContrat || "", nom: c.nom, jours: String(jours) };
     const subject = fillTemplate(subjectTpl, vars);
     const html = renderHtml(fillTemplate(bodyTpl, vars), signature, `<span style="display:none;font-size:0;line-height:0;color:transparent">gufetto-ref:${p.id}:rs_relance</span>`);
