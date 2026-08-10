@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useTransition, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Check, CheckCircle2, ChevronRight, FileText, Paperclip, Upload, X } from "lucide-react";
-import { updateCoproCaracteristiques, logDevisSent, advanceStatut } from "@/lib/actions";
+import { updateCoproCaracteristiques, logDevisSent, advanceStatut, getPdfSignedUrl } from "@/lib/actions";
 import { toast } from "sonner";
 
 type DroppedFile = { file: File; name: string };
@@ -186,6 +186,7 @@ interface DevisRequestActionProps {
     protectionJuridique: string | null;
     assureursDevis: string | null;
   };
+  documents?: { id: string; kind: string; part: number | null; fileName: string; storagePath: string }[];
 }
 
 type Step = "assureurs" | "formulaire" | "preview";
@@ -248,7 +249,7 @@ function RadioButton({ label, selected, onClick }: { label: string; selected: bo
 }
 
 
-export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, userName }: DevisRequestActionProps) {
+export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, userName, documents = [] }: DevisRequestActionProps) {
   function initAssureurs(): Set<Assureur> {
     try {
       const saved = copro.assureursDevis ? JSON.parse(copro.assureursDevis) as Assureur[] : [];
@@ -279,6 +280,37 @@ export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, us
   );
   const [contratFile, setContratFile] = useState<DroppedFile | null>(null);
   const [rsFile, setRsFile] = useState<DroppedFile | null>(null);
+  // Documents récupérés (Supabase) préchargés en File, cochés par défaut = joints.
+  // L'utilisateur décoche ce qu'il ne veut pas envoyer (ex. une seule partie de RS).
+  const [storedFiles, setStoredFiles] = useState<Record<string, DroppedFile>>({});
+  const [includedIds, setIncludedIds] = useState<Set<string>>(new Set());
+  const [docsLoaded, setDocsLoaded] = useState(false);
+  useEffect(() => {
+    if (docsLoaded || !documents.length) return;
+    setDocsLoaded(true);
+    (async () => {
+      const map: Record<string, DroppedFile> = {};
+      const inc = new Set<string>();
+      for (const d of documents) {
+        const url = await getPdfSignedUrl(d.storagePath);
+        if (!url) continue;
+        const res = await fetch(url).catch(() => null);
+        if (!res?.ok) continue;
+        const blob = await res.blob();
+        const name = d.fileName.endsWith(".pdf") ? d.fileName : `${d.fileName}.pdf`;
+        map[d.id] = { file: new File([blob], name, { type: "application/pdf" }), name };
+        inc.add(d.id);
+      }
+      setStoredFiles(map);
+      setIncludedIds(inc);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documents.length]);
+  const includedDocs = documents.filter((d) => includedIds.has(d.id) && storedFiles[d.id]);
+  const hasContratJoint = !!contratFile || includedDocs.some((d) => d.kind === "contrat_mri");
+  const hasRsJoint = !!rsFile || includedDocs.some((d) => d.kind === "rs");
+  const contratsDispo0 = documents.some((d) => d.kind === "contrat_mri");
+  const rsDispo0 = documents.some((d) => d.kind === "rs");
 
   // Champs destinataires + corps dans la prévisualisation
   const [emailAxa, setEmailAxa] = useState("achille.leboeuf@axa.fr");
@@ -332,8 +364,8 @@ export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, us
     caracteristiques.length > 0 &&
     proportion !== "" &&
     protectionJuridique !== null &&
-    contratFile !== null &&
-    rsFile !== null;
+    hasContratJoint &&
+    hasRsJoint;
 
   async function sendOneEmail(assureur: Assureur, email: string, body: string) {
     const formData = new FormData();
@@ -343,6 +375,8 @@ export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, us
     formData.append("refTag", `${pipelineId}:devis_${assureur}`);
     if (contratFile) formData.append("contrat", contratFile.file, contratFile.name);
     if (rsFile) formData.append("pv", rsFile.file, rsFile.name);
+    // Documents récupérés cochés → PJ supplémentaires (champ répétable "extra").
+    for (const d of includedDocs) { const f = storedFiles[d.id]; if (f) formData.append("extra", f.file, f.name); }
     const res = await fetch("/api/front/draft", { method: "POST", body: formData });
     return res.json() as Promise<{ success: boolean; fallback?: boolean; mailtoUrl?: string; error?: string; conversationId?: string }>;
   }
@@ -670,19 +704,50 @@ export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, us
           <Label className="text-sm font-medium" style={{ color: "#26262C" }}>
             Documents à joindre
           </Label>
+
+          {/* Documents récupérés du courtier — joints automatiquement, décochables */}
+          {documents.length > 0 && (
+            <div className="rounded-xl border p-3" style={{ borderColor: "#D9D9F5", background: "#F7F7FF" }}>
+              <div className="text-xs font-semibold mb-2" style={{ color: "#4E49FC" }}>
+                📎 Documents récupérés du courtier — joints automatiquement
+              </div>
+              <div className="space-y-1.5">
+                {documents.map((d) => {
+                  const ready = !!storedFiles[d.id];
+                  const on = includedIds.has(d.id);
+                  const kindLabel = d.kind === "rs" ? "RS" : d.kind === "contrat_mri" ? "Contrat MRI" : "Doc";
+                  return (
+                    <label key={d.id} className={cn("flex items-center gap-2 text-xs cursor-pointer", !ready && "opacity-50")}>
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        disabled={!ready}
+                        onChange={() => setIncludedIds((prev) => { const n = new Set(prev); if (n.has(d.id)) n.delete(d.id); else n.add(d.id); return n; })}
+                      />
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, color: d.kind === "rs" ? "#13762C" : "#4E49FC", background: d.kind === "rs" ? "#EAF7EE" : "#EEF0FF", border: `1px solid ${d.kind === "rs" ? "#B7E4C4" : "#D9D9F5"}` }}>{kindLabel}{d.part ? ` p.${d.part}` : ""}</span>
+                      <span className="truncate" style={{ color: "#26262C" }}>{d.fileName}</span>
+                      {!ready && <span style={{ color: "#A2A1AF" }}>chargement…</span>}
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="text-[11px] mt-2" style={{ color: "#A2A1AF" }}>Décoche ce que tu ne veux pas envoyer (ex. n&apos;envoyer qu&apos;une partie du relevé).</div>
+            </div>
+          )}
+
           <div className="space-y-2">
             <DropZone
-              label="Contrat d'assurance actuel"
+              label={contratsDispo0 ? "Autre contrat (manuel, optionnel)" : "Contrat d'assurance actuel"}
               hint="Glisse le fichier ici ou clique pour parcourir"
-              required
+              required={!hasContratJoint}
               file={contratFile}
               onDrop={f => setContratFile({ file: f, name: f.name })}
               onRemove={() => setContratFile(null)}
             />
             <DropZone
-              label="Relevé de sinistralité"
+              label={rsDispo0 ? "Autre relevé (manuel, optionnel)" : "Relevé de sinistralité"}
               hint="Glisse le fichier ici ou clique pour parcourir"
-              required
+              required={!hasRsJoint}
               file={rsFile}
               onDrop={f => setRsFile({ file: f, name: f.name })}
               onRemove={() => setRsFile(null)}
