@@ -441,3 +441,15 @@ model RsBatchLog {
   count      Int
   actorEmail String?
 }
+
+// Automatisation 4 : historique des envois de mails (demandes de RS + relances)
+// aux courtiers, pour garder une trace datée.
+model Rs4SendLog {
+  id         String   @id @default(cuid())
+  sentAt     DateTime @default(now())
+  kind       String // "initial" | "relance"
+  relanceNum Int? // n° de relance si kind = "relance"
+  count      Int // mails envoyés
+  failed     Int    @default(0) // échecs
+  actorEmail String?
+}

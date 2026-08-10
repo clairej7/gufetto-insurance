@@ -200,7 +200,14 @@ export async function sendVolet2(actorEmail: string, subjectTpl: string, bodyTpl
       movedExisting++;
     }
   }
+  if (sent > 0 || failed > 0) await prisma.rs4SendLog.create({ data: { kind: "initial", count: sent, failed, actorEmail } });
   return { sent, failed, movedExisting, errors: errors.slice(0, 20) };
+}
+
+// Historique daté des envois auto 4 (demandes de RS + relances), plus récent d'abord.
+export async function getRs4SendHistory(limit = 20): Promise<{ sentAt: string; kind: string; relanceNum: number | null; count: number; failed: number }[]> {
+  const rows = await prisma.rs4SendLog.findMany({ orderBy: { sentAt: "desc" }, take: limit, select: { sentAt: true, kind: true, relanceNum: true, count: true, failed: true } });
+  return rows.map((r) => ({ sentAt: r.sentAt.toISOString(), kind: r.kind, relanceNum: r.relanceNum, count: r.count, failed: r.failed }));
 }
 
 // Bascule au Volet 3 les dossiers DÉJÀ envoyés à la main (event draft_sent) mais
@@ -275,6 +282,7 @@ export async function sendRelance(actorEmail: string, relanceNum: number, subjec
     await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Relance ${relanceNum} de la demande de RS envoyée (${to})`, metadata: { rsType: "draft_sent", relanceNum, to, conversationId: r.conversationId, auto: "rs4_relance" }, createdBy: actorEmail } });
     sent++;
   }
+  if (sent > 0 || failed > 0) await prisma.rs4SendLog.create({ data: { kind: "relance", relanceNum, count: sent, failed, actorEmail } });
   return { sent, failed, errors: errors.slice(0, 20) };
 }
 
