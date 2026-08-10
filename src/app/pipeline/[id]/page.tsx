@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { CoproDetail } from "@/components/copro/copro-detail";
 import { getExcludedCoproIds } from "@/lib/exclusions";
+import { getPipelineDocuments } from "@/lib/rs-docs";
 
 export default async function CoproDetailPage({
   params,
@@ -56,6 +57,7 @@ export default async function CoproDetailPage({
           userEmail={user.email ?? ""}
           pipelineTasks={pipelineTasks}
           excluded={(await getExcludedCoproIds()).includes(pipeline.coproId)}
+          documents={await getPipelineDocuments(id)}
         />
       </main>
     </div>

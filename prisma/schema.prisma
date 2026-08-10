@@ -233,6 +233,29 @@ model InsurancePipeline {
   taskCompletions TaskCompletion[]
   devisRecus      DevisRecu[]
   tasks           Task[]
+  documents       PipelineDocument[]
+}
+
+// Documents d'assurance rattachés à un dossier (relevé de sinistralité, contrat
+// MRI…), capturés depuis les réponses courtier sur Front et stockés dans Supabase.
+// Réutilisés en aval (RS → demandes de devis AXA/Mila ; contrat MRI → comparaison).
+model PipelineDocument {
+  id                String            @id @default(cuid())
+  pipelineId        String
+  pipeline          InsurancePipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  coproId           String
+  kind              String            // "contrat_mri" | "rs" | "autre"
+  part              Int?              // n° de partie quand plusieurs RS (partie 1/2)
+  storagePath       String            // chemin Supabase (bucket gufetto_doc)
+  fileName          String            // nom affiché : "{adresse} - Contrat MRI"
+  source            String            @default("front") // "front" | "manuel"
+  frontAttachmentId String?
+  frontMsgId        String?
+  createdAt         DateTime          @default(now())
+  createdBy         String?
+
+  @@unique([pipelineId, frontAttachmentId])
+  @@index([pipelineId])
 }
 
 model Task {
