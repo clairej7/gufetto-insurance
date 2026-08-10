@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 
 type Row = { pipelineId: string; nom: string; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; manque: string[] };
 type Sample = { total: number; complete: number; incomplete: number; completeRows: Row[]; incompleteRows: Row[] };
-type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null };
+type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; sendMail: string | null; hold: boolean; holdReason: string };
 type Volet2 = { total: number; nouveaux: number; dejaEnvoyes: number; rows: Volet2Row[] };
 type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number };
 type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[] };
@@ -331,7 +331,15 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
                                 <td style={{ padding: "6px 10px", color: "#656576" }}>{r.assureur || "—"}</td>
                                 <td style={{ padding: "6px 10px", color: "#656576" }}>{r.numeroContrat || "—"}</td>
                                 <td style={{ padding: "6px 10px", color: "#656576" }}>{r.courtier || "—"}</td>
-                                <td style={{ padding: "6px 10px", color: "#13762C" }}>{r.mail || "—"}</td>
+                                <td style={{ padding: "6px 10px" }}>
+                                  {r.hold ? (
+                                    <span style={{ color: "#B4690E" }}>⏸ en attente — {r.holdReason}</span>
+                                  ) : r.sendMail && r.sendMail !== (r.mail || "") ? (
+                                    <span><span style={{ color: "#13762C" }}>{r.sendMail}</span>{r.mail && r.mail.split(/[;,]/).length > r.sendMail.split(/[;,]/).length && <span style={{ color: "#A2A1AF", fontSize: 11 }}> (nettoyé)</span>}</span>
+                                  ) : (
+                                    <span style={{ color: "#13762C" }}>{r.sendMail || r.mail || "—"}</span>
+                                  )}
+                                </td>
                               </tr>
                             );
                           })}

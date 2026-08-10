@@ -186,15 +186,20 @@ async function volet2Candidates() {
   return ps;
 }
 
-export type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null };
+export type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; sendMail: string | null; hold: boolean; holdReason: string };
 export type Volet2Data = { total: number; nouveaux: number; dejaEnvoyes: number; rows: Volet2Row[] };
 export async function getRs4Volet2Data(): Promise<Volet2Data> {
   const ps = await volet2Candidates();
+  const idx = await getCourtierIndex();
   const dejaEnvoyes = ps.filter((p) => p.events.length > 0).length;
-  // rows = les « nouveaux » (ceux qui partiront), pour vérif manuelle avant envoi.
+  // rows = les « nouveaux » (ceux qui partiront), avec le DESTINATAIRE RÉEL (mail
+  // nettoyé par prepareSendMails) pour que le détail reflète ce qui sera envoyé.
   const rows: Volet2Row[] = ps
     .filter((p) => p.events.length === 0)
-    .map((p) => ({ pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, assureur: p.copro.assureurActuel, numeroContrat: p.copro.numeroContrat, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail }));
+    .map((p) => {
+      const plan = prepareSendMails(p.copro.courtierActuel, p.copro.contactCourtierEmail, idx);
+      return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, assureur: p.copro.assureurActuel, numeroContrat: p.copro.numeroContrat, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, sendMail: plan.hold ? null : plan.mails.join(", "), hold: plan.hold, holdReason: plan.reason };
+    });
   return { total: ps.length, nouveaux: ps.length - dejaEnvoyes, dejaEnvoyes, rows };
 }
 
