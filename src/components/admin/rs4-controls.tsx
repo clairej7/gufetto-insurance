@@ -1,13 +1,15 @@
 "use client";
 
-// Automatisation 4 — 3 volets.
+// Automatisation 4 — 5 volets.
 // Volet 1 : vérification de l'échantillon (complets / incomplets) + passage au volet 2.
 // Volet 2 : template + envoi en masse des demandes de RS (infos par dossier + signature Front).
-// Volet 3 : suivi (jours depuis l'envoi) + boucle de relances successives + « RS reçu ».
+// Volet 3 : détecteur de réponses (scan Front, verdict par dossier, aiguillage par clic).
+// Volet 4 : boucle de relances successives (dossiers « sans réponse » routés depuis V3).
+// Volet 5 : RS en cours de récupération (courtier a répondu, doc à venir).
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ListChecks, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Send, Mail, Check, Search, PauseCircle, Archive } from "lucide-react";
+import { ListChecks, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Send, Mail, Check, Search, PauseCircle, Archive, Radar, CornerUpLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -15,11 +17,30 @@ type Row = { pipelineId: string; nom: string; assureur: string | null; numeroCon
 type Sample = { total: number; complete: number; incomplete: number; completeRows: Row[]; incompleteRows: Row[] };
 type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; sendMail: string | null; hold: boolean; holdReason: string };
 type Volet2 = { total: number; nouveaux: number; dejaEnvoyes: number; sent: number; rows: Volet2Row[] };
-type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number };
-type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[] };
+type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null };
+type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null };
+type Detector = { total: number; scanned: number; nonScanne: number; sansReponse: number; replyCounts: Record<string, number>; lastScanAt: string | null; rows: Volet3Row[] };
 type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number };
 type Volet4 = { total: number; rows: Volet4Row[] };
 type SendHist = { sentAt: string; kind: string; relanceNum: number | null; count: number; failed: number };
+
+// Métadonnées d'affichage des verdicts du détecteur.
+const KIND_META: Record<string, { label: string; emoji: string; color: string; bg: string; border: string }> = {
+  rs_recu:      { label: "RS reçu",        emoji: "📩", color: "#13762C", bg: "#EAF7EE", border: "#B7E4C4" },
+  attente:      { label: "En attente",     emoji: "⏳", color: "#1F6FE0", bg: "#EAF3FE", border: "#C7DEF9" },
+  info:         { label: "Info demandée",  emoji: "❓", color: "#B4690E", bg: "#FDF0D5", border: "#F3D9A6" },
+  redirect:     { label: "Redirection",    emoji: "↩️", color: "#7A3EC8", bg: "#F3ECFB", border: "#DDC9F2" },
+  pj:           { label: "Mauvais n° (PJ)", emoji: "⚠️", color: "#B4690E", bg: "#FDF0D5", border: "#F3D9A6" },
+  bounce:       { label: "Bounce",         emoji: "⛔", color: "#CA1E12", bg: "#FDECEA", border: "#F5C6C0" },
+  autre:        { label: "À vérifier",     emoji: "🔍", color: "#656576", bg: "#F1F1F4", border: "#E8E8EC" },
+  sans_reponse: { label: "Pas de réponse", emoji: "—",  color: "#A2A1AF", bg: "#FAFAFC", border: "#E8E8EC" },
+  non_scanne:   { label: "Non scanné",     emoji: "·",  color: "#A2A1AF", bg: "#FAFAFC", border: "#E8E8EC" },
+};
+function Badge({ kind }: { kind: string | null }) {
+  if (!kind) return <span style={{ color: "#C7C7D1", fontSize: 11 }}>—</span>;
+  const m = KIND_META[kind] ?? KIND_META.non_scanne;
+  return <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, color: m.color, background: m.bg, border: `1px solid ${m.border}`, whiteSpace: "nowrap" }}>{m.emoji} {m.label}</span>;
+}
 
 // ── Templates par défaut (éditables). Placeholders : {adresse} {assureur} {numeroContrat} {jours} ──
 const DEFAULT_SUBJECT = "Demande de relevé de sinistralité — {adresse} — contrat n° {numeroContrat}";
@@ -43,6 +64,8 @@ Pourriez-vous nous le faire parvenir dès que possible ? Je reste à votre dispo
 Je vous en remercie,
 
 Bien cordialement,`;
+
+const btn = (color: string, bg: string, border: string): React.CSSProperties => ({ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, border: `1px solid ${border}`, background: bg, color, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 });
 
 function VoletTitle({ n, children }: { n: number; children: React.ReactNode }) {
   return (
@@ -82,8 +105,14 @@ function V1Table({ rows, showManque }: { rows: Row[]; showManque?: boolean }) {
   );
 }
 
-export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }: { volet1Count: number; volet2: Volet2; volet3: Volet3; volet4: Volet4; sendHistory: SendHist[] }) {
+export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sendHistory }: { volet1Count: number; volet2: Volet2; detector: Detector; volet3: Volet3; volet4: Volet4; sendHistory: SendHist[] }) {
   const router = useRouter();
+  // Volet 3 — Détecteur
+  const [scanning, setScanning] = useState(false);
+  const [scanProg, setScanProg] = useState<{ done: number; total: number } | null>(null);
+  const [showDet, setShowDet] = useState(false);
+  const [detSearch, setDetSearch] = useState("");
+  const [routing, setRouting] = useState<string | null>(null);
   // Volet 1
   const [sample, setSample] = useState<Sample | null>(null);
   const [loading, setLoading] = useState(false);
@@ -192,6 +221,48 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec de la relance"); } finally { setRelancing(null); }
   }
 
+  async function scanReplies() {
+    if (detector.total === 0) return;
+    setScanning(true);
+    setScanProg({ done: 0, total: detector.total });
+    try {
+      let offset = 0;
+      for (;;) {
+        const res = await fetch("/api/rs4/scan-replies", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offset, limit: 40 }) });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+        const data = await res.json();
+        offset = data.nextOffset;
+        setScanProg({ done: Math.min(offset, data.total), total: data.total });
+        if (data.done) break;
+      }
+      toast.success("Scan des réponses terminé.");
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec du scan"); } finally { setScanning(false); }
+  }
+
+  async function route(url: string, pipelineId: string, okMsg: string, extra?: Record<string, unknown>) {
+    setRouting(pipelineId);
+    try {
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId, ...extra }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      toast.success(okMsg);
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setRouting(null); }
+  }
+
+  async function moveAllNoReply() {
+    if (detector.sansReponse === 0) return;
+    if (!window.confirm(`Envoyer les ${detector.sansReponse} dossier(s) « sans réponse » en boucle de relances (Volet 4) ?`)) return;
+    setRouting("all");
+    try {
+      const res = await fetch("/api/rs4/move-to-relance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ all: true }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      const data = await res.json();
+      toast.success(`${data.moved} dossier(s) passé(s) en boucle de relances.`);
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setRouting(null); }
+  }
+
   async function rsRecu(pipelineId: string) {
     try {
       const res = await fetch("/api/rs4/rs-recu", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId }) });
@@ -213,6 +284,12 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
   const v3Filtered = v3Search.trim()
     ? volet3.rows.filter((r) => `${r.adresse ?? ""} ${r.nom} ${r.courtier ?? ""} ${r.mail ?? ""}`.toLowerCase().includes(v3Search.trim().toLowerCase()))
     : volet3.rows;
+  const detFiltered = detSearch.trim()
+    ? detector.rows.filter((r) => `${r.adresse ?? ""} ${r.nom} ${r.courtier ?? ""} ${r.mail ?? ""} ${r.replySnippet ?? ""}`.toLowerCase().includes(detSearch.trim().toLowerCase()))
+    : detector.rows;
+  // Ordre d'affichage du détecteur : réponses détectées d'abord, « pas de réponse » / non scanné en bas.
+  const KIND_ORDER = ["rs_recu", "pj", "bounce", "redirect", "info", "attente", "autre", "sans_reponse", "non_scanne"];
+  const detSorted = [...detFiltered].sort((a, b) => (KIND_ORDER.indexOf(a.replyKind ?? "non_scanne") - KIND_ORDER.indexOf(b.replyKind ?? "non_scanne")));
   const v2Filtered = v2Search.trim()
     ? volet2.rows.filter((r) => `${r.adresse ?? ""} ${r.nom} ${r.assureur ?? ""} ${r.courtier ?? ""} ${r.numeroContrat ?? ""} ${r.mail ?? ""}`.toLowerCase().includes(v2Search.trim().toLowerCase()))
     : volet2.rows;
@@ -419,15 +496,103 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
         )}
       </div>
 
-      {/* ── Volet 3 ── */}
+      {/* ── Volet 3 — Détecteur de réponses ── */}
       <div>
-        <VoletTitle n={3}>Dossiers en cours · boucle de relances</VoletTitle>
+        <VoletTitle n={3}>Détecteur de réponses</VoletTitle>
+        {detector.total === 0 ? (
+          <p style={{ fontSize: 12, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun dossier à trier. Les envois du volet 2 arrivent ici pour être analysés, puis routés vers la boucle de relances (V4), « RS en cours » (V5), le devis ou l&apos;auto 3.</p>
+        ) : (
+          <>
+            <p style={{ fontSize: 13, color: "#656576", margin: "0 0 8px" }}>
+              <strong>{detector.total}</strong> dossier{detector.total > 1 ? "s" : ""} à trier · {detector.scanned} scanné{detector.scanned > 1 ? "s" : ""}
+              {detector.lastScanAt && <span style={{ color: "#A2A1AF" }}> · dernier scan {new Date(detector.lastScanAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>}
+            </p>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <Button onClick={scanReplies} disabled={scanning} size="sm">
+                {scanning ? <Loader2 size={15} className="animate-spin" /> : <Radar size={15} />} Vérifier les réponses (Front)
+              </Button>
+              {detector.sansReponse > 0 && (
+                <Button onClick={moveAllNoReply} disabled={routing !== null} variant="outline" size="sm">
+                  {routing === "all" ? <Loader2 size={15} className="animate-spin" /> : <ArrowRight size={15} />} Passer les {detector.sansReponse} sans réponse en relances
+                </Button>
+              )}
+            </div>
+            {scanning && scanProg && (
+              <div style={{ margin: "10px 0 0", maxWidth: 460 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#656576", marginBottom: 4 }}>
+                  <span>Scan Front en cours…</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{scanProg.done} / {scanProg.total}</span>
+                </div>
+                <div style={{ height: 8, borderRadius: 999, background: "#E8E8EC", overflow: "hidden" }}>
+                  <div style={{ width: `${scanProg.total ? Math.round((scanProg.done / scanProg.total) * 100) : 0}%`, height: "100%", background: "#4E49FC", transition: "width 200ms" }} />
+                </div>
+              </div>
+            )}
+            {/* Compteurs par catégorie */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
+              {KIND_ORDER.filter((k) => (detector.replyCounts[k] ?? 0) > 0).map((k) => (
+                <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, padding: "3px 9px", borderRadius: 999, color: KIND_META[k].color, background: KIND_META[k].bg, border: `1px solid ${KIND_META[k].border}` }}>
+                  {KIND_META[k].emoji} {KIND_META[k].label} · {detector.replyCounts[k]}
+                </span>
+              ))}
+            </div>
+            <button onClick={() => setShowDet((v) => !v)} style={{ marginTop: 12, fontSize: 12, fontWeight: 600, color: "#656576", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+              {showDet ? "▾" : "▸"} Détail & aiguillage des {detector.total} dossiers
+            </button>
+            {showDet && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ position: "relative", marginBottom: 8, maxWidth: 380 }}>
+                  <Search size={14} style={{ position: "absolute", left: 10, top: 9, color: "#A2A1AF" }} />
+                  <input value={detSearch} onChange={(e) => setDetSearch(e.target.value)} placeholder="Rechercher une copro / courtier / extrait…" style={{ width: "100%", fontSize: 12, padding: "7px 10px 7px 30px", border: "1px solid #E8E8EC", borderRadius: 8 }} />
+                </div>
+                <div style={{ maxHeight: 420, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                        {["Copropriété", "Verdict", "Extrait de réponse", "Aiguillage"].map((h) => (
+                          <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detSorted.map((r) => {
+                        const busy = routing === r.pipelineId;
+                        return (
+                          <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
+                            <td style={{ padding: "6px 10px", color: "#26262C", maxWidth: 200 }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
+                            <td style={{ padding: "6px 10px" }}><Badge kind={r.replyKind} /></td>
+                            <td style={{ padding: "6px 10px", color: "#656576", maxWidth: 280, fontStyle: r.replySnippet ? "normal" : "italic" }}>{r.replySnippet || "—"}</td>
+                            <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>
+                              {busy ? <Loader2 size={14} className="animate-spin" style={{ color: "#A2A1AF" }} /> : (
+                                <div style={{ display: "inline-flex", gap: 5, flexWrap: "wrap" }}>
+                                  <button onClick={() => route("/api/rs4/rs-recu", r.pipelineId, "RS reçu → demande de devis.")} disabled={routing !== null} title="RS reçu → devis" style={btn("#13762C", "#EAF7EE", "#B7E4C4")}><Check size={11} /> RS reçu</button>
+                                  <button onClick={() => route("/api/rs4/en-cours", r.pipelineId, "→ RS en cours de récupération (V5).")} disabled={routing !== null} title="Courtier a répondu, doc à venir → V5" style={btn("#1F6FE0", "#EAF3FE", "#C7DEF9")}><PauseCircle size={11} /> En cours</button>
+                                  <button onClick={() => route("/api/rs4/move-to-relance", r.pipelineId, "→ boucle de relances (V4).")} disabled={routing !== null} title="Pas de réponse → relancer (V4)" style={btn("#656576", "#F1F1F4", "#E8E8EC")}><Mail size={11} /> Relances</button>
+                                  <button onClick={() => route("/api/rs4/renvoi-auto3", r.pipelineId, "→ Volet 1 (mail à corriger).", { clearMail: r.replyKind !== "pj" })} disabled={routing !== null} title={r.replyKind === "pj" ? "Mauvais n° → Volet 1 (garde le mail)" : "Mail KO → Volet 1 (efface le mail)"} style={btn("#B4690E", "#FDF0D5", "#F3D9A6")}><CornerUpLeft size={11} /> Corriger</button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {detSorted.length === 0 && <tr><td colSpan={4} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* ── Volet 4 — Boucle de relances ── */}
+      <div>
+        <VoletTitle n={4}>Dossiers en cours · boucle de relances</VoletTitle>
         {volet3.total === 0 ? (
-          <p style={{ fontSize: 12, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun dossier en attente de RS. Les envois du volet 2 arriveront ici.</p>
+          <p style={{ fontSize: 12, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun dossier en relance. Ils arrivent ici depuis le détecteur (V3), bouton « Relances ».</p>
         ) : (
           <>
             <p style={{ fontSize: 13, color: "#656576", margin: "0 0 10px" }}>
-              <strong>{volet3.total}</strong> dossier{volet3.total > 1 ? "s" : ""} en attente du RS (restent ici jusqu&apos;à réception).
+              <strong>{volet3.total}</strong> dossier{volet3.total > 1 ? "s" : ""} en relance (arrivés du détecteur ; restent ici jusqu&apos;à réception ou re-tri).
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {volet3.stages.map((s) => (
@@ -449,7 +614,7 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
                       <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-                        {["Copropriété", "J+", "Relances", "Mail courtier", "Actions"].map((h) => (
+                        {["Copropriété", "J+", "Relances", "Réponse", "Mail courtier", "Actions"].map((h) => (
                           <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
                         ))}
                       </tr>
@@ -460,6 +625,7 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
                           <td style={{ padding: "6px 10px", color: "#26262C" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
                           <td style={{ padding: "6px 10px", color: r.joursDepuisEnvoi >= 8 ? "#CA1E12" : r.joursDepuisEnvoi >= 4 ? "#B4690E" : "#656576", fontWeight: 600 }}>J+{r.joursDepuisEnvoi}</td>
                           <td style={{ padding: "6px 10px", color: "#656576" }}>{r.relances}</td>
+                          <td style={{ padding: "6px 10px" }}>{r.replyKind && r.replyKind !== "sans_reponse" && r.replyKind !== "non_scanne" ? <Badge kind={r.replyKind} /> : <span style={{ color: "#C7C7D1" }}>—</span>}</td>
                           <td style={{ padding: "6px 10px", color: "#656576" }}>{r.mail || "—"}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap" }}>
                             <button onClick={() => enCours(r.pipelineId)} title="Le courtier a répondu mais pas de RS → sortir de la relance" style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, border: "1px solid #F3D9A6", background: "#FDF0D5", color: "#B4690E", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, marginRight: 6 }}>
@@ -472,7 +638,7 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
                         </tr>
                       ))}
                       {v3Filtered.length === 0 && (
-                        <tr><td colSpan={5} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>
+                        <tr><td colSpan={6} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -483,11 +649,11 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4, sendHistory }
         )}
       </div>
 
-      {/* ── Volet 4 ── */}
+      {/* ── Volet 5 — RS en cours de récupération ── */}
       <div>
-        <VoletTitle n={4}>RS en cours de récupération</VoletTitle>
+        <VoletTitle n={5}>RS en cours de récupération</VoletTitle>
         {volet4.total === 0 ? (
-          <p style={{ fontSize: 12, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun dossier ici. Depuis le volet 3, « RS en cours de réception » place ici les dossiers où le courtier a répondu sans encore fournir le RS (sortis de la boucle de relance).</p>
+          <p style={{ fontSize: 12, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun dossier ici. Le bouton « En cours » (détecteur V3 ou relances V4) place ici les dossiers où le courtier a répondu sans encore fournir le RS.</p>
         ) : (
           <>
             <p style={{ fontSize: 13, color: "#656576", margin: "0 0 10px" }}>

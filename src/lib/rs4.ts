@@ -308,16 +308,29 @@ export async function moveSentToVolet3(actorEmail: string): Promise<{ moved: num
 }
 
 // ─── Volet 3 : suivi + boucle de relances ────────────────────────────────────
-export type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number };
-export type Volet3Data = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[] };
+export type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null };
+export type Volet3Data = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null };
 
+const RS4_SELECT = { id: true, rs4SentAt: true, rs4ReplyKind: true, rs4ReplyAt: true, rs4ReplySnippet: true, rs4ReplyScanAt: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true, numeroContrat: true, assureurActuel: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } } as const;
+
+// UI Volet 4 = boucle de relances : dossiers TRIÉS depuis le détecteur (rs4RelanceAt
+// posé), pas encore passés en « RS en cours de récupération » (rs4EnCoursAt null).
 async function volet3Pipelines() {
   const excl = await getExcludedCoproIds();
   return prisma.insurancePipeline.findMany({
-    // Volet 3 = RS envoyée, en attente ; on EXCLUT ceux passés en « RS en cours de
-    // récupération » (volet 4) qui sont sortis de la boucle de relance.
-    where: { statut: "rs_en_cours", rs4SentAt: { not: null }, rs4EnCoursAt: null, coproId: { notIn: excl }, copro: { archivedAt: null } },
-    select: { id: true, rs4SentAt: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true, numeroContrat: true, assureurActuel: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } },
+    where: { statut: "rs_en_cours", rs4SentAt: { not: null }, rs4RelanceAt: { not: null }, rs4EnCoursAt: null, coproId: { notIn: excl }, copro: { archivedAt: null } },
+    select: RS4_SELECT,
+    orderBy: { rs4SentAt: "asc" },
+  });
+}
+
+// UI Volet 3 = Détecteur : RS envoyée mais dossier PAS encore trié (ni relance ni
+// en-cours). C'est l'inbox de tri où le scan Front pose un verdict par dossier.
+async function detectorPipelines() {
+  const excl = await getExcludedCoproIds();
+  return prisma.insurancePipeline.findMany({
+    where: { statut: "rs_en_cours", rs4SentAt: { not: null }, rs4RelanceAt: null, rs4EnCoursAt: null, coproId: { notIn: excl }, copro: { archivedAt: null } },
+    select: RS4_SELECT,
     orderBy: { rs4SentAt: "asc" },
   });
 }
@@ -326,14 +339,137 @@ function relanceCountOf(events: { metadata: unknown }[]): number {
   return events.filter((e) => { const m = e.metadata as { relanceNum?: number } | null; return !!m && typeof m.relanceNum === "number" && m.relanceNum > 0; }).length;
 }
 
+type Rs4Pipeline = Awaited<ReturnType<typeof volet3Pipelines>>[number];
+function toVolet3Row(p: Rs4Pipeline, nowMs: number): Volet3Row {
+  const jours = Math.floor((nowMs - new Date(p.rs4SentAt!).getTime()) / 86400000);
+  return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events), replyKind: p.rs4ReplyKind, replyAt: p.rs4ReplyAt ? p.rs4ReplyAt.toISOString() : null, replySnippet: p.rs4ReplySnippet };
+}
+function replyCountsOf(ps: Rs4Pipeline[]): Record<string, number> {
+  const c: Record<string, number> = {};
+  for (const p of ps) { const k = p.rs4ReplyKind ?? "non_scanne"; c[k] = (c[k] ?? 0) + 1; }
+  return c;
+}
+function lastScanOf(ps: Rs4Pipeline[]): string | null {
+  const dates = ps.map((p) => p.rs4ReplyScanAt).filter(Boolean) as Date[];
+  if (!dates.length) return null;
+  return new Date(Math.max(...dates.map((d) => d.getTime()))).toISOString();
+}
+
 export async function getRs4Volet3Data(nowMs: number): Promise<Volet3Data> {
   const ps = await volet3Pipelines();
-  const rows: Volet3Row[] = ps.map((p) => {
-    const jours = Math.floor((nowMs - new Date(p.rs4SentAt!).getTime()) / 86400000);
-    return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events) };
-  });
+  const rows = ps.map((p) => toVolet3Row(p, nowMs));
   const stages = RELANCE_STAGES.map((s) => ({ num: s.num, day: s.day, eligibles: rows.filter((r) => r.joursDepuisEnvoi >= s.day && r.relances < s.num).length }));
-  return { total: rows.length, rows, stages };
+  return { total: rows.length, rows, stages, replyCounts: replyCountsOf(ps), lastScanAt: lastScanOf(ps) };
+}
+
+// ─── Volet 3 : Détecteur de réponses ─────────────────────────────────────────
+export type DetectorData = { total: number; scanned: number; nonScanne: number; sansReponse: number; replyCounts: Record<string, number>; lastScanAt: string | null; rows: Volet3Row[] };
+export async function getRs4DetectorData(nowMs: number): Promise<DetectorData> {
+  const ps = await detectorPipelines();
+  const rows = ps.map((p) => toVolet3Row(p, nowMs));
+  const counts = replyCountsOf(ps);
+  const scanned = ps.filter((p) => p.rs4ReplyScanAt).length;
+  return { total: ps.length, scanned, nonScanne: ps.length - scanned, sansReponse: counts["sans_reponse"] ?? 0, replyCounts: counts, lastScanAt: lastScanOf(ps), rows };
+}
+
+// Verdict possibles du détecteur. « sans_reponse » = scanné mais aucun entrant.
+export const REPLY_KINDS = ["rs_recu", "redirect", "attente", "info", "pj", "bounce", "autre", "sans_reponse"] as const;
+const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ").trim();
+function realDoc(atts: { contentType?: string; content_type?: string; filename?: string }[]): boolean {
+  return (atts ?? []).some((a) => {
+    const ct = (a.contentType || a.content_type || "").toLowerCase();
+    const fn = (a.filename || "").toLowerCase();
+    const inline = /^image\d+\.(png|gif|jpe?g)$/.test(fn) || /logo|signature/.test(fn);
+    return !inline && (ct.includes("pdf") || ct.includes("word") || ct.includes("sheet") || ct.includes("excel") || /\.(pdf|docx?|xlsx?)$/.test(fn));
+  });
+}
+const RRE = {
+  pj: /protection juridique|ne ressort que|cité en objet.*juridique/i,
+  redirect: /adressez-?vous (au|à votre|directement)|interlocuteur (exclusif|unique)|pas de contact direct|nous ne (sommes|gérons)|n'?[eê]tes plus/i,
+  attente: /interroger le march|reviendrons vers vous|en attente|dans l'attente|pv d'?ag|proc[èe]s.?verbal|nomination|mandat|nous reviendrons/i,
+  info: /quel(le)? (est|sont).*(contrat|police)|num[ée]ro de contrat|merci de.*(communiquer|fournir|préciser|transmettre)|pouvez-?vous.*(communiquer|préciser|indiquer)/i,
+  rsText: /relev[ée].{0,3}(de sinistralit|des sinistres|d'?informations?)|ci-?joint|pièce.?jointe|document (demandé|transmis|ci)|statistiques? sinistr|aucun sinistre|sans sinistre|n[ée]ant/i,
+};
+function classifyReply(body: string, hasDoc: boolean, bounce: boolean): string {
+  const s = body.toLowerCase();
+  if (bounce) return "bounce";
+  if (RRE.pj.test(s)) return "pj";
+  if (RRE.redirect.test(s)) return "redirect";
+  if (hasDoc) return "rs_recu";
+  if (RRE.rsText.test(s)) return "rs_recu";
+  if (RRE.attente.test(s)) return "attente";
+  if (RRE.info.test(s)) return "info";
+  return "autre";
+}
+async function frontGet(path: string): Promise<Record<string, unknown> | null> {
+  if (!FRONT_TOKEN) return null;
+  const res = await fetch(`${FRONT_API_URL}${path}`, { headers: { Authorization: `Bearer ${FRONT_TOKEN}` } });
+  if (!res.ok) return null;
+  return res.json();
+}
+const isFromMatera = (m: { author?: { email?: string }; recipients?: { role: string; handle: string }[] }) => {
+  const from = (m.recipients ?? []).find((r) => r.role === "from")?.handle || m.author?.email || "";
+  return /@(?:[a-z0-9-]+\.)?matera\.eu$/i.test(from);
+};
+
+// Scanne un lot du périmètre « envoyé, en attente » (détecteur + relances) et pose
+// un verdict par dossier. LECTURE Front uniquement : aucun dossier n'est déplacé.
+export async function scanReplies(offset: number, limit: number): Promise<{ total: number; scanned: number; nextOffset: number; done: boolean; counts: Record<string, number> }> {
+  const excl = await getExcludedCoproIds();
+  const ps = await prisma.insurancePipeline.findMany({
+    where: { statut: "rs_en_cours", rs4SentAt: { not: null }, rs4EnCoursAt: null, coproId: { notIn: excl }, copro: { archivedAt: null } },
+    select: { id: true, rs4SentAt: true, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } },
+    orderBy: { rs4SentAt: "asc" },
+  });
+  const slice = ps.slice(offset, offset + limit);
+  const counts: Record<string, number> = {};
+  const now = new Date();
+  for (const p of slice) {
+    const cid = p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop();
+    if (!cid) { await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: "non_scanne" } }); counts["non_scanne"] = (counts["non_scanne"] ?? 0) + 1; continue; }
+    const sentMs = new Date(p.rs4SentAt!).getTime();
+    const list = await frontGet(`/conversations/${cid}/messages?limit=20`);
+    const results = ((list?._results as unknown[]) ?? []) as { id: string; is_inbound: boolean; created_at: number; error_type?: string; blurb?: string; attachments?: { contentType?: string; filename?: string }[]; author?: { email?: string }; recipients?: { role: string; handle: string }[] }[];
+    const bounce = results.some((m) => !m.is_inbound && m.error_type);
+    const inbound = results.filter((m) => m.is_inbound && m.created_at * 1000 > sentMs && !isFromMatera(m));
+    if (!inbound.length && !bounce) { await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: "sans_reponse", rs4ReplyAt: null, rs4ReplySnippet: null, rs4ReplyMsgId: null } }); counts["sans_reponse"] = (counts["sans_reponse"] ?? 0) + 1; continue; }
+    const last = inbound.sort((a, b) => b.created_at - a.created_at)[0];
+    let body = "", snippet = "", hasDoc = inbound.some((m) => realDoc(m.attachments ?? []));
+    if (last) {
+      const full = (await frontGet(`/messages/${last.id}`)) as { content?: string; attachments?: { contentType?: string; filename?: string }[] } | null;
+      body = stripHtml(full?.content || last.blurb || "").slice(0, 500);
+      snippet = body.slice(0, 160);
+      if (full?.attachments && realDoc(full.attachments)) hasDoc = true;
+    }
+    const kind = classifyReply(body, hasDoc, bounce && !inbound.length);
+    await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: kind, rs4ReplyAt: last ? new Date(last.created_at * 1000) : now, rs4ReplySnippet: snippet || (bounce ? "Échec de remise (bounce)" : null), rs4ReplyMsgId: last?.id ?? null } });
+    counts[kind] = (counts[kind] ?? 0) + 1;
+  }
+  const nextOffset = offset + slice.length;
+  return { total: ps.length, scanned: slice.length, nextOffset, done: nextOffset >= ps.length, counts };
+}
+
+// Aiguillage depuis le détecteur — chaque action = un clic utilisateur.
+// → boucle de relances (Volet 4)
+export async function moveToRelance(actorEmail: string, pipelineId: string): Promise<{ ok: boolean }> {
+  await prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { rs4RelanceAt: new Date() } });
+  await prisma.pipelineEvent.create({ data: { pipelineId, type: "action_manuelle", description: "Dossier envoyé en boucle de relances (Volet 4) depuis le détecteur", metadata: { auto: "rs4_to_relance" }, createdBy: actorEmail } });
+  return { ok: true };
+}
+// Bulk : tous les « sans réponse » du détecteur → boucle de relances.
+export async function moveAllNoReplyToRelance(actorEmail: string): Promise<{ moved: number }> {
+  const ps = (await detectorPipelines()).filter((p) => p.rs4ReplyKind === "sans_reponse");
+  for (const p of ps) await moveToRelance(actorEmail, p.id);
+  return { moved: ps.length };
+}
+// → renvoi auto 3 (corriger le mail) : sort du suivi RS, revient au Volet 1 de l'auto 4.
+export async function renvoiAuto3(actorEmail: string, pipelineId: string, clearMail: boolean): Promise<{ ok: boolean }> {
+  const p = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, select: { rsBatchAt: true, coproId: true, copro: { select: { contactCourtierEmail: true } } } });
+  if (!p) return { ok: false };
+  if (clearMail) await prisma.copro.update({ where: { id: p.coproId }, data: { contactCourtierEmail: null } });
+  await prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { rsBatchAt: p.rsBatchAt ?? new Date(), rs4Volet2At: null, rs4SentAt: null, rs4RelanceAt: null, rs4EnCoursAt: null, rs4ReplyKind: null, rs4ReplyAt: null, rs4ReplySnippet: null, rs4ReplyMsgId: null, rs4ReplyScanAt: null } });
+  await prisma.pipelineEvent.create({ data: { pipelineId, type: "action_manuelle", description: clearMail ? "Mail en erreur — dossier renvoyé au Volet 1 (mail effacé) pour correction" : "Dossier renvoyé au Volet 1 pour vérification (n° de contrat / PJ)", metadata: { auto: "rs4_renvoi_auto3", clearMail, before: p.copro.contactCourtierEmail }, createdBy: actorEmail } });
+  return { ok: true };
 }
 
 // Envoie la relance n° `relanceNum` aux dossiers éligibles (J+seuil atteint et
