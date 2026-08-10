@@ -8,7 +8,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSignatureHtml, tagConversation, assignConversation, resolveTeammateId } from "@/lib/front";
-import { getCourtierIndex, prepareSendMails } from "@/lib/courtier-audit";
+import { getCourtierIndex, prepareSendMails, isMateraInternal } from "@/lib/courtier-audit";
 import { getExcludedCoproIds } from "@/lib/exclusions";
 
 const FRONT_API_URL = "https://api2.frontapp.com";
@@ -52,14 +52,21 @@ export function parseEmails(field: string | null | undefined): string[] {
 
 async function frontSend(opts: { toList: string[]; subject: string; html: string; pipelineId: string; gestionnaireEmail: string | null; authorEmail: string }): Promise<{ ok: boolean; conversationId: string | null; error?: string }> {
   if (!FRONT_TOKEN || !FRONT_CHANNEL_ID) return { ok: false, conversationId: null, error: "Front non configuré" };
-  if (!opts.toList.length) return { ok: false, conversationId: null, error: "aucun destinataire" };
+  // BARRIÈRE FINALE : jamais d'envoi vers une adresse interne Matera (CS/salarié),
+  // quel que soit le chemin qui a construit toList.
+  const toList = opts.toList.filter((t) => !isMateraInternal(t));
+  if (toList.length !== opts.toList.length) {
+    const blocked = opts.toList.filter(isMateraInternal).join(", ");
+    if (!toList.length) return { ok: false, conversationId: null, error: `destinataire interne Matera bloqué (${blocked})` };
+  }
+  if (!toList.length) return { ok: false, conversationId: null, error: "aucun destinataire" };
   const form = new FormData();
   // Auteur = teammate qui déclenche l'envoi → nom d'expéditeur correct + sa
   // signature (une adresse partagée non-teammate afficherait le nom du channel).
   form.append("author_id", `alt:email:${opts.authorEmail || FRONT_AUTHOR_EMAIL}`);
   // UN seul mail, adressé à TOUS les destinataires (plusieurs to[] = plusieurs
   // destinataires du même message, pas plusieurs mails).
-  for (const to of opts.toList) form.append("to[]", to);
+  for (const to of toList) form.append("to[]", to);
   form.append("subject", opts.subject);
   form.append("body", opts.html);
   form.append("type", "email");
