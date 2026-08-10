@@ -11,19 +11,21 @@ import { toast } from "sonner";
 type Row = { pipelineId: string; nom: string; adresse: string | null; statut: "devis_demandes" | "devis_recus"; assureur: string | null; numeroContrat: string | null; prime: number | null; courtier: string | null; mail: string | null };
 type Data = { total: number; demande: number; comparaison: number; rows: Row[] };
 type DocHist = { loadedAt: string; dossiers: number; created: number };
+type NoDoc = { pipelineId: string; nom: string; adresse: string | null; checkedAt: string };
 
 const STATUT_LABEL: Record<Row["statut"], { label: string; bg: string; fg: string }> = {
   devis_demandes: { label: "Demande de devis", bg: "#EAF3FE", fg: "#1F6FE0" },
   devis_recus: { label: "Comparaison des devis", bg: "#F3EFFE", fg: "#6D3BEB" },
 };
 
-export function Devis5Controls({ data, toLoad, docHistory = [] }: { data: Data; toLoad: number; docHistory?: DocHist[] }) {
+export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [] }: { data: Data; toLoad: number; docHistory?: DocHist[]; noDocs?: NoDoc[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [prog, setProg] = useState<{ done: number; total: number; created: number } | null>(null);
   const [showHist, setShowHist] = useState(false);
+  const [showNoDocs, setShowNoDocs] = useState(false);
   const rows = q.trim()
     ? data.rows.filter((r) => `${r.adresse ?? ""} ${r.nom} ${r.assureur ?? ""} ${r.courtier ?? ""} ${r.numeroContrat ?? ""}`.toLowerCase().includes(q.trim().toLowerCase()))
     : data.rows;
@@ -106,6 +108,27 @@ export function Devis5Controls({ data, toLoad, docHistory = [] }: { data: Data; 
                   <span>→ <strong>{h.created}</strong> doc(s) sur {h.dossiers} dossier(s)</span>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {noDocs.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <button onClick={() => setShowNoDocs((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#B4690E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+            {showNoDocs ? "▾" : "▸"} Dossiers sans document trouvé ({noDocs.length}) — à traiter à la main
+          </button>
+          {showNoDocs && (
+            <div style={{ marginTop: 6 }}>
+              <p style={{ fontSize: 11, color: "#A2A1AF", margin: "0 0 6px" }}>Aucun RS/contrat trouvé sur Front (pas de réponse courtier, ou réponse sans pièce jointe). Exclus du chargement auto — récupère-les à la main sur la fiche (bouton « Récupérer ») une fois le courtier relancé.</p>
+              <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid #F3D9A6", borderRadius: 8, background: "#FFFBF3" }}>
+                {noDocs.map((r) => (
+                  <div key={r.pipelineId} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 10px", borderTop: "1px solid #F6ECD5", fontSize: 12 }}>
+                    <a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a>
+                    <span style={{ color: "#A2A1AF", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{new Date(r.checkedAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
