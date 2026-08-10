@@ -136,6 +136,19 @@ export function Rs4Controls({ volet1Count, volet2, volet3 }: { volet1Count: numb
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec de l'envoi"); } finally { setSending(false); }
   }
 
+  async function moveSentToV3() {
+    if (volet2.dejaEnvoyes === 0) return;
+    if (!window.confirm(`Basculer ${volet2.dejaEnvoyes} dossier(s) déjà envoyé(s) à la main directement au suivi (volet 3), avec leur vraie date d'envoi ? Aucun mail ne part.`)) return;
+    setSending(true);
+    try {
+      const res = await fetch("/api/rs4/move-sent-to-volet3", { method: "POST" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      const data = await res.json();
+      toast.success(`${data.moved} dossier(s) basculé(s) au suivi (volet 3).`);
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setSending(false); }
+  }
+
   async function sendRelance(num: number, eligibles: number) {
     if (eligibles === 0) return;
     if (!window.confirm(`Envoyer la relance ${num} à ${eligibles} dossier(s) ?`)) return;
@@ -231,6 +244,11 @@ export function Rs4Controls({ volet1Count, volet2, volet3 }: { volet1Count: numb
               <Button onClick={() => sendVolet2(5)} disabled={sending || volet2.nouveaux === 0} variant="outline" size="sm">
                 {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Envoyer un lot de {Math.min(5, volet2.nouveaux)} (test)
               </Button>
+              {volet2.dejaEnvoyes > 0 && (
+                <Button onClick={moveSentToV3} disabled={sending} variant="outline" size="sm">
+                  {sending ? <Loader2 size={15} className="animate-spin" /> : <ArrowRight size={15} />} Basculer les {volet2.dejaEnvoyes} déjà-envoyés au suivi (sans mail)
+                </Button>
+              )}
             </div>
           </>
         )}
