@@ -57,7 +57,8 @@ async function getDevis5Volet1Ids(): Promise<string[]> {
   const ps = await prisma.insurancePipeline.findMany({
     where: {
       statut: { in: ["devis_demandes", "devis_recus"] }, coproId: { notIn: await getExcludedCoproIds() }, copro: { archivedAt: null },
-      events: { none: { metadata: { path: ["devisType"], equals: "devis_sent" } } },
+      // On garde les « devis déjà envoyé » : leurs PJ (RS/contrat) sont récupérables
+      // depuis le mail sortant → captureDocsForPipeline sait les rapatrier.
       documents: { none: {} },
       docsCheckedAt: null, // déjà tenté sans résultat → hors file (évite la boucle)
     },
@@ -77,7 +78,6 @@ export async function getDevis5NoDocs(): Promise<{ pipelineId: string; nom: stri
   const ps = await prisma.insurancePipeline.findMany({
     where: {
       statut: { in: ["devis_demandes", "devis_recus"] }, coproId: { notIn: await getExcludedCoproIds() }, copro: { archivedAt: null },
-      events: { none: { metadata: { path: ["devisType"], equals: "devis_sent" } } },
       documents: { none: {} },
       docsCheckedAt: { not: null },
     },
