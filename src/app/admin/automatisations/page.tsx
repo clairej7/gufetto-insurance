@@ -18,6 +18,7 @@ import { CourtierAuditControls } from "@/components/admin/courtier-audit-control
 import { getRs4Volet1Count, getRs4Volet2Data, getRs4DetectorData, getRs4Volet3Data, getRs4Volet4Data, getRs4SendHistory } from "@/lib/rs4";
 import { Rs4Controls } from "@/components/admin/rs4-controls";
 import { getDevis5Volet1Data, getDevis5DocsToLoad, getDocLoadHistory, getDevis5NoDocs } from "@/lib/devis5";
+import { getDocsStats } from "@/lib/rs-docs";
 import { Devis5Controls } from "@/components/admin/devis5-controls";
 import { getExclusionState } from "@/lib/exclusions";
 import { ExclusionsPanel } from "@/components/admin/exclusions-panel";
@@ -101,6 +102,7 @@ export default async function AutomatisationsPage() {
   const devis5ToLoad = await getDevis5DocsToLoad();
   const devis5DocHistory = await getDocLoadHistory();
   const devis5NoDocs = await getDevis5NoDocs();
+  const docsStats = await getDocsStats();
   const exclusionState = await getExclusionState();
   const ghcReviewLabel: Record<string, string> = { prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
@@ -264,7 +266,7 @@ export default async function AutomatisationsPage() {
                 {a.n === 5 && (
                   <details style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
                     <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content" }}>Contrôles admin</summary>
-                    <Devis5Controls data={devis5Volet1} toLoad={devis5ToLoad} docHistory={devis5DocHistory} noDocs={devis5NoDocs} />
+                    <Devis5Controls data={devis5Volet1} toLoad={devis5ToLoad} docHistory={devis5DocHistory} noDocs={devis5NoDocs} docsStats={docsStats} />
                   </details>
                 )}
 
