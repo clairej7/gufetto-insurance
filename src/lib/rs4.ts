@@ -135,11 +135,16 @@ async function volet2Candidates() {
   return ps;
 }
 
-export type Volet2Data = { total: number; nouveaux: number; dejaEnvoyes: number };
+export type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null };
+export type Volet2Data = { total: number; nouveaux: number; dejaEnvoyes: number; rows: Volet2Row[] };
 export async function getRs4Volet2Data(): Promise<Volet2Data> {
   const ps = await volet2Candidates();
   const dejaEnvoyes = ps.filter((p) => p.events.length > 0).length;
-  return { total: ps.length, nouveaux: ps.length - dejaEnvoyes, dejaEnvoyes };
+  // rows = les « nouveaux » (ceux qui partiront), pour vérif manuelle avant envoi.
+  const rows: Volet2Row[] = ps
+    .filter((p) => p.events.length === 0)
+    .map((p) => ({ pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, assureur: p.copro.assureurActuel, numeroContrat: p.copro.numeroContrat, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail }));
+  return { total: ps.length, nouveaux: ps.length - dejaEnvoyes, dejaEnvoyes, rows };
 }
 
 // Envoie la demande de RS aux « nouveaux » (jamais envoyée) et fait passer au

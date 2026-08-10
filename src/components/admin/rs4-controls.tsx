@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button";
 
 type Row = { pipelineId: string; nom: string; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; manque: string[] };
 type Sample = { total: number; complete: number; incomplete: number; completeRows: Row[]; incompleteRows: Row[] };
-type Volet2 = { total: number; nouveaux: number; dejaEnvoyes: number };
+type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null };
+type Volet2 = { total: number; nouveaux: number; dejaEnvoyes: number; rows: Volet2Row[] };
 type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number };
 type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[] };
 type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number };
@@ -92,6 +93,8 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4 }: { volet1Cou
   const [subject, setSubject] = useState(DEFAULT_SUBJECT);
   const [body, setBody] = useState(DEFAULT_BODY);
   const [showTpl, setShowTpl] = useState(false);
+  const [showV2, setShowV2] = useState(false);
+  const [v2Search, setV2Search] = useState("");
   const [sending, setSending] = useState(false);
   // Volet 3
   const [relancing, setRelancing] = useState<number | null>(null);
@@ -186,6 +189,9 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4 }: { volet1Cou
   const v3Filtered = v3Search.trim()
     ? volet3.rows.filter((r) => `${r.adresse ?? ""} ${r.nom} ${r.courtier ?? ""} ${r.mail ?? ""}`.toLowerCase().includes(v3Search.trim().toLowerCase()))
     : volet3.rows;
+  const v2Filtered = v2Search.trim()
+    ? volet2.rows.filter((r) => `${r.adresse ?? ""} ${r.nom} ${r.assureur ?? ""} ${r.courtier ?? ""} ${r.numeroContrat ?? ""} ${r.mail ?? ""}`.toLowerCase().includes(v2Search.trim().toLowerCase()))
+    : volet2.rows;
 
   return (
     <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC", display: "flex", flexDirection: "column", gap: 22 }}>
@@ -253,6 +259,45 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4 }: { volet1Cou
                 <p style={{ fontSize: 11, color: "#A2A1AF", margin: 0 }}>Ta signature Front est ajoutée automatiquement en pied de chaque mail. Pas de pièce jointe (n° de contrat connu).</p>
               </div>
             )}
+            {volet2.rows.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <button onClick={() => setShowV2((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                  {showV2 ? "▾" : "▸"} Détail des {volet2.rows.length} dossiers à envoyer (vérif avant envoi)
+                </button>
+                {showV2 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ position: "relative", marginBottom: 8, maxWidth: 380 }}>
+                      <Search size={14} style={{ position: "absolute", left: 10, top: 9, color: "#A2A1AF" }} />
+                      <input value={v2Search} onChange={(e) => setV2Search(e.target.value)} placeholder="Rechercher une copro / assureur / courtier…" style={{ width: "100%", fontSize: 12, padding: "7px 10px 7px 30px", border: "1px solid #E8E8EC", borderRadius: 8 }} />
+                    </div>
+                    <div style={{ maxHeight: 360, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                        <thead>
+                          <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                            {["Copropriété", "Assureur", "N° contrat", "Courtier", "Mail courtier"].map((h) => (
+                              <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {v2Filtered.map((r) => (
+                            <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
+                              <td style={{ padding: "6px 10px", color: "#26262C" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
+                              <td style={{ padding: "6px 10px", color: "#656576" }}>{r.assureur || "—"}</td>
+                              <td style={{ padding: "6px 10px", color: "#656576" }}>{r.numeroContrat || "—"}</td>
+                              <td style={{ padding: "6px 10px", color: "#656576" }}>{r.courtier || "—"}</td>
+                              <td style={{ padding: "6px 10px", color: "#13762C" }}>{r.mail || "—"}</td>
+                            </tr>
+                          ))}
+                          {v2Filtered.length === 0 && <tr><td colSpan={5} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
               <Button onClick={() => sendVolet2()} disabled={sending || volet2.nouveaux === 0} size="sm">
                 {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Envoyer {volet2.nouveaux} demande{volet2.nouveaux > 1 ? "s" : ""} de RS
