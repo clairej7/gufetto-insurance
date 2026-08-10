@@ -554,6 +554,16 @@ export async function moveToEnCours(actorEmail: string, pipelineId: string): Pro
   return { ok: true };
 }
 
+// Volet 4 / Volet 5 → Volet 3 (Détecteur) : renvoie le dossier au détecteur pour
+// re-tri (efface rs4EnCoursAt + rs4RelanceAt). rs4SentAt conservé.
+export async function moveToDetector(actorEmail: string, pipelineId: string): Promise<{ ok: boolean }> {
+  const p = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, select: { statut: true } });
+  if (!p || p.statut !== "rs_en_cours") return { ok: false };
+  await prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { rs4EnCoursAt: null, rs4RelanceAt: null } });
+  await prisma.pipelineEvent.create({ data: { pipelineId, type: "action_manuelle", description: "Dossier renvoyé au détecteur de réponses (Volet 3) pour re-tri", metadata: { auto: "rs4_to_detector" }, createdBy: actorEmail } });
+  return { ok: true };
+}
+
 // Passe les dossiers « infos complètes » du Volet 1 au Volet 2 (pose rs4Volet2At).
 export async function moveCompleteToVolet2(actorEmail: string): Promise<{ moved: number; volet2Total: number }> {
   const sample = await getRs4Sample();
