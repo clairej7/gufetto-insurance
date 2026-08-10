@@ -470,6 +470,26 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
     if (url) setDocPreview({ id, url }); else toast.error("PDF indisponible");
   }
   const [capturingDocs, setCapturingDocs] = useState(false);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  async function uploadDoc(file: File) {
+    setUploadingDoc(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      fd.append("pipelineId", pipeline.id);
+      const res = await fetch("/api/rs4/upload-doc", { method: "POST", body: fd });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      const data = await res.json();
+      toast.success(`Document ajouté (${data.kind === "rs" ? "RS" : data.kind === "contrat_mri" ? "Contrat MRI" : "Document"}).`);
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec de l'upload"); } finally { setUploadingDoc(false); }
+  }
+  function pickDoc() {
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = ".pdf";
+    input.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) uploadDoc(f); };
+    input.click();
+  }
   async function captureDocs() {
     setCapturingDocs(true);
     try {
@@ -982,16 +1002,25 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                 <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C" }}>
                   📎 Documents assurance
                 </h3>
-                <button
-                  onClick={captureDocs}
-                  disabled={capturingDocs}
-                  className="text-[11px] font-semibold px-2 py-1 rounded-md border disabled:opacity-60"
-                  style={{ color: "#4E49FC", background: "#F5F5FF", borderColor: "#D9D9F5" }}
-                  title="Récupérer les PJ (RS / contrat MRI) de la réponse courtier depuis Front"
-                >{capturingDocs ? "Récupération…" : "↻ Récupérer"}</button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={pickDoc}
+                    disabled={uploadingDoc}
+                    className="text-[11px] font-semibold px-2 py-1 rounded-md border disabled:opacity-60"
+                    style={{ color: "#13762C", background: "#EFFBF2", borderColor: "#B7E4C4" }}
+                    title="Ajouter un document manuellement (PDF depuis ton Drive)"
+                  >{uploadingDoc ? "Ajout…" : "＋ Ajouter (PDF)"}</button>
+                  <button
+                    onClick={captureDocs}
+                    disabled={capturingDocs}
+                    className="text-[11px] font-semibold px-2 py-1 rounded-md border disabled:opacity-60"
+                    style={{ color: "#4E49FC", background: "#F5F5FF", borderColor: "#D9D9F5" }}
+                    title="Récupérer les PJ (RS / contrat MRI) de la réponse courtier depuis Front"
+                  >{capturingDocs ? "Récupération…" : "↻ Récupérer"}</button>
+                </div>
               </div>
               {documents.length === 0 && (
-                <p className="text-xs" style={{ color: "#A2A1AF" }}>Aucun document. Clique « Récupérer » pour importer le relevé / contrat MRI depuis la réponse du courtier (Front).</p>
+                <p className="text-xs" style={{ color: "#A2A1AF" }}>Aucun document. « Récupérer » importe le relevé / contrat MRI depuis la réponse du courtier (Front) ; « Ajouter (PDF) » permet de charger un fichier manuellement (depuis ton Drive).</p>
               )}
               <div className="space-y-2.5">
                 {documents.map((d) => {
