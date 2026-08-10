@@ -689,7 +689,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                       </div>
                       <div>
                         <div style={{ fontSize: 18, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{contratsRecus}</div>
-                        <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>contrats reçus</div>
+                        <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>contrats récupérés</div>
                       </div>
                     </div>
                   </div>
