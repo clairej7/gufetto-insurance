@@ -138,6 +138,20 @@ export async function getDocsStats(): Promise<{ rs: number; contrat: number }> {
   return { rs, contrat };
 }
 
+// Ajout MANUEL d'un document (upload depuis le Drive). Typé automatiquement par
+// contenu (corrigeable ensuite via le menu type). source = "manuel".
+export async function addManualDoc(opts: { pipelineId: string; coproId: string; adresse: string; buffer: Buffer; filename: string; createdBy?: string }): Promise<{ ok: boolean; kind?: DocKind; fileName?: string; error?: string }> {
+  const kind = await classifyInsuranceDoc(opts.buffer, opts.filename);
+  const rsCount = await prisma.pipelineDocument.count({ where: { pipelineId: opts.pipelineId, kind: "rs" } });
+  const part = kind === "rs" && rsCount >= 1 ? rsCount + 1 : null;
+  const fileName = docName(opts.adresse, kind, part);
+  const storagePath = `insurance/${opts.coproId}/manual-${crypto.randomUUID()}.pdf`;
+  const { error } = await getSupabaseAdmin().storage.from(STORAGE_BUCKET).upload(storagePath, opts.buffer, { contentType: "application/pdf", upsert: true });
+  if (error) return { ok: false, error: error.message };
+  await prisma.pipelineDocument.create({ data: { pipelineId: opts.pipelineId, coproId: opts.coproId, kind, part, storagePath, fileName, source: "manuel", createdBy: opts.createdBy ?? "manuel" } });
+  return { ok: true, kind, fileName };
+}
+
 export type PipelineDoc = { id: string; kind: DocKind; part: number | null; fileName: string; storagePath: string; source: string; createdAt: string };
 export async function getPipelineDocuments(pipelineId: string): Promise<PipelineDoc[]> {
   const rows = await prisma.pipelineDocument.findMany({ where: { pipelineId }, orderBy: [{ kind: "asc" }, { part: "asc" }, { createdAt: "asc" }] });
