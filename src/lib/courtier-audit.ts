@@ -44,6 +44,12 @@ function tokensOf(norm: string): string[] {
 }
 
 const domainOf = (email: string) => (email.includes("@") ? email.split("@")[1].toLowerCase().trim() : "");
+// Adresse interne Matera (CS `cs.*@mail.matera.eu`, salariés `x@matera.eu`,
+// `bonjour@matera.eu`…) — jamais un courtier ; à bloquer partout à l'envoi.
+export const isMateraInternal = (email: string) => {
+  const d = domainOf(email.toLowerCase());
+  return d === "matera.eu" || d.endsWith(".matera.eu");
+};
 
 // Distance de Levenshtein bornée (retourne >max dès dépassement).
 function lev(a: string, b: string, max = 1): number {
@@ -253,7 +259,11 @@ function nameMatchesDomain(nameTokens: string[], domain: string): boolean {
 //    (≥2 domaines non génériques, aucun ne matchant le nom) → hold (ambigu).
 export type SendMailPlan = { mails: string[]; hold: boolean; reason: string };
 export function prepareSendMails(courtierName: string | null, mailField: string | null, idx: CourtierIndex): SendMailPlan {
-  const mails = (mailField ?? "").split(/[;,]/).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s));
+  const all = (mailField ?? "").split(/[;,]/).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s));
+  // GARDE-FOU : toute adresse @matera.eu / *.matera.eu est INTERNE (CS, salarié,
+  // bonjour@, canal Gufetto) — jamais un courtier. On la retire systématiquement.
+  const mails = all.filter((m) => !isMateraInternal(m));
+  if (all.length && !mails.length) return { mails: [], hold: true, reason: "adresse interne Matera (CS/salarié) — pas un courtier" };
   if (!mails.length) return { mails: [], hold: true, reason: "pas de mail exploitable" };
   const dom = (m: string) => domainOf(m.toLowerCase());
   const res = resolveCourtier(courtierName, idx);
