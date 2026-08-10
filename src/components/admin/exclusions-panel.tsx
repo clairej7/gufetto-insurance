@@ -5,12 +5,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Plus, X, Loader2 } from "lucide-react";
+import { Ban, Plus, X, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 type Row = { id: string; kind: string; value: string; label: string | null; createdAt: string };
-type State = { gestionnaires: number; copros: number; totalCopros: number; rows: Row[] };
+type ExcludedCopro = { id: string; nom: string; adresse: string | null; gestionnaireNom: string | null };
+type State = { gestionnaires: number; copros: number; totalCopros: number; rows: Row[]; coproList: ExcludedCopro[] };
 
 export function ExclusionsPanel({ state }: { state: State }) {
   const router = useRouter();
@@ -18,6 +19,12 @@ export function ExclusionsPanel({ state }: { state: State }) {
   const [value, setValue] = useState("");
   const [label, setLabel] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showList, setShowList] = useState(false);
+  const [q, setQ] = useState("");
+  const coproList = state.coproList ?? [];
+  const filtered = q.trim()
+    ? coproList.filter((c) => `${c.nom} ${c.adresse ?? ""} ${c.gestionnaireNom ?? ""}`.toLowerCase().includes(q.trim().toLowerCase()))
+    : coproList;
 
   async function add() {
     if (!value.trim()) return;
@@ -65,6 +72,43 @@ export function ExclusionsPanel({ state }: { state: State }) {
         ))}
         {state.rows.length === 0 && <span style={{ fontSize: 13, color: "#A2A1AF", fontStyle: "italic" }}>Aucune exclusion.</span>}
       </div>
+
+      {coproList.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <button onClick={() => setShowList((v) => !v)} style={{ fontSize: 13, fontWeight: 600, color: "#CA1E12", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+            {showList ? "▾" : "▸"} Voir les {coproList.length} copros exclues (recherche)
+          </button>
+          {showList && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ position: "relative", marginBottom: 8, maxWidth: 380 }}>
+                <Search size={14} style={{ position: "absolute", left: 10, top: 9, color: "#A2A1AF" }} />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Vérifier si une adresse / copro est exclue…" style={{ width: "100%", fontSize: 12, padding: "7px 10px 7px 30px", border: "1px solid #E8E8EC", borderRadius: 8 }} />
+              </div>
+              <div style={{ maxHeight: 300, overflowY: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                      {["Copropriété", "Adresse", "Gestionnaire"].map((h) => (
+                        <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((c) => (
+                      <tr key={c.id} style={{ borderTop: "1px solid #F1F1F4" }}>
+                        <td style={{ padding: "6px 10px", color: "#26262C" }}>🚫 {c.nom}</td>
+                        <td style={{ padding: "6px 10px", color: "#656576" }}>{c.adresse || "—"}</td>
+                        <td style={{ padding: "6px 10px", color: "#656576" }}>{c.gestionnaireNom || "—"}</td>
+                      </tr>
+                    ))}
+                    {filtered.length === 0 && <tr><td colSpan={3} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucune copro exclue ne correspond.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <select value={kind} onChange={(e) => setKind(e.target.value as "gestionnaire" | "copro")} style={{ fontSize: 13, padding: "7px 10px", border: "1px solid #E8E8EC", borderRadius: 8 }}>
