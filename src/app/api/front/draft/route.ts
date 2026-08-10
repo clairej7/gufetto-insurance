@@ -50,7 +50,9 @@ export async function POST(req: NextRequest) {
   draftForm.append("body", htmlBody);
   draftForm.append("type", "email");
 
-  for (const file of [contratFile, pvFile, devisFile]) {
+  // PJ supplémentaires (ex. RS partie 2, 2e contrat) — champ répétable "extra".
+  const extraFiles = formData.getAll("extra").filter((f): f is File => f instanceof File);
+  for (const file of [contratFile, pvFile, devisFile, ...extraFiles]) {
     if (!file) continue;
     const buf = await file.arrayBuffer();
     draftForm.append("attachments[]", new Blob([buf], { type: file.type }), file.name);
