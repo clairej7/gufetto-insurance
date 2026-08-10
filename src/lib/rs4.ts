@@ -8,6 +8,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSignatureHtml, tagConversation, assignConversation, resolveTeammateId } from "@/lib/front";
+import { getCourtierIndex, recipientSuspect } from "@/lib/courtier-audit";
 
 const FRONT_API_URL = "https://api2.frontapp.com";
 const FRONT_TOKEN = process.env.FRONT_API_TOKEN;
@@ -174,6 +175,7 @@ export async function getRs4Volet2Data(): Promise<Volet2Data> {
 export async function sendVolet2(actorEmail: string, subjectTpl: string, bodyTpl: string, limit?: number): Promise<{ sent: number; failed: number; movedExisting: number; errors: string[] }> {
   const ps = await volet2Candidates();
   const signature = await getSignatureHtml(actorEmail);
+  const idx = await getCourtierIndex();
   let sent = 0, failed = 0, movedExisting = 0;
   const errors: string[] = [];
   const now = new Date();
@@ -186,6 +188,9 @@ export async function sendVolet2(actorEmail: string, subjectTpl: string, bodyTpl
     const c = p.copro;
     const toList = parseEmails(c.contactCourtierEmail);
     if (!toList.length) { failed++; errors.push(`${c.nom} : pas de mail`); continue; }
+    // Garde-fou : ne pas envoyer si le destinataire est suspect (courtier connu à
+    // vrai domaine mais mail perso/autre) → évite d'écrire à un tiers (ex. CS).
+    if (recipientSuspect(c.courtierActuel, c.contactCourtierEmail, idx)) { failed++; errors.push(`${c.nom} : destinataire suspect (${c.contactCourtierEmail}) — non envoyé`); continue; }
     const to = toList.join(", ");
     const vars = { adresse: c.adresse || c.nom, assureur: c.assureurActuel || "", numeroContrat: c.numeroContrat || "", nom: c.nom };
     const subject = fillTemplate(subjectTpl, vars);
@@ -272,6 +277,7 @@ export async function sendRelance(actorEmail: string, relanceNum: number, subjec
   if (!stage) return { sent: 0, failed: 0, errors: ["relance inconnue"] };
   const ps = await volet3Pipelines();
   const signature = await getSignatureHtml(actorEmail);
+  const idx = await getCourtierIndex();
   let sent = 0, failed = 0;
   const errors: string[] = [];
   for (const p of ps) {
@@ -280,6 +286,7 @@ export async function sendRelance(actorEmail: string, relanceNum: number, subjec
     const c = p.copro;
     const toList = parseEmails(c.contactCourtierEmail);
     if (!toList.length) { failed++; errors.push(`${c.nom} : pas de mail`); continue; }
+    if (recipientSuspect(c.courtierActuel, c.contactCourtierEmail, idx)) { failed++; errors.push(`${c.nom} : destinataire suspect (${c.contactCourtierEmail}) — non relancé`); continue; }
     const to = toList.join(", ");
     const vars = { adresse: c.adresse || c.nom, assureur: c.assureurActuel || "", numeroContrat: c.numeroContrat || "", nom: c.nom, jours: String(jours) };
     const subject = fillTemplate(subjectTpl, vars);
