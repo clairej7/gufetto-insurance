@@ -302,8 +302,11 @@ export function Rs4Controls({ volet1Count, volet2, volet3, volet4 }: { volet1Cou
               <Button onClick={() => sendVolet2()} disabled={sending || volet2.nouveaux === 0} size="sm">
                 {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Envoyer {volet2.nouveaux} demande{volet2.nouveaux > 1 ? "s" : ""} de RS
               </Button>
+              <Button onClick={() => sendVolet2(50)} disabled={sending || volet2.nouveaux === 0} variant="outline" size="sm">
+                {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Envoyer un lot de {Math.min(50, volet2.nouveaux)}
+              </Button>
               <Button onClick={() => sendVolet2(5)} disabled={sending || volet2.nouveaux === 0} variant="outline" size="sm">
-                {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Envoyer un lot de {Math.min(5, volet2.nouveaux)} (test)
+                {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Envoyer un lot de {Math.min(5, volet2.nouveaux)}
               </Button>
               {volet2.dejaEnvoyes > 0 && (
                 <Button onClick={moveSentToV3} disabled={sending} variant="outline" size="sm">
