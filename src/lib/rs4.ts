@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { getSignatureHtml, tagConversation, assignConversation, resolveTeammateId } from "@/lib/front";
 import { getCourtierIndex, prepareSendMails, isMateraInternal } from "@/lib/courtier-audit";
 import { getExcludedCoproIds } from "@/lib/exclusions";
+import { captureReplyDocs } from "@/lib/rs-docs";
 
 const FRONT_API_URL = "https://api2.frontapp.com";
 const FRONT_TOKEN = process.env.FRONT_API_TOKEN;
@@ -427,7 +428,7 @@ export async function scanReplies(offset: number, limit: number): Promise<{ tota
   const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({
     where: { statut: "rs_en_cours", rs4SentAt: { not: null }, rs4EnCoursAt: null, coproId: { notIn: excl }, copro: { archivedAt: null } },
-    select: { id: true, rs4SentAt: true, rs4RelanceAt: true, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } },
+    select: { id: true, coproId: true, rs4SentAt: true, rs4RelanceAt: true, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } },
     orderBy: { rs4SentAt: "asc" },
   });
   const slice = ps.slice(offset, offset + limit);
@@ -458,6 +459,14 @@ export async function scanReplies(offset: number, limit: number): Promise<{ tota
     // Réponse détectée → rouvrir la conv Front (sans re-assigner) pour qu'elle
     // soit visible au même endroit dans l'inbox Gufetto.
     await reopenConversation(cid);
+    // « RS reçu » → capturer les PJ (relevé + contrat MRI) dans Gufetto (Supabase),
+    // typées par contenu. Idempotent, best-effort (n'interrompt pas le scan).
+    if (kind === "rs_recu" && hasDoc) {
+      try {
+        const cp = await prisma.copro.findUnique({ where: { id: p.coproId! }, select: { nom: true, adresse: true } });
+        if (cp) await captureReplyDocs({ pipelineId: p.id, coproId: p.coproId!, adresse: cp.adresse || cp.nom, msgIds: inbound.map((m) => m.id) });
+      } catch { /* capture best-effort */ }
+    }
     if (backToDetector) await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Réponse détectée (${kind}) — dossier renvoyé de la boucle de relances (V4) au détecteur (V3)`, metadata: { auto: "rs4_reply_back_to_detector", kind }, createdBy: "auto:scan_replies" } });
     counts[kind] = (counts[kind] ?? 0) + 1;
   }

@@ -812,6 +812,15 @@ export async function setRecommandeDevis(id: string, pipelineId: string) {
   return { success: true };
 }
 
+// Correction manuelle du type d'un document d'assurance (RS / contrat MRI / autre).
+export async function retypeDocumentAction(id: string, kind: "rs" | "contrat_mri" | "autre", pipelineId: string) {
+  await getSession();
+  const { retypeDocument } = await import("@/lib/rs-docs");
+  const r = await retypeDocument(id, kind);
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return r;
+}
+
 export async function getPdfSignedUrl(storagePath: string): Promise<string | null> {
   const { data, error } = await supabaseAdmin.storage
     .from(STORAGE_BUCKET)
