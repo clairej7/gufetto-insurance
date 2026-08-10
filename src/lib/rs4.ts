@@ -409,6 +409,13 @@ async function frontGet(path: string): Promise<Record<string, unknown> | null> {
   if (!res.ok) return null;
   return res.json();
 }
+// Rouvre une conversation (statut open) SANS toucher l'assigné → elle réapparaît
+// dans l'inbox Gufetto (affichée « assigned » au gestionnaire déjà en place),
+// sans déclencher de notif d'assignation. Best-effort.
+async function reopenConversation(cid: string): Promise<void> {
+  if (!FRONT_TOKEN) return;
+  await fetch(`${FRONT_API_URL}/conversations/${cid}`, { method: "PATCH", headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify({ status: "open" }) }).catch(() => {});
+}
 const isFromMatera = (m: { author?: { email?: string }; recipients?: { role: string; handle: string }[] }) => {
   const from = (m.recipients ?? []).find((r) => r.role === "from")?.handle || m.author?.email || "";
   return /@(?:[a-z0-9-]+\.)?matera\.eu$/i.test(from);
@@ -448,6 +455,9 @@ export async function scanReplies(offset: number, limit: number): Promise<{ tota
     // détecteur (V3) pour re-tri : on efface rs4RelanceAt.
     const backToDetector = !!p.rs4RelanceAt;
     await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: kind, rs4ReplyAt: last ? new Date(last.created_at * 1000) : now, rs4ReplySnippet: snippet || (bounce ? "Échec de remise (bounce)" : null), rs4ReplyMsgId: last?.id ?? null, rs4ReplyConvId: cid, ...(backToDetector ? { rs4RelanceAt: null } : {}) } });
+    // Réponse détectée → rouvrir la conv Front (sans re-assigner) pour qu'elle
+    // soit visible au même endroit dans l'inbox Gufetto.
+    await reopenConversation(cid);
     if (backToDetector) await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Réponse détectée (${kind}) — dossier renvoyé de la boucle de relances (V4) au détecteur (V3)`, metadata: { auto: "rs4_reply_back_to_detector", kind }, createdBy: "auto:scan_replies" } });
     counts[kind] = (counts[kind] ?? 0) + 1;
   }
