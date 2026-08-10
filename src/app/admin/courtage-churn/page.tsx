@@ -98,6 +98,27 @@ export default async function CourtageChurnPage() {
           </a>
         </div>
 
+        {/* Obligation : prévenir l'assureur de la fin de mandat courtier + PV d'AG */}
+        <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px dashed #E8E8EC" }}>
+          <div className="flex items-center gap-3 mb-1">
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Obligation : prévenir l&apos;assureur en fin de mandat courtier</h2>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>À traiter plus tard</span>
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#F2F7FE", border: "1px solid #C7DEF9", borderRadius: 10, padding: "12px 16px", margin: "10px 0", maxWidth: 800 }}>
+            <span style={{ fontSize: 18, lineHeight: "20px" }}>📌</span>
+            <div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: "#1F5FA8" }}>Sur les dossiers où Matera est courtier : quand on cesse de l&apos;être, c&apos;est à NOUS de prévenir l&apos;assureur.</div>
+              <div style={{ fontSize: 12.5, color: "#33628F", marginTop: 4 }}>
+                Retour de <strong>Virginie (AXA)</strong> lors des derniers échanges : lorsqu&apos;un immeuble dont nous sommes courtier
+                nous quitte / change de syndic, il est de <strong>notre responsabilité de notifier l&apos;assureur</strong> de la fin de
+                mandat et de <strong>leur transmettre le PV d&apos;AG</strong> (qui acte le changement). Sans ça, l&apos;assureur nous
+                garde comme courtier référent. → À intégrer au futur process courtage/churn (détecter les fins de mandat côté dossiers
+                « nous sommes courtier », générer la notification + joindre le PV d&apos;AG à l&apos;assureur).
+              </div>
+            </div>
+          </div>
+        </div>
+
         <p style={{ fontSize: 12, color: "#A2A1AF", marginTop: 24 }}>Source : {CHURN.source}. Snapshot — sera réactualisé quand on traitera le sujet courtage/churn.</p>
       </main>
     </div>
