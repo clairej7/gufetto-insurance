@@ -213,39 +213,134 @@ export async function getDocLoadHistory(limit = 15): Promise<{ loadedAt: string;
   return rows.map((r) => ({ loadedAt: r.loadedAt.toISOString(), dossiers: r.dossiers, created: r.created }));
 }
 
-// ─── Volet 4 : suivi des demandes de devis ───────────────────────────────────
+// ─── Volet 4 : suivi des demandes de devis + détecteur de réponses ───────────
 const FRONT_CONV = (cid: string | null) => (cid ? `https://app.frontapp.com/open/${cid}` : null);
-export type Devis5SuiviRow = { pipelineId: string; nom: string; adresse: string | null; assureurs: string[]; sentAt: string; jours: number; convs: { assureur: string; url: string | null }[] };
-export type Devis5Suivi = { envoyes: number; demandesTotal: number; recus: number; sansReponse10j: number; rows: Devis5SuiviRow[] };
+const FRONT_API_URL = "https://api2.frontapp.com";
+const FRONT_TOKEN = process.env.FRONT_API_TOKEN;
+// Adresses des demandes de devis : le détecteur ne scanne QUE ces conversations.
+const AXA_ADDR = "achille.leboeuf@axa.fr";
+const MILA_ADDR = "souscription@mila.fr";
+const scanEligible = (to: string | null | undefined) => {
+  const t = (to || "").toLowerCase();
+  return t.includes(AXA_ADDR) || t.includes(MILA_ADDR);
+};
 
-// Suivi = dossiers ayant au moins une demande de devis envoyée (event devis_sent).
-// « demandesTotal » = nb d'envois (par assureur). « recus » = à venir (détection
-// de réponse en 2e temps → 0 pour l'instant). « sansReponse10j » = envoi ≥ 10 j.
+export type DevisReplyKind = "devis_obtenu" | "traiter_manuel" | "pas_de_reponse" | "non_scanne";
+export type Devis5Demande = {
+  eventId: string; pipelineId: string; nom: string; adresse: string | null;
+  assureur: string; to: string | null; sentAt: string; jours: number; convUrl: string | null; scanEligible: boolean;
+  replyKind: DevisReplyKind; replyConfirmed: boolean; replySnippet: string | null; scanned: boolean;
+};
+export type Devis5Suivi = {
+  envoyes: number; demandesTotal: number; devisObtenus: number; aTraiter: number; pasReponse: number;
+  sansReponse10j: number; lastScanAt: string | null; demandes: Devis5Demande[];
+};
+
+type DevisSentMeta = { assureur?: string; to?: string; conversationId?: string; replyKind?: DevisReplyKind; replyConfirmed?: boolean; replySnippet?: string; replyScanAt?: string };
+
+// Suivi = une ligne par DEMANDE (dossier × assureur). Le statut de réponse est
+// stocké dans l'event devis_sent lui-même (1 demande = 1 statut, pas de doublon).
 export async function getDevis5Volet4Data(nowMs: number): Promise<Devis5Suivi> {
   const excl = await getExcludedCoproIds();
   const ev = await prisma.pipelineEvent.findMany({
-    // Exclut les dossiers repartis en ODR : l'Auto 5 ne suit jamais les ODR,
-    // même s'ils gardent un ancien event « devis envoyé ».
+    // Exclut les dossiers repartis en ODR : l'Auto 5 ne suit jamais les ODR.
     where: { metadata: { path: ["devisType"], equals: "devis_sent" }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null }, statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] } } },
-    select: { createdAt: true, metadata: true, pipelineId: true, pipeline: { select: { copro: { select: { nom: true, adresse: true } } } } },
+    select: { id: true, createdAt: true, metadata: true, pipelineId: true, pipeline: { select: { copro: { select: { nom: true, adresse: true } } } } },
     orderBy: { createdAt: "asc" },
   });
-  type G = { pipelineId: string; nom: string; adresse: string | null; assureurs: Set<string>; sentAt: Date; convs: { assureur: string; url: string | null }[] };
-  const byPipe = new Map<string, G>();
-  let demandesTotal = 0;
-  for (const e of ev) {
-    demandesTotal++;
-    const m = (e.metadata ?? {}) as { assureur?: string; conversationId?: string };
-    const ass = (m.assureur ?? "?").toUpperCase();
-    let g = byPipe.get(e.pipelineId);
-    if (!g) { g = { pipelineId: e.pipelineId, nom: e.pipeline?.copro.nom ?? "?", adresse: e.pipeline?.copro.adresse ?? null, assureurs: new Set(), sentAt: e.createdAt, convs: [] }; byPipe.set(e.pipelineId, g); }
-    g.assureurs.add(ass);
-    g.convs.push({ assureur: ass, url: FRONT_CONV(m.conversationId ?? null) });
-    if (e.createdAt < g.sentAt) g.sentAt = e.createdAt;
+  const pipes = new Set<string>();
+  let lastScan: number | null = null;
+  const demandes: Devis5Demande[] = ev.map((e) => {
+    const m = (e.metadata ?? {}) as DevisSentMeta;
+    pipes.add(e.pipelineId);
+    if (m.replyScanAt) { const t = new Date(m.replyScanAt).getTime(); if (lastScan == null || t > lastScan) lastScan = t; }
+    return {
+      eventId: e.id, pipelineId: e.pipelineId, nom: e.pipeline?.copro.nom ?? "?", adresse: e.pipeline?.copro.adresse ?? null,
+      assureur: (m.assureur ?? "?").toUpperCase(), to: m.to ?? null, sentAt: e.createdAt.toISOString(),
+      jours: Math.floor((nowMs - e.createdAt.getTime()) / 86400000), convUrl: FRONT_CONV(m.conversationId ?? null),
+      scanEligible: scanEligible(m.to), replyKind: (m.replyKind ?? "non_scanne") as DevisReplyKind,
+      replyConfirmed: !!m.replyConfirmed, replySnippet: m.replySnippet ?? null, scanned: !!m.replyScanAt,
+    };
+  }).sort((a, b) => b.jours - a.jours);
+  const cnt = (k: DevisReplyKind) => demandes.filter((d) => d.replyKind === k).length;
+  return {
+    envoyes: pipes.size, demandesTotal: demandes.length,
+    devisObtenus: cnt("devis_obtenu"), aTraiter: cnt("traiter_manuel"), pasReponse: cnt("pas_de_reponse"),
+    sansReponse10j: demandes.filter((d) => (d.replyKind === "pas_de_reponse" || d.replyKind === "non_scanne") && d.jours >= 10).length,
+    lastScanAt: lastScan ? new Date(lastScan).toISOString() : null, demandes,
+  };
+}
+
+// ── Détecteur de réponses (AXA/Mila) ──────────────────────────────────────
+const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ").trim();
+function hasRealDoc(atts: { content_type?: string; contentType?: string; filename?: string }[]): boolean {
+  return (atts ?? []).some((a) => {
+    const ct = (a.content_type || a.contentType || "").toLowerCase(); const fn = (a.filename || "").toLowerCase();
+    const inline = /^image\d+\.(png|gif|jpe?g)$/.test(fn) || /logo|signature/.test(fn);
+    return !inline && (ct.includes("pdf") || ct.includes("word") || ct.includes("sheet") || ct.includes("excel") || /\.(pdf|docx?|xlsx?)$/.test(fn));
+  });
+}
+const DEVIS_TXT = /devis|proposition (commerciale|tarifaire|d'?assurance)|tarification|cotisation propos|projet de contrat|offre (tarifaire|commerciale)|ci-?joint.*(devis|proposition|tarif|offre)/i;
+function classifyDevisReply(body: string, hasDoc: boolean, hasInbound: boolean, bounce: boolean): DevisReplyKind {
+  if (!hasInbound) return bounce ? "traiter_manuel" : "pas_de_reponse";
+  if (hasDoc) return "devis_obtenu";
+  if (DEVIS_TXT.test(body)) return "devis_obtenu";
+  return "traiter_manuel";
+}
+async function frontGetJson(path: string): Promise<Record<string, unknown> | null> {
+  if (!FRONT_TOKEN) return null;
+  const r = await fetch(`${FRONT_API_URL}${path}`, { headers: { Authorization: `Bearer ${FRONT_TOKEN}` } });
+  return r.ok ? r.json() : null;
+}
+const isFromMateraH = (from: string) => /@(?:[a-z0-9-]+\.)?matera\.eu$/i.test(from);
+
+// Scanne un lot de demandes (AXA/Mila uniquement) et pose un statut. Ne touche
+// PAS un statut déjà confirmé à la main. Lecture Front seule (aucun déplacement).
+export async function scanDevisReplies(offset: number, limit: number): Promise<{ total: number; scanned: number; nextOffset: number; done: boolean; counts: Record<string, number> }> {
+  const excl = await getExcludedCoproIds();
+  const ev = await prisma.pipelineEvent.findMany({
+    where: { metadata: { path: ["devisType"], equals: "devis_sent" }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null }, statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] } } },
+    select: { id: true, createdAt: true, metadata: true }, orderBy: { createdAt: "asc" },
+  });
+  const eligible = ev.filter((e) => scanEligible((e.metadata as DevisSentMeta | null)?.to));
+  const slice = eligible.slice(offset, offset + limit);
+  const counts: Record<string, number> = {};
+  const now = new Date();
+  for (const e of slice) {
+    const m = (e.metadata ?? {}) as DevisSentMeta;
+    if (m.replyConfirmed) { counts[m.replyKind ?? "?"] = (counts[m.replyKind ?? "?"] ?? 0) + 1; continue; }
+    const cid = m.conversationId;
+    const setMeta = (patch: Partial<DevisSentMeta>) => prisma.pipelineEvent.update({ where: { id: e.id }, data: { metadata: { ...m, ...patch, replyScanAt: now.toISOString() } as object } });
+    if (!cid) { await setMeta({ replyKind: "non_scanne" }); counts["non_scanne"] = (counts["non_scanne"] ?? 0) + 1; continue; }
+    const sentMs = e.createdAt.getTime();
+    const list = await frontGetJson(`/conversations/${cid}/messages?limit=20`);
+    const results = ((list?._results as unknown[]) ?? []) as { id: string; is_inbound: boolean; created_at: number; error_type?: string; blurb?: string; attachments?: { content_type?: string; filename?: string }[]; author?: { email?: string }; recipients?: { role: string; handle: string }[] }[];
+    const bounce = results.some((x) => !x.is_inbound && x.error_type);
+    const inbound = results.filter((x) => {
+      const from = (x.recipients ?? []).find((r) => r.role === "from")?.handle || x.author?.email || "";
+      return x.is_inbound && x.created_at * 1000 > sentMs && !isFromMateraH(from);
+    });
+    let body = "", snippet = "", hasDoc = inbound.some((x) => hasRealDoc(x.attachments ?? []));
+    const last = inbound.sort((a, b) => b.created_at - a.created_at)[0];
+    if (last) {
+      const full = (await frontGetJson(`/messages/${last.id}`)) as { content?: string; attachments?: { content_type?: string; filename?: string }[] } | null;
+      body = stripHtml(full?.content || last.blurb || "").slice(0, 500);
+      snippet = body.slice(0, 160);
+      if (full?.attachments && hasRealDoc(full.attachments)) hasDoc = true;
+    }
+    const kind = classifyDevisReply(body, hasDoc, inbound.length > 0, bounce);
+    await setMeta({ replyKind: kind, replySnippet: snippet || (bounce ? "Échec de remise (bounce)" : undefined) });
+    counts[kind] = (counts[kind] ?? 0) + 1;
   }
-  const rows: Devis5SuiviRow[] = [...byPipe.values()].map((g) => ({
-    pipelineId: g.pipelineId, nom: g.nom, adresse: g.adresse, assureurs: [...g.assureurs], sentAt: g.sentAt.toISOString(),
-    jours: Math.floor((nowMs - g.sentAt.getTime()) / 86400000), convs: g.convs,
-  })).sort((a, b) => b.jours - a.jours);
-  return { envoyes: byPipe.size, demandesTotal, recus: 0, sansReponse10j: rows.filter((r) => r.jours >= 10).length, rows };
+  const nextOffset = offset + slice.length;
+  return { total: eligible.length, scanned: slice.length, nextOffset, done: nextOffset >= eligible.length, counts };
+}
+
+// Confirme (ou corrige) le statut d'une demande via le menu déroulant.
+export async function confirmDevisReply(eventId: string, kind: DevisReplyKind, actorEmail: string): Promise<{ ok: boolean }> {
+  const e = await prisma.pipelineEvent.findUnique({ where: { id: eventId }, select: { metadata: true } });
+  if (!e) return { ok: false };
+  const base = (e.metadata ?? {}) as DevisSentMeta;
+  await prisma.pipelineEvent.update({ where: { id: eventId }, data: { metadata: { ...base, replyKind: kind, replyConfirmed: true, replyConfirmedBy: actorEmail, replyConfirmedAt: new Date().toISOString() } as object } });
+  return { ok: true };
 }
