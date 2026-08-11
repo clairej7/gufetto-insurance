@@ -26,20 +26,6 @@ export function Devis6Controls({ volet1, volet2, suivi }: { volet1: V1; volet2?:
   const [passing, setPassing] = useState(false);
   const [showV2, setShowV2] = useState(false);
   const [showSuivi, setShowSuivi] = useState(false);
-  const [fetchingCs, setFetchingCs] = useState(false);
-
-  async function fetchCsMembers() {
-    if (!volet2 || volet2.count === 0) return;
-    setFetchingCs(true);
-    try {
-      const res = await fetch("/api/devis6/fetch-cs-members", { method: "POST" });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error ?? "Erreur");
-      if (d.materaConfigure === false) toast.error(d.error ?? "Accès Matera non configuré");
-      else toast.success(`${d.withMembers}/${d.processed} dossiers avec membres CS (${d.totalMembers} mails).`);
-      router.refresh();
-    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setFetchingCs(false); }
-  }
 
   const rows = volet1.rows
     .filter((r) => !onlyReady || r.pret)
@@ -142,22 +128,13 @@ export function Devis6Controls({ volet1, volet2, suivi }: { volet1: V1; volet2?:
               <div><div style={{ fontSize: 24, fontWeight: 800, color: volet2.avecMembres === volet2.count ? "#13762C" : "#B4690E", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{volet2.avecMembres}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>avec membres CS récupérés</div></div>
             </div>
 
-            {!volet2.materaConfigure && (
-              <div style={{ margin: "0 0 10px", padding: "8px 12px", borderRadius: 8, background: "#FDF0D5", border: "1px solid #F3D9A6", fontSize: 12, color: "#8A5A00" }}>
-                ⚠️ Accès Matera non configuré (<code>MATERA_API_TOKEN</code> manquant côté serveur) → la récupération des membres du CS est indisponible tant que le token n&apos;est pas ajouté. Le reste de l&apos;écran fonctionne.
-              </div>
-            )}
-
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-              <button onClick={fetchCsMembers} disabled={fetchingCs || !volet2.materaConfigure}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#fff", background: !volet2.materaConfigure ? "#B7B6E6" : "#4E49FC", border: "none", borderRadius: 8, padding: "8px 14px", cursor: fetchingCs || !volet2.materaConfigure ? "default" : "pointer" }}>
-                {fetchingCs ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Récupérer les membres du CS (Matera)
-              </button>
               <button onClick={() => setShowV2((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>{showV2 ? "▾ masquer le détail" : "▸ voir le détail par dossier"}</button>
+              <button onClick={() => router.refresh()} title="Rafraîchir" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: "#656576", background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "4px 10px", cursor: "pointer" }}><RefreshCw size={13} /> Rafraîchir</button>
             </div>
 
             <div style={{ padding: "8px 12px", borderRadius: 8, background: "#EEF0FF", border: "1px solid #D9D9F5", fontSize: 12, color: "#3A37B8", marginBottom: 10 }}>
-              ℹ️ L&apos;<strong>envoi</strong> du mail au CS (texte de recommandation personnalisé) sera activé avec le <strong>crédit Anthropic</strong>. Ici : destinataires (membres du CS) + résumé de la proposition, prêts à l&apos;emploi.
+              ℹ️ Les <strong>membres du CS</strong> sont récupérés depuis Matera via la connexion data (hors application) et mis en cache ici. L&apos;<strong>envoi</strong> du mail (texte de recommandation) sera activé avec le <strong>crédit Anthropic</strong>.
             </div>
 
             {showV2 && (
