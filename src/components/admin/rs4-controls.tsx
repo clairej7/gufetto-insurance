@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 
 type Row = { pipelineId: string; nom: string; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; manque: string[] };
 type Sample = { total: number; complete: number; incomplete: number; completeRows: Row[]; incompleteRows: Row[] };
-type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; sendMail: string | null; hold: boolean; holdReason: string };
+type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; sendMail: string | null; hold: boolean; holdReason: string; gestionnaire: string | null };
 type Volet2 = { total: number; nouveaux: number; dejaEnvoyes: number; sent: number; rows: Volet2Row[] };
 type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null; commentText: string | null; commentBy: string | null; commentAt: string | null; devisMixup: boolean };
 type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null; commentedCount: number; devisMixupCount: number };
@@ -472,7 +472,7 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                         <thead>
                           <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-                            {["#", "Copropriété", "Assureur", "N° contrat", "Courtier", "Mail courtier"].map((h) => (
+                            {["#", "Copropriété", "Assureur", "N° contrat", "Courtier", "Mail courtier", "Gestionnaire"].map((h) => (
                               <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
                             ))}
                           </tr>
@@ -497,10 +497,11 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
                                     <span style={{ color: "#13762C" }}>{r.sendMail || r.mail || "—"}</span>
                                   )}
                                 </td>
+                                <td style={{ padding: "6px 10px", color: "#656576", whiteSpace: "nowrap" }}>{r.gestionnaire || "—"}</td>
                               </tr>
                             );
                           })}
-                          {v2Filtered.length === 0 && <tr><td colSpan={6} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>}
+                          {v2Filtered.length === 0 && <tr><td colSpan={7} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>}
                         </tbody>
                       </table>
                     </div>

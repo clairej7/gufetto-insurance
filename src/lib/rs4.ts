@@ -188,13 +188,20 @@ async function volet2Candidates() {
   const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({
     where: { statut: "rs_en_cours", rs4Volet2At: { not: null }, rs4SentAt: null, coproId: { notIn: excl }, copro: { archivedAt: null } },
-    select: { id: true, copro: { select: { nom: true, adresse: true, assureurActuel: true, numeroContrat: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { id: true, createdAt: true } } },
+    select: { id: true, copro: { select: { nom: true, adresse: true, assureurActuel: true, numeroContrat: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true, gestionnaireNom: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { id: true, createdAt: true } } },
     orderBy: { rs4Volet2At: "desc" },
   });
   return ps;
 }
 
-export type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; sendMail: string | null; hold: boolean; holdReason: string };
+// Nom lisible du gestionnaire (nom si dispo, sinon dérivé du mail).
+function gestionnaireLabel(nom: string | null, email: string | null): string | null {
+  if (nom?.trim()) return nom.trim();
+  if (!email) return null;
+  return email.split("@")[0].split(/[._-]/).filter(Boolean).map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+}
+
+export type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; sendMail: string | null; hold: boolean; holdReason: string; gestionnaire: string | null };
 export type Volet2Data = { total: number; nouveaux: number; dejaEnvoyes: number; sent: number; rows: Volet2Row[] };
 export async function getRs4Volet2Data(): Promise<Volet2Data> {
   const ps = await volet2Candidates();
@@ -208,7 +215,7 @@ export async function getRs4Volet2Data(): Promise<Volet2Data> {
     .filter((p) => p.events.length === 0)
     .map((p) => {
       const plan = prepareSendMails(p.copro.courtierActuel, p.copro.contactCourtierEmail, idx);
-      return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, assureur: p.copro.assureurActuel, numeroContrat: p.copro.numeroContrat, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, sendMail: plan.hold ? null : plan.mails.join(", "), hold: plan.hold, holdReason: plan.reason };
+      return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, assureur: p.copro.assureurActuel, numeroContrat: p.copro.numeroContrat, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, sendMail: plan.hold ? null : plan.mails.join(", "), hold: plan.hold, holdReason: plan.reason, gestionnaire: gestionnaireLabel(p.copro.gestionnaireNom, p.copro.gestionnaireEmail) };
     });
   return { total: ps.length, nouveaux: ps.length - dejaEnvoyes, dejaEnvoyes, sent, rows };
 }
