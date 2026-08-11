@@ -179,6 +179,16 @@ export async function getPipelineDocuments(pipelineId: string): Promise<Pipeline
   return rows.map((r) => ({ id: r.id, kind: r.kind as DocKind, part: r.part, fileName: r.fileName, storagePath: r.storagePath, source: r.source, createdAt: r.createdAt.toISOString() }));
 }
 
+// Suppression d'un document (fichier Supabase + ligne). Le fil Front n'est pas
+// touché : « ↻ Récupérer » pourra le réimporter si besoin (unique convId+attach).
+export async function deleteDocument(id: string): Promise<{ ok: boolean }> {
+  const doc = await prisma.pipelineDocument.findUnique({ where: { id }, select: { storagePath: true } }).catch(() => null);
+  if (!doc) return { ok: false };
+  await getSupabaseAdmin().storage.from(STORAGE_BUCKET).remove([doc.storagePath]).catch(() => {});
+  await prisma.pipelineDocument.delete({ where: { id } });
+  return { ok: true };
+}
+
 // Correction manuelle du type (recalcule le nom). Réservé aux cas mal classés.
 export async function retypeDocument(id: string, kind: DocKind): Promise<{ ok: boolean }> {
   const doc = await prisma.pipelineDocument.findUnique({ where: { id }, select: { coproId: true, part: true } }).catch(() => null);
