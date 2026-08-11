@@ -131,6 +131,25 @@ function unwrapResults<T>(data: unknown): T[] {
   return d.body?.results ?? d.results ?? [];
 }
 
+// Membres du conseil syndical (role="council") avec leur email perso, depuis
+// GET /owners. Sert au mail de proposition en masse (Auto 6 volet 2).
+export type CouncilMember = { name: string; email: string };
+type MateraOwner = { email: string | null; full_name: string | null; entity_leader_name: string | null; role: string | null; visible_role: string | null };
+export async function getCouncilMembers(buildingId: string | number): Promise<CouncilMember[]> {
+  const data = await mataraGet<unknown>("/owners", { building_id: buildingId, limit: 200 });
+  const owners = unwrapResults<MateraOwner>(data);
+  const seen = new Set<string>();
+  const out: CouncilMember[] = [];
+  for (const o of owners) {
+    if ((o.role !== "council" && o.visible_role !== "council") || !o.email) continue;
+    const email = o.email.trim().toLowerCase();
+    if (seen.has(email)) continue;
+    seen.add(email);
+    out.push({ name: (o.full_name || o.entity_leader_name || "").trim(), email: o.email.trim() });
+  }
+  return out;
+}
+
 export async function listMriContracts(buildingId: string | number): Promise<MateraContract[]> {
   const data = await mataraGet<unknown>("/contracts", {
     building_id: buildingId,

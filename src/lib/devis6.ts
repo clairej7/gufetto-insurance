@@ -72,14 +72,37 @@ export async function passDevis6ToVolet2(actorEmail: string): Promise<{ passed: 
   return { passed: prets.length };
 }
 
-// ─── Volet 2 : file d'attente (dossiers marqués) ─────────────────────────────
-export type Devis6Volet2Row = { pipelineId: string; nom: string; adresse: string | null; passedAt: string };
-export type Devis6Volet2 = { count: number; rows: Devis6Volet2Row[] };
+// ─── Volet 2 : file d'attente + envoi mail CS ────────────────────────────────
+export type CsMember = { name: string; email: string };
+export type Devis6Volet2Row = {
+  pipelineId: string; nom: string; adresse: string | null; passedAt: string; buildingId: string | null;
+  csMembers: CsMember[]; csMembersSyncedAt: string | null; contactCsEmail: string | null;
+  recoAssureur: string | null; recoPrime: number | null; primeActuelle: number | null; economie: number | null;
+};
+export type Devis6Volet2 = { count: number; avecMembres: number; materaConfigure: boolean; rows: Devis6Volet2Row[] };
+
+function parseCsMembers(raw: string | null): CsMember[] {
+  if (!raw) return [];
+  try { const a = JSON.parse(raw); return Array.isArray(a) ? a.filter((m) => m?.email) : []; } catch { return []; }
+}
+
+async function getVolet2PipelineIds(): Promise<string[]> {
+  const excl = await getExcludedCoproIds();
+  const ev = await prisma.pipelineEvent.findMany({
+    where: { metadata: { path: ["devis6Volet"], equals: 2 }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null }, statut: "devis_recus" } },
+    select: { pipelineId: true }, distinct: ["pipelineId"],
+  });
+  return ev.map((e) => e.pipelineId);
+}
+
 export async function getDevis6Volet2Data(): Promise<Devis6Volet2> {
   const excl = await getExcludedCoproIds();
   const ev = await prisma.pipelineEvent.findMany({
     where: { metadata: { path: ["devis6Volet"], equals: 2 }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null }, statut: "devis_recus" } },
-    select: { createdAt: true, pipelineId: true, pipeline: { select: { copro: { select: { nom: true, adresse: true } } } } },
+    select: {
+      createdAt: true, pipelineId: true,
+      pipeline: { select: { copro: { select: { nom: true, adresse: true, buildingId: true, primeActuelle: true, contactCsEmail: true, csMembersData: true, csMembersSyncedAt: true } }, devisRecus: { where: { recommande: true }, select: { assureur: true, primeTTC: true }, take: 1 } } },
+    },
     orderBy: { createdAt: "desc" },
   });
   const seen = new Set<string>();
@@ -87,9 +110,40 @@ export async function getDevis6Volet2Data(): Promise<Devis6Volet2> {
   for (const e of ev) {
     if (seen.has(e.pipelineId)) continue;
     seen.add(e.pipelineId);
-    rows.push({ pipelineId: e.pipelineId, nom: e.pipeline?.copro.nom ?? "?", adresse: e.pipeline?.copro.adresse ?? null, passedAt: e.createdAt.toISOString() });
+    const c = e.pipeline!.copro;
+    const reco = e.pipeline!.devisRecus[0] ?? null;
+    const prime = c.primeActuelle;
+    rows.push({
+      pipelineId: e.pipelineId, nom: c.nom, adresse: c.adresse, passedAt: e.createdAt.toISOString(), buildingId: c.buildingId,
+      csMembers: parseCsMembers(c.csMembersData), csMembersSyncedAt: c.csMembersSyncedAt?.toISOString() ?? null, contactCsEmail: c.contactCsEmail,
+      recoAssureur: reco?.assureur ?? null, recoPrime: reco?.primeTTC ?? null, primeActuelle: prime,
+      economie: reco && prime != null ? Math.round(prime - reco.primeTTC) : null,
+    });
   }
-  return { count: rows.length, rows };
+  return {
+    count: rows.length, avecMembres: rows.filter((r) => r.csMembers.length > 0).length,
+    materaConfigure: !!process.env.MATERA_API_TOKEN, rows,
+  };
+}
+
+// Récupère les membres du CS (Matera, role=council) pour les dossiers du volet 2
+// et les met en cache sur la copro. Renvoie un résumé + une éventuelle raison
+// d'échec (token Matera absent → materaConfigure=false).
+export async function fetchCsMembersVolet2(): Promise<{ processed: number; withMembers: number; totalMembers: number; materaConfigure: boolean; error?: string }> {
+  if (!process.env.MATERA_API_TOKEN) return { processed: 0, withMembers: 0, totalMembers: 0, materaConfigure: false, error: "MATERA_API_TOKEN non configuré côté serveur." };
+  const { getCouncilMembers } = await import("@/lib/matera");
+  const ids = await getVolet2PipelineIds();
+  const ps = await prisma.insurancePipeline.findMany({ where: { id: { in: ids } }, select: { coproId: true, copro: { select: { buildingId: true } } } });
+  let withMembers = 0, totalMembers = 0;
+  for (const p of ps) {
+    if (!p.copro.buildingId) continue;
+    try {
+      const members = await getCouncilMembers(p.copro.buildingId);
+      await prisma.copro.update({ where: { id: p.coproId }, data: { csMembersData: JSON.stringify(members), csMembersSyncedAt: new Date() } });
+      if (members.length) { withMembers++; totalMembers += members.length; }
+    } catch { /* immeuble sans accès / erreur ponctuelle → on continue */ }
+  }
+  return { processed: ps.length, withMembers, totalMembers, materaConfigure: true };
 }
 
 // ─── Volet 3 : suivi des propositions envoyées au CS ─────────────────────────
