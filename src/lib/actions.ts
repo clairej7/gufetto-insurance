@@ -821,6 +821,14 @@ export async function retypeDocumentAction(id: string, kind: "rs" | "contrat_mri
   return r;
 }
 
+export async function deleteDocumentAction(id: string, pipelineId: string) {
+  await getSession();
+  const { deleteDocument } = await import("@/lib/rs-docs");
+  const r = await deleteDocument(id);
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return r;
+}
+
 export async function getPdfSignedUrl(storagePath: string): Promise<string | null> {
   const { data, error } = await supabaseAdmin.storage
     .from(STORAGE_BUCKET)

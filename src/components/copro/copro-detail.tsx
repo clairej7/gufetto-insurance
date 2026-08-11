@@ -46,7 +46,7 @@ import { DevisRequestAction } from "@/components/copro/steps/devis-request-actio
 import { DevisRecusAction } from "@/components/copro/steps/devis-recus-action";
 import { ContratSigneAction } from "@/components/copro/steps/contrat-signe-action";
 import { ResiliationAction } from "@/components/copro/steps/resiliation-action";
-import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl, saveSignedPdfUrl, toggleTermineTask, completeTask, reopenTask, setOdrPartenaire, updateEcheance, retypeDocumentAction } from "@/lib/actions";
+import { advanceStatut, abandonPipeline, toggleTask, addNote, deleteNote, editNote, goBackStatut, goToStatut, marquerRefus, marquerNonAssurable, updateCoproCaracteristiques, getPdfSignedUrl, saveSignedPdfUrl, toggleTermineTask, completeTask, reopenTask, setOdrPartenaire, updateEcheance, retypeDocumentAction, deleteDocumentAction } from "@/lib/actions";
 import { DueDatePicker } from "@/components/ui/due-date-picker";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -1021,9 +1021,17 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                   const meta = d.kind === "rs" ? { l: "RS", c: "#13762C", bg: "#EAF7EE", bd: "#B7E4C4" } : d.kind === "contrat_mri" ? { l: "Contrat MRI", c: "#4E49FC", bg: "#EEF0FF", bd: "#D9D9F5" } : { l: "Document", c: "#656576", bg: "#F1F1F4", bd: "#E8E8EC" };
                   const isOpen = docPreview?.id === d.id;
                   return (
-                    <div key={d.id} style={{ border: "1px solid #EFEFF3", borderRadius: 10, padding: 8, background: isOpen ? "#FBFBFE" : "transparent" }}>
+                    <div key={d.id} style={{ position: "relative", border: "1px solid #EFEFF3", borderRadius: 10, padding: 8, background: isOpen ? "#FBFBFE" : "transparent" }}>
+                      <button
+                        onClick={() => { if (confirm(`Supprimer « ${d.fileName} » ?\n\nLe fichier est retiré de Gufetto. La conversation Front n'est pas touchée : « ↻ Récupérer » pourra le réimporter.`)) startTransition(async () => { const r = await deleteDocumentAction(d.id, pipeline.id); if (r?.ok) { toast.success("Document supprimé"); if (docPreview?.id === d.id) setDocPreview(null); } else toast.error("Suppression impossible"); }); }}
+                        disabled={isPending}
+                        title="Supprimer ce document"
+                        aria-label="Supprimer ce document"
+                        className="absolute flex items-center justify-center rounded-md disabled:opacity-50"
+                        style={{ top: 6, right: 6, width: 20, height: 20, fontSize: 13, lineHeight: 1, color: "#B4243A", background: "#FDEEF0", border: "1px solid #F4C9CF" }}
+                      >×</button>
                       <div>
-                        <div className="text-xs font-medium truncate" style={{ color: "#26262C" }} title={d.fileName}>{d.fileName}</div>
+                        <div className="text-xs font-medium truncate" style={{ color: "#26262C", paddingRight: 22 }} title={d.fileName}>{d.fileName}</div>
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                           <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 999, color: meta.c, background: meta.bg, border: `1px solid ${meta.bd}` }}>{meta.l}{d.part ? ` · partie ${d.part}` : ""}</span>
                           {d.source === "front" && <span style={{ fontSize: 10, color: "#A2A1AF" }}>récupéré du courtier</span>}
