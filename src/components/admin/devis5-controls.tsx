@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Loader2, Download } from "lucide-react";
+import { Search, Loader2, Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 type Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; prime: number | null; courtier: string | null; gestionnaire: string | null; hasRs: boolean; hasContrat: boolean };
@@ -24,7 +24,6 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
   const [loading, setLoading] = useState(false);
   const [prog, setProg] = useState<{ done: number; total: number; created: number } | null>(null);
   const [showHist, setShowHist] = useState(false);
-  const [showNoDocs, setShowNoDocs] = useState(false);
   const rows = data.rows
     .filter((r) => !onlyMissing || !r.hasRs || !r.hasContrat)
     .filter((r) => !q.trim() || `${r.adresse ?? ""} ${r.nom} ${r.assureur ?? ""} ${r.courtier ?? ""} ${r.numeroContrat ?? ""} ${r.gestionnaire ?? ""}`.toLowerCase().includes(q.trim().toLowerCase()));
@@ -63,10 +62,6 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
         <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, color: "#B4690E", background: "#FDF0D5", border: "1px solid #F3D9A6" }}>⚠ {data.docsManquants} docs manquants</span>
         {docsStats && <span style={{ fontSize: 11, color: "#A2A1AF", alignSelf: "center" }}>· {docsStats.rs} RS / {docsStats.contrat} contrats stockés depuis le début</span>}
       </div>
-      <br/>
-      <button onClick={() => setOpen((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-        {open ? "▾" : "▸"} Parcourir les {data.total} dossiers
-      </button>
 
       {/* Chargement en masse des docs (RS + contrat MRI) depuis Front → Gufetto */}
       <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -85,6 +80,7 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
           {loading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Charger les docs de {Math.min(5, toLoad)} dossiers
         </button>
         {toLoad === 0 && <span style={{ fontSize: 12, color: "#13762C" }}>✓ Tous les documents disponibles sont chargés.</span>}
+        <button onClick={() => router.refresh()} title="Rafraîchir — met à jour les statuts RS/contrat après un ajout manuel" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#656576", background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}><RefreshCw size={15} /> Rafraîchir</button>
       </div>
       <p style={{ fontSize: 11.5, color: "#A2A1AF", margin: "6px 0 0" }}>
         Récupère automatiquement les RS et contrats MRI reçus des courtiers (Front) et les range dans chaque dossier. Idempotent : ne recharge pas ce qui est déjà là.
@@ -118,26 +114,11 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
         </div>
       )}
 
-      {noDocs.length > 0 && (
-        <div style={{ marginTop: 10 }}>
-          <button onClick={() => setShowNoDocs((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#B4690E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-            {showNoDocs ? "▾" : "▸"} Dossiers sans document trouvé ({noDocs.length}) — à traiter à la main
-          </button>
-          {showNoDocs && (
-            <div style={{ marginTop: 6 }}>
-              <p style={{ fontSize: 11, color: "#A2A1AF", margin: "0 0 6px" }}>Aucun RS/contrat trouvé sur Front (pas de réponse courtier, ou réponse sans pièce jointe). Exclus du chargement auto — récupère-les à la main sur la fiche (bouton « Récupérer ») une fois le courtier relancé.</p>
-              <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid #F3D9A6", borderRadius: 8, background: "#FFFBF3" }}>
-                {noDocs.map((r) => (
-                  <div key={r.pipelineId} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 10px", borderTop: "1px solid #F6ECD5", fontSize: 12 }}>
-                    <a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a>
-                    <span style={{ color: "#A2A1AF", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{new Date(r.checkedAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      <div style={{ marginTop: 10 }}>
+        <button onClick={() => setOpen((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          {open ? "▾" : "▸"} Parcourir les {data.total} dossiers ({data.docsManquants} avec docs manquants — à traiter à la main)
+        </button>
+      </div>
 
       {open && (
         <div style={{ marginTop: 8 }}>
