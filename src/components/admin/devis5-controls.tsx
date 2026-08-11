@@ -8,27 +8,23 @@ import { useRouter } from "next/navigation";
 import { Search, Loader2, Download } from "lucide-react";
 import { toast } from "sonner";
 
-type Row = { pipelineId: string; nom: string; adresse: string | null; statut: "devis_demandes" | "devis_recus"; assureur: string | null; numeroContrat: string | null; prime: number | null; courtier: string | null; mail: string | null };
-type Data = { total: number; demande: number; comparaison: number; rows: Row[] };
+type Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; prime: number | null; courtier: string | null; gestionnaire: string | null; hasRs: boolean; hasContrat: boolean };
+type Data = { total: number; prets: number; docsManquants: number; rows: Row[] };
 type DocHist = { loadedAt: string; dossiers: number; created: number };
 type NoDoc = { pipelineId: string; nom: string; adresse: string | null; checkedAt: string };
-
-const STATUT_LABEL: Record<Row["statut"], { label: string; bg: string; fg: string }> = {
-  devis_demandes: { label: "Demande de devis", bg: "#EAF3FE", fg: "#1F6FE0" },
-  devis_recus: { label: "Comparaison des devis", bg: "#F3EFFE", fg: "#6D3BEB" },
-};
 
 export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], docsStats }: { data: Data; toLoad: number; docHistory?: DocHist[]; noDocs?: NoDoc[]; docsStats?: { rs: number; contrat: number } }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [onlyMissing, setOnlyMissing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [prog, setProg] = useState<{ done: number; total: number; created: number } | null>(null);
   const [showHist, setShowHist] = useState(false);
   const [showNoDocs, setShowNoDocs] = useState(false);
-  const rows = q.trim()
-    ? data.rows.filter((r) => `${r.adresse ?? ""} ${r.nom} ${r.assureur ?? ""} ${r.courtier ?? ""} ${r.numeroContrat ?? ""}`.toLowerCase().includes(q.trim().toLowerCase()))
-    : data.rows;
+  const rows = data.rows
+    .filter((r) => !onlyMissing || !r.hasRs || !r.hasContrat)
+    .filter((r) => !q.trim() || `${r.adresse ?? ""} ${r.nom} ${r.assureur ?? ""} ${r.courtier ?? ""} ${r.numeroContrat ?? ""} ${r.gestionnaire ?? ""}`.toLowerCase().includes(q.trim().toLowerCase()));
 
   async function loadDocs(onlyFive: boolean) {
     if (toLoad === 0) return;
@@ -57,15 +53,14 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
         <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Dossiers concernés — chargement des documents</span>
       </div>
       <p style={{ fontSize: 13, color: "#656576", margin: "0 0 10px" }}>
-        <strong>{data.total}</strong> dossier{data.total > 1 ? "s" : ""} à traiter · {data.demande} en « Demande de devis » · {data.comparaison} en « Comparaison des devis » (hors comparaisons déjà lancées).
+        <strong>{data.total}</strong> dossier{data.total > 1 ? "s" : ""} en « Demande de devis » à traiter (hors devis déjà envoyés).
       </p>
-      {docsStats && (
-        <div style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, color: "#13762C", background: "#EAF7EE", border: "1px solid #B7E4C4" }}>📄 {docsStats.rs} RS récupérés</span>
-          <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5" }}>📑 {docsStats.contrat} contrats MRI récupérés</span>
-          <span style={{ fontSize: 11, color: "#A2A1AF", alignSelf: "center" }}>depuis le début</span>
-        </div>
-      )}
+      <div style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, color: "#13762C", background: "#EAF7EE", border: "1px solid #B7E4C4" }}>✓ {data.prets} prêts (RS + contrat)</span>
+        <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, color: "#B4690E", background: "#FDF0D5", border: "1px solid #F3D9A6" }}>⚠ {data.docsManquants} docs manquants</span>
+        {docsStats && <span style={{ fontSize: 11, color: "#A2A1AF", alignSelf: "center" }}>· {docsStats.rs} RS / {docsStats.contrat} contrats stockés depuis le début</span>}
+      </div>
+      <br/>
       <button onClick={() => setOpen((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
         {open ? "▾" : "▸"} Parcourir les {data.total} dossiers
       </button>
@@ -143,34 +138,41 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
 
       {open && (
         <div style={{ marginTop: 8 }}>
-          <div style={{ position: "relative", marginBottom: 8, maxWidth: 380 }}>
-            <Search size={14} style={{ position: "absolute", left: 10, top: 9, color: "#A2A1AF" }} />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher une copro / assureur / n° contrat…" style={{ width: "100%", fontSize: 12, padding: "7px 10px 7px 30px", border: "1px solid #E8E8EC", borderRadius: 8 }} />
+          <div style={{ display: "flex", gap: 10, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ position: "relative", flex: "1 1 300px", maxWidth: 380 }}>
+              <Search size={14} style={{ position: "absolute", left: 10, top: 9, color: "#A2A1AF" }} />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher une copro / assureur / gestionnaire…" style={{ width: "100%", fontSize: 12, padding: "7px 10px 7px 30px", border: "1px solid #E8E8EC", borderRadius: 8 }} />
+            </div>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#B4690E", cursor: "pointer" }}>
+              <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} /> Docs manquants seulement ({data.docsManquants})
+            </label>
           </div>
-          <div style={{ maxHeight: 380, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+          <div style={{ maxHeight: 420, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-                  {["Copropriété", "Étape", "Assureur actuel", "N° contrat", "Prime", "Courtier"].map((h) => (
+                  {["Copropriété", "RS", "Contrat", "Assureur actuel", "N° contrat", "Prime", "Courtier", "Gestionnaire"].map((h) => (
                     <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => {
-                  const s = STATUT_LABEL[r.statut];
+                  const chip = (ok: boolean) => <span style={{ fontSize: 11, fontWeight: 700, color: ok ? "#13762C" : "#CA1E12" }}>{ok ? "✓" : "✗"}</span>;
                   return (
-                    <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
-                      <td style={{ padding: "6px 10px", color: "#26262C" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
-                      <td style={{ padding: "6px 10px" }}><span style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 999, background: s.bg, color: s.fg }}>{s.label}</span></td>
+                    <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4", background: (!r.hasRs || !r.hasContrat) ? "#FFFBF3" : undefined }}>
+                      <td style={{ padding: "6px 10px", color: "#26262C" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
+                      <td style={{ padding: "6px 10px", textAlign: "center" }}>{chip(r.hasRs)}</td>
+                      <td style={{ padding: "6px 10px", textAlign: "center" }}>{chip(r.hasContrat)}</td>
                       <td style={{ padding: "6px 10px", color: "#656576" }}>{r.assureur || "—"}</td>
                       <td style={{ padding: "6px 10px", color: "#656576" }}>{r.numeroContrat || "—"}</td>
                       <td style={{ padding: "6px 10px", color: "#656576" }}>{r.prime != null ? `${r.prime.toLocaleString("fr-FR")} €` : "—"}</td>
                       <td style={{ padding: "6px 10px", color: "#656576" }}>{r.courtier || "—"}</td>
+                      <td style={{ padding: "6px 10px", color: "#656576", whiteSpace: "nowrap" }}>{r.gestionnaire || "—"}</td>
                     </tr>
                   );
                 })}
-                {rows.length === 0 && <tr><td colSpan={6} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>}
+                {rows.length === 0 && <tr><td colSpan={8} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>}
               </tbody>
             </table>
           </div>

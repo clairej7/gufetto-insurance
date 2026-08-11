@@ -14,39 +14,49 @@ export type Devis5Row = {
   pipelineId: string;
   nom: string;
   adresse: string | null;
-  statut: "devis_demandes" | "devis_recus";
   assureur: string | null;
   numeroContrat: string | null;
   prime: number | null;
   courtier: string | null;
-  mail: string | null;
+  gestionnaire: string | null;
+  hasRs: boolean;
+  hasContrat: boolean;
 };
 
-export type Devis5Data = { total: number; demande: number; comparaison: number; rows: Devis5Row[] };
+// prets = RS + contrat présents ; docsManquants = au moins un des deux absent.
+export type Devis5Data = { total: number; prets: number; docsManquants: number; rows: Devis5Row[] };
+
+function gestLabel(nom: string | null, email: string | null): string | null {
+  if (nom?.trim()) return nom.trim();
+  if (!email) return null;
+  return email.split("@")[0].split(/[._-]/).filter(Boolean).map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+}
 
 export async function getDevis5Volet1Data(): Promise<Devis5Data> {
+  // Périmètre = étape « Demande de devis » (devis_demandes) uniquement, hors devis
+  // déjà envoyé, hors exclus/archivés. La comparaison (devis_recus) est une étape à part.
   const ps = await prisma.insurancePipeline.findMany({
-    where: { statut: { in: ["devis_demandes", "devis_recus"] }, coproId: { notIn: await getExcludedCoproIds() }, copro: { archivedAt: null } },
+    where: {
+      statut: "devis_demandes", coproId: { notIn: await getExcludedCoproIds() }, copro: { archivedAt: null },
+      events: { none: { metadata: { path: ["devisType"], equals: "devis_sent" } } },
+    },
     select: {
-      id: true, statut: true,
-      copro: { select: { nom: true, adresse: true, assureurActuel: true, numeroContrat: true, primeActuelle: true, courtierActuel: true, contactCourtierEmail: true } },
-      events: { where: { metadata: { path: ["devisType"], equals: "devis_sent" } }, select: { id: true } },
+      id: true,
+      copro: { select: { nom: true, adresse: true, assureurActuel: true, numeroContrat: true, primeActuelle: true, courtierActuel: true, gestionnaireNom: true, gestionnaireEmail: true } },
+      documents: { select: { kind: true } },
     },
     orderBy: { copro: { dateEcheance: "asc" } },
   });
-  // Exclut les dossiers dont la demande/comparaison de devis est déjà lancée.
-  const rows: Devis5Row[] = ps
-    .filter((p) => p.events.length === 0)
-    .map((p) => ({
-      pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse,
-      statut: p.statut as Devis5Row["statut"],
-      assureur: p.copro.assureurActuel, numeroContrat: p.copro.numeroContrat, prime: p.copro.primeActuelle,
-      courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail,
-    }));
+  const rows: Devis5Row[] = ps.map((p) => ({
+    pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse,
+    assureur: p.copro.assureurActuel, numeroContrat: p.copro.numeroContrat, prime: p.copro.primeActuelle,
+    courtier: p.copro.courtierActuel, gestionnaire: gestLabel(p.copro.gestionnaireNom, p.copro.gestionnaireEmail),
+    hasRs: p.documents.some((d) => d.kind === "rs"), hasContrat: p.documents.some((d) => d.kind === "contrat_mri"),
+  }));
   return {
     total: rows.length,
-    demande: rows.filter((r) => r.statut === "devis_demandes").length,
-    comparaison: rows.filter((r) => r.statut === "devis_recus").length,
+    prets: rows.filter((r) => r.hasRs && r.hasContrat).length,
+    docsManquants: rows.filter((r) => !r.hasRs || !r.hasContrat).length,
     rows,
   };
 }
