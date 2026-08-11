@@ -14,8 +14,10 @@ type DocHist = { loadedAt: string; dossiers: number; created: number };
 type NoDoc = { pipelineId: string; nom: string; adresse: string | null; checkedAt: string };
 type SuiviRow = { pipelineId: string; nom: string; adresse: string | null; assureurs: string[]; sentAt: string; jours: number; convs: { assureur: string; url: string | null }[] };
 type Suivi = { envoyes: number; demandesTotal: number; recus: number; sansReponse10j: number; rows: SuiviRow[] };
+type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; passedAt: string };
+type Volet2 = { count: number; rows: Volet2Row[] };
 
-export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], docsStats, suivi }: { data: Data; toLoad: number; docHistory?: DocHist[]; noDocs?: NoDoc[]; docsStats?: { rs: number; contrat: number }; suivi?: Suivi }) {
+export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], docsStats, volet2, suivi }: { data: Data; toLoad: number; docHistory?: DocHist[]; noDocs?: NoDoc[]; docsStats?: { rs: number; contrat: number }; volet2?: Volet2; suivi?: Suivi }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [showSuivi, setShowSuivi] = useState(false);
@@ -24,6 +26,8 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
   const [loading, setLoading] = useState(false);
   const [prog, setProg] = useState<{ done: number; total: number; created: number } | null>(null);
   const [showHist, setShowHist] = useState(false);
+  const [passing, setPassing] = useState(false);
+  const [showV2, setShowV2] = useState(false);
   const rows = data.rows
     .filter((r) => !onlyMissing || !r.hasRs || !r.hasContrat)
     .filter((r) => !q.trim() || `${r.adresse ?? ""} ${r.nom} ${r.assureur ?? ""} ${r.courtier ?? ""} ${r.numeroContrat ?? ""} ${r.gestionnaire ?? ""}`.toLowerCase().includes(q.trim().toLowerCase()));
@@ -46,6 +50,18 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
       toast.success(`${created} document(s) chargé(s) sur ${processed} dossier(s).`);
       router.refresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec du chargement"); } finally { setLoading(false); }
+  }
+
+  async function passToVolet2() {
+    if (data.prets === 0) return;
+    setPassing(true);
+    try {
+      const res = await fetch("/api/devis5/pass-to-volet2", { method: "POST" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      const d = await res.json();
+      toast.success(`${d.passed} dossier(s) complet(s) passé(s) au volet 2.`);
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec du passage"); } finally { setPassing(false); }
   }
 
   return (
@@ -163,6 +179,18 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
         </div>
       )}
 
+      {/* Passage des dossiers complets (RS + contrat) au volet 2 */}
+      <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #F1F1F4", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <button
+          onClick={passToVolet2}
+          disabled={passing || data.prets === 0}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#fff", background: data.prets === 0 ? "#A9D9B8" : "#13762C", border: "none", borderRadius: 8, padding: "8px 14px", cursor: passing || data.prets === 0 ? "default" : "pointer" }}
+        >
+          {passing ? <Loader2 size={15} className="animate-spin" /> : <span style={{ fontSize: 15 }}>→</span>} Passer les {data.prets} dossiers complets au volet 2
+        </button>
+        <span style={{ fontSize: 11.5, color: "#A2A1AF" }}>Un dossier est complet quand il a le RS <strong>et</strong> le contrat MRI. Il quitte alors le volet 1.</span>
+      </div>
+
       {/* ── Volet 2 — placeholder ── */}
       <div style={{ marginTop: 22, paddingTop: 18, borderTop: "1px solid #E8E8EC" }}>
         <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -170,6 +198,35 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
           <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Récupération des infos nécessaires aux devis</span>
           <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>Contenu à venir</span>
         </div>
+        {volet2 && volet2.count > 0 && (
+          <div style={{ marginBottom: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, color: "#13762C", background: "#EAF7EE", border: "1px solid #B7E4C4" }}>✓ {volet2.count} dossier{volet2.count > 1 ? "s" : ""} en attente de traitement</span>
+            <button onClick={() => setShowV2((v) => !v)} style={{ marginLeft: 10, fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+              {showV2 ? "▾ masquer" : "▸ voir la liste"}
+            </button>
+            {showV2 && (
+              <div style={{ marginTop: 8, maxHeight: 320, overflowY: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                      {["Copropriété", "Passé au volet 2 le"].map((h) => (
+                        <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {volet2.rows.map((r) => (
+                      <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
+                        <td style={{ padding: "6px 10px" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
+                        <td style={{ padding: "6px 10px", color: "#656576", whiteSpace: "nowrap" }}>{new Date(r.passedAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
         <p style={{ fontSize: 12.5, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>À construire : rassembler les informations requises par les assureurs pour chiffrer (surface, période de construction, activités, sinistralité…).</p>
       </div>
 

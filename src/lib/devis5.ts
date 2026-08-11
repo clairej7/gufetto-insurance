@@ -38,7 +38,11 @@ export async function getDevis5Volet1Data(): Promise<Devis5Data> {
   const ps = await prisma.insurancePipeline.findMany({
     where: {
       statut: "devis_demandes", coproId: { notIn: await getExcludedCoproIds() }, copro: { archivedAt: null },
-      events: { none: { metadata: { path: ["devisType"], equals: "devis_sent" } } },
+      AND: [
+        { events: { none: { metadata: { path: ["devisType"], equals: "devis_sent" } } } },
+        // Dossiers déjà « passés au volet 2 » : sortent de la liste V1.
+        { events: { none: { metadata: { path: ["devis5Volet"], equals: 2 } } } },
+      ],
     },
     select: {
       id: true,
@@ -110,6 +114,71 @@ export async function loadDevis5Docs(offset: number, limit: number): Promise<{ t
   }
   const nextOffset = offset + slice.length;
   return { total: ids.length, processed: slice.length, nextOffset, done: nextOffset >= ids.length, created, withDocs };
+}
+
+// ─── Passage au Volet 2 ──────────────────────────────────────────────────────
+// Un dossier est « complet » = il a AU MOINS un doc RS ET un doc contrat MRI.
+// « Passer au volet 2 » pose un marqueur (event devis5Volet=2) : le dossier
+// quitte le Volet 1 et entre dans la file du Volet 2 (récupération des infos).
+
+// Nb de dossiers complets encore en Volet 1 (= éligibles au passage).
+export async function getDevis5CompletsCount(): Promise<number> {
+  const excl = await getExcludedCoproIds();
+  return prisma.insurancePipeline.count({
+    where: {
+      statut: "devis_demandes", coproId: { notIn: excl }, copro: { archivedAt: null },
+      AND: [
+        { events: { none: { metadata: { path: ["devisType"], equals: "devis_sent" } } } },
+        { events: { none: { metadata: { path: ["devis5Volet"], equals: 2 } } } },
+        { documents: { some: { kind: "rs" } } },
+        { documents: { some: { kind: "contrat_mri" } } },
+      ],
+    },
+  });
+}
+
+// Pose le marqueur sur tous les dossiers complets encore en Volet 1.
+export async function passDevis5CompletsToVolet2(actorEmail: string): Promise<{ passed: number }> {
+  const excl = await getExcludedCoproIds();
+  const ps = await prisma.insurancePipeline.findMany({
+    where: {
+      statut: "devis_demandes", coproId: { notIn: excl }, copro: { archivedAt: null },
+      AND: [
+        { events: { none: { metadata: { path: ["devisType"], equals: "devis_sent" } } } },
+        { events: { none: { metadata: { path: ["devis5Volet"], equals: 2 } } } },
+        { documents: { some: { kind: "rs" } } },
+        { documents: { some: { kind: "contrat_mri" } } },
+      ],
+    },
+    select: { id: true, copro: { select: { nom: true } } },
+  });
+  for (const p of ps) {
+    await prisma.pipelineEvent.create({
+      data: { pipelineId: p.id, type: "action_manuelle", description: `${p.copro.nom} — passage au volet 2 (RS + contrat complets)`, metadata: { devis5Volet: 2 }, createdBy: actorEmail },
+    });
+  }
+  return { passed: ps.length };
+}
+
+export type Devis5Volet2Row = { pipelineId: string; nom: string; adresse: string | null; passedAt: string };
+export type Devis5Volet2 = { count: number; rows: Devis5Volet2Row[] };
+
+// Dossiers déjà passés au Volet 2 (marqueur posé), pour affichage de la file.
+export async function getDevis5Volet2Data(): Promise<Devis5Volet2> {
+  const excl = await getExcludedCoproIds();
+  const ev = await prisma.pipelineEvent.findMany({
+    where: { metadata: { path: ["devis5Volet"], equals: 2 }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null } } },
+    select: { createdAt: true, pipelineId: true, pipeline: { select: { copro: { select: { nom: true, adresse: true } } } } },
+    orderBy: { createdAt: "desc" },
+  });
+  const seen = new Set<string>();
+  const rows: Devis5Volet2Row[] = [];
+  for (const e of ev) {
+    if (seen.has(e.pipelineId)) continue;
+    seen.add(e.pipelineId);
+    rows.push({ pipelineId: e.pipelineId, nom: e.pipeline?.copro.nom ?? "?", adresse: e.pipeline?.copro.adresse ?? null, passedAt: e.createdAt.toISOString() });
+  }
+  return { count: rows.length, rows };
 }
 
 export async function logDevis5DocLoad(actorEmail: string, dossiers: number, created: number): Promise<void> {
