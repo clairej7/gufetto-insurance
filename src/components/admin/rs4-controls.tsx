@@ -9,7 +9,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ListChecks, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Send, Mail, Check, Search, PauseCircle, Archive, Radar } from "lucide-react";
+import { ListChecks, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Send, Mail, Check, Search, PauseCircle, Archive, Radar, Inbox } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -114,6 +114,25 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
   const [showDet, setShowDet] = useState(false);
   const [detSearch, setDetSearch] = useState("");
   const [routing, setRouting] = useState<string | null>(null);
+  const [recovering, setRecovering] = useState(false);
+  const [recoverProg, setRecoverProg] = useState<{ done: number; total: number; moved: number } | null>(null);
+  async function recoverInbox() {
+    setRecovering(true);
+    setRecoverProg({ done: 0, total: 0, moved: 0 });
+    let offset = 0, moved = 0;
+    try {
+      for (;;) {
+        const res = await fetch("/api/rs4/recover-inbox", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offset, limit: 40 }) });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+        const d = await res.json();
+        offset = d.nextOffset; moved += d.moved;
+        setRecoverProg({ done: Math.min(offset, d.total), total: d.total, moved });
+        if (d.done) break;
+      }
+      toast.success(moved > 0 ? `${moved} conversation(s) récupérée(s) dans l'inbox Gufetto.` : "Aucune conversation hors Gufetto à récupérer.");
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setRecovering(false); }
+  }
   const [showV5, setShowV5] = useState(false);
   const [v5Search, setV5Search] = useState("");
   // Volet 1
@@ -561,6 +580,9 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
           {detector.lastScanAt && <span style={{ color: "#A2A1AF" }}> · dernier scan {new Date(detector.lastScanAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>}
         </p>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <Button onClick={recoverInbox} disabled={recovering} variant="outline" size="sm" title="Re-classer dans l'inbox Gufetto les RS déplacées ailleurs (CSM) par la règle Matera">
+            {recovering ? <Loader2 size={15} className="animate-spin" /> : <Inbox size={15} />} Récupérer les conversations des inbox hors Gufetto
+          </Button>
           {scanButton}
           {detector.sansReponse > 0 && (
             <Button onClick={moveAllNoReply} disabled={routing !== null} variant="outline" size="sm">
@@ -568,6 +590,15 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
             </Button>
           )}
         </div>
+        {recovering && recoverProg && (
+          <div style={{ margin: "10px 0 0", maxWidth: 460 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#656576", marginBottom: 4 }}>
+              <span>Récupération des conversations… <strong style={{ color: "#13762C" }}>{recoverProg.moved}</strong> re-classée(s)</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{recoverProg.done} / {recoverProg.total}</span>
+            </div>
+            <div style={{ height: 8, borderRadius: 999, background: "#E8E8EC", overflow: "hidden" }}><div style={{ width: `${recoverProg.total ? Math.round((recoverProg.done / recoverProg.total) * 100) : 0}%`, height: "100%", background: "#13762C", transition: "width 200ms" }} /></div>
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: "#F5F5FF", border: "1px dashed #D9D9F5", borderRadius: 8, padding: "8px 12px", margin: "10px 0 0", maxWidth: 560 }}>
           <span style={{ fontSize: 14, lineHeight: "18px" }}>🌙</span>
           <span style={{ fontSize: 12, color: "#5A57B0" }}>

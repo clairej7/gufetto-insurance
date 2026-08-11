@@ -16,6 +16,7 @@ const FRONT_API_URL = "https://api2.frontapp.com";
 const FRONT_TOKEN = process.env.FRONT_API_TOKEN;
 const FRONT_CHANNEL_ID = process.env.FRONT_CHANNEL_ID;
 const FRONT_AUTHOR_EMAIL = process.env.FRONT_AUTHOR_EMAIL || "bonjour@matera.eu";
+const GUFETTO_INBOX = process.env.FRONT_GUFETTO_INBOX || "inb_601dy"; // « Assurance Pro - Gufetto »
 
 // Étapes de relance du Volet 3 : n° de relance + délai (jours depuis l'envoi initial).
 export const RELANCE_STAGES = [
@@ -520,6 +521,30 @@ async function archiveConversationsFor(pipelineId: string): Promise<number> {
     if (r.ok) n++;
   }
   return n;
+}
+
+// Récupère les conversations RS qui ont été déplacées HORS de l'inbox Gufetto
+// (règle Matera « projet Duomo » → CSM) et les re-classe dans l'inbox Gufetto.
+// Par lots. Ne touche que celles qui ne sont PAS déjà dans Gufetto.
+export async function recoverEscapedConversations(offset: number, limit: number): Promise<{ total: number; processed: number; nextOffset: number; done: boolean; moved: number; errors: number }> {
+  if (!FRONT_TOKEN) return { total: 0, processed: 0, nextOffset: offset, done: true, moved: 0, errors: 0 };
+  // Liste stable des conversationId de toutes nos demandes de RS (envois + relances).
+  const ev = await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { createdAt: true, metadata: true }, orderBy: { createdAt: "asc" } });
+  const seen = new Set<string>(); const cids: string[] = [];
+  for (const e of ev) { const cid = (e.metadata as { conversationId?: string } | null)?.conversationId; if (cid && !seen.has(cid)) { seen.add(cid); cids.push(cid); } }
+  const slice = cids.slice(offset, offset + limit);
+  let moved = 0, errors = 0;
+  for (const cid of slice) {
+    const r = await fetch(`${FRONT_API_URL}/conversations/${cid}/inboxes`, { headers: { Authorization: `Bearer ${FRONT_TOKEN}` } });
+    if (!r.ok) { errors++; continue; }
+    const results = ((await r.json())._results ?? []) as { id: string; name: string }[];
+    const inGufetto = results.some((x) => x.id === GUFETTO_INBOX || /gufetto/i.test(x.name));
+    if (inGufetto) continue;
+    const mv = await fetch(`${FRONT_API_URL}/conversations/${cid}`, { method: "PATCH", headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify({ inbox_id: GUFETTO_INBOX }) });
+    if (mv.ok) moved++; else errors++;
+  }
+  const nextOffset = offset + slice.length;
+  return { total: cids.length, processed: slice.length, nextOffset, done: nextOffset >= cids.length, moved, errors };
 }
 
 // Aiguillage depuis le détecteur — chaque action = un clic utilisateur.
