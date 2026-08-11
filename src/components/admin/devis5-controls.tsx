@@ -12,8 +12,17 @@ type Row = { pipelineId: string; nom: string; adresse: string | null; assureur: 
 type Data = { total: number; prets: number; docsManquants: number; rows: Row[] };
 type DocHist = { loadedAt: string; dossiers: number; created: number };
 type NoDoc = { pipelineId: string; nom: string; adresse: string | null; checkedAt: string };
-type SuiviRow = { pipelineId: string; nom: string; adresse: string | null; assureurs: string[]; sentAt: string; jours: number; convs: { assureur: string; url: string | null }[] };
-type Suivi = { envoyes: number; demandesTotal: number; recus: number; sansReponse10j: number; rows: SuiviRow[] };
+type DevisReplyKind = "devis_obtenu" | "traiter_manuel" | "pas_de_reponse" | "non_scanne";
+type Demande = { eventId: string; pipelineId: string; nom: string; adresse: string | null; assureur: string; to: string | null; sentAt: string; jours: number; convUrl: string | null; scanEligible: boolean; replyKind: DevisReplyKind; replyConfirmed: boolean; replySnippet: string | null; scanned: boolean };
+type Suivi = { envoyes: number; demandesTotal: number; devisObtenus: number; aTraiter: number; pasReponse: number; sansReponse10j: number; lastScanAt: string | null; demandes: Demande[] };
+const AXA_ADDR = "achille.leboeuf@axa.fr";
+const MILA_ADDR = "souscription@mila.fr";
+const DR_META: Record<DevisReplyKind, { label: string; color: string; bg: string }> = {
+  devis_obtenu: { label: "Devis obtenu", color: "#13762C", bg: "#EAF7EE" },
+  traiter_manuel: { label: "À traiter manuellement", color: "#B4690E", bg: "#FDF0D5" },
+  pas_de_reponse: { label: "Pas de réponse", color: "#8A1F2E", bg: "#FDECEA" },
+  non_scanne: { label: "Non scanné", color: "#A2A1AF", bg: "#F7F7F8" },
+};
 type FieldKey = "prime" | "surface" | "periode" | "nature" | "activites" | "caracteristiques" | "proportion" | "pj";
 type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; passedAt: string; present: Record<FieldKey, boolean>; nb: number };
 type Volet2 = { count: number; complets: number; taux: number; toFill: number; rows: Volet2Row[] };
@@ -26,6 +35,36 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [showSuivi, setShowSuivi] = useState(false);
+  const [scanningR, setScanningR] = useState(false);
+  const [scanProg, setScanProg] = useState<{ done: number; total: number } | null>(null);
+
+  async function scanReplies() {
+    if (!suivi) return;
+    setScanningR(true);
+    setScanProg({ done: 0, total: 0 });
+    let offset = 0, scanned = 0;
+    try {
+      for (;;) {
+        const res = await fetch("/api/devis5/scan-replies", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offset, limit: 20 }) });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+        const d = await res.json();
+        offset = d.nextOffset; scanned += d.scanned;
+        setScanProg({ done: scanned, total: d.total });
+        if (d.done) break;
+      }
+      toast.success(`Scan terminé — ${scanned} demande(s) analysée(s).`);
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec du scan"); } finally { setScanningR(false); }
+  }
+
+  async function confirmReply(eventId: string, kind: DevisReplyKind) {
+    try {
+      const res = await fetch("/api/devis5/confirm-reply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventId, kind }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      toast.success("Statut confirmé.");
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); }
+  }
   const [q, setQ] = useState("");
   const [onlyMissing, setOnlyMissing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -330,36 +369,62 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
           <>
             <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginBottom: 12 }}>
               <div><div style={{ fontSize: 24, fontWeight: 800, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.envoyes}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>dossiers avec devis envoyé</div></div>
-              <div><div style={{ fontSize: 24, fontWeight: 800, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.demandesTotal}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>demandes envoyées (AXA + Mila)</div></div>
-              <div><div style={{ fontSize: 24, fontWeight: 800, color: "#A2A1AF", lineHeight: 1 }}>—</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>devis reçus <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>à venir</span></div></div>
-              <div><div style={{ fontSize: 24, fontWeight: 800, color: suivi.sansReponse10j > 0 ? "#CA1E12" : "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.sansReponse10j}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>sans réponse depuis ≥ 10 j</div></div>
+              <div><div style={{ fontSize: 24, fontWeight: 800, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.demandesTotal}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>demandes (AXA + Mila)</div></div>
+              <div><div style={{ fontSize: 24, fontWeight: 800, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.devisObtenus}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>devis obtenus</div></div>
+              <div><div style={{ fontSize: 24, fontWeight: 800, color: suivi.aTraiter > 0 ? "#B4690E" : "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.aTraiter}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>à traiter manuellement</div></div>
+              <div><div style={{ fontSize: 24, fontWeight: 800, color: suivi.sansReponse10j > 0 ? "#CA1E12" : "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.sansReponse10j}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>sans réponse ≥ 10 j</div></div>
             </div>
-            <button onClick={() => setShowSuivi((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-              {showSuivi ? "▾" : "▸"} Détail des {suivi.rows.length} dossiers
-            </button>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+              <button onClick={scanReplies} disabled={scanningR}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#fff", background: "#4E49FC", border: "none", borderRadius: 8, padding: "8px 14px", cursor: scanningR ? "default" : "pointer" }}>
+                {scanningR ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Détecter les réponses (AXA / Mila)
+              </button>
+              <button onClick={() => setShowSuivi((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>{showSuivi ? "▾ masquer" : `▸ détail des ${suivi.demandesTotal} demandes`}</button>
+              {suivi.lastScanAt && <span style={{ fontSize: 11.5, color: "#A2A1AF" }}>dernier scan {new Date(suivi.lastScanAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>}
+            </div>
+            {scanningR && scanProg && (
+              <div style={{ margin: "2px 0 10px", maxWidth: 420 }}>
+                <div style={{ fontSize: 12, color: "#656576", marginBottom: 4 }}>Scan Front… {scanProg.done}{scanProg.total ? ` / ${scanProg.total}` : ""}</div>
+                <div style={{ height: 8, borderRadius: 999, background: "#E8E8EC", overflow: "hidden" }}><div style={{ width: `${scanProg.total ? Math.round((scanProg.done / scanProg.total) * 100) : 10}%`, height: "100%", background: "#4E49FC", transition: "width 200ms" }} /></div>
+              </div>
+            )}
+            <p style={{ fontSize: 11.5, color: "#A2A1AF", margin: "0 0 8px" }}>Le détecteur ne lit que les conversations avec <strong>{AXA_ADDR}</strong> (AXA) et <strong>{MILA_ADDR}</strong> (Mila). Le statut proposé est modifiable/confirmable au menu déroulant.</p>
+
             {showSuivi && (
-              <div style={{ marginTop: 8, maxHeight: 420, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+              <div style={{ maxHeight: 460, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
                     <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-                      {["Copropriété", "Envoyé le", "Depuis", "Assureurs", "Conversations Front"].map((h) => (
-                        <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
+                      {["Copropriété", "Assureur", "Envoyé", "Depuis", "Statut", "Front"].map((h) => (
+                        <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC", whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {suivi.rows.map((r) => (
-                      <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4", background: r.jours >= 10 ? "#FDECEA" : undefined }}>
-                        <td style={{ padding: "6px 10px" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
-                        <td style={{ padding: "6px 10px", color: "#656576", whiteSpace: "nowrap" }}>{new Date(r.sentAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
-                        <td style={{ padding: "6px 10px", fontWeight: 600, color: r.jours >= 10 ? "#CA1E12" : "#656576" }}>J+{r.jours}</td>
-                        <td style={{ padding: "6px 10px", color: "#656576" }}>{r.assureurs.join(", ")}</td>
+                    {suivi.demandes.map((d) => (
+                      <tr key={d.eventId} style={{ borderTop: "1px solid #F1F1F4", background: d.replyKind === "devis_obtenu" ? "#F4FBF6" : (d.replyKind === "pas_de_reponse" && d.jours >= 10) ? "#FDECEA" : undefined }}>
+                        <td style={{ padding: "6px 10px" }}><a href={`/pipeline/${d.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none" }}>{d.adresse || d.nom}</a></td>
+                        <td style={{ padding: "6px 10px", color: "#656576", whiteSpace: "nowrap" }}>{d.assureur}</td>
+                        <td style={{ padding: "6px 10px", color: "#656576", whiteSpace: "nowrap" }}>{new Date(d.sentAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" })}</td>
+                        <td style={{ padding: "6px 10px", fontWeight: 600, color: d.jours >= 10 ? "#CA1E12" : "#656576" }}>J+{d.jours}</td>
                         <td style={{ padding: "6px 10px" }}>
-                          {r.convs.filter((c) => c.url).map((c, i) => (
-                            <a key={i} href={c.url!} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none", marginRight: 8 }}>{c.assureur} ↗</a>
-                          ))}
-                          {r.convs.every((c) => !c.url) && <span style={{ color: "#A2A1AF" }}>—</span>}
+                          {d.scanEligible ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                              <select value={d.replyKind === "non_scanne" ? "" : d.replyKind}
+                                onChange={(e) => confirmReply(d.eventId, e.target.value as DevisReplyKind)}
+                                title={d.replySnippet ?? undefined}
+                                style={{ fontSize: 11.5, fontWeight: 600, border: `1px solid ${DR_META[d.replyKind].bg}`, borderRadius: 8, padding: "4px 6px", background: DR_META[d.replyKind].bg, color: DR_META[d.replyKind].color, cursor: "pointer" }}>
+                                <option value="" disabled>— à définir —</option>
+                                <option value="devis_obtenu">Devis obtenu</option>
+                                <option value="traiter_manuel">À traiter manuellement</option>
+                                <option value="pas_de_reponse">Pas de réponse</option>
+                              </select>
+                              {d.replyConfirmed && <span title="Confirmé à la main" style={{ fontSize: 11, color: "#13762C" }}>✓</span>}
+                            </div>
+                          ) : <span style={{ fontSize: 11, color: "#A2A1AF" }} title={d.to ?? undefined}>hors périmètre</span>}
                         </td>
+                        <td style={{ padding: "6px 10px" }}>{d.convUrl ? <a href={d.convUrl} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none" }}>↗</a> : <span style={{ color: "#A2A1AF" }}>—</span>}</td>
                       </tr>
                     ))}
                   </tbody>
