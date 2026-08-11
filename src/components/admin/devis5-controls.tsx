@@ -80,7 +80,6 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
           {loading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Charger les docs de {Math.min(5, toLoad)} dossiers
         </button>
         {toLoad === 0 && <span style={{ fontSize: 12, color: "#13762C" }}>✓ Tous les documents disponibles sont chargés.</span>}
-        <button onClick={() => router.refresh()} title="Rafraîchir — met à jour les statuts RS/contrat après un ajout manuel" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#656576", background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}><RefreshCw size={15} /> Rafraîchir</button>
       </div>
       <p style={{ fontSize: 11.5, color: "#A2A1AF", margin: "6px 0 0" }}>
         Récupère automatiquement les RS et contrats MRI reçus des courtiers (Front) et les range dans chaque dossier. Idempotent : ne recharge pas ce qui est déjà là.
@@ -114,10 +113,11 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
         </div>
       )}
 
-      <div style={{ marginTop: 10 }}>
+      <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <button onClick={() => setOpen((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
           {open ? "▾" : "▸"} Parcourir les {data.total} dossiers ({data.docsManquants} avec docs manquants — à traiter à la main)
         </button>
+        <button onClick={() => router.refresh()} title="Rafraîchir — met à jour les statuts RS/contrat (prêts / manquants)" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: "#656576", background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "4px 10px", cursor: "pointer" }}><RefreshCw size={13} /> Rafraîchir</button>
       </div>
 
       {open && (
