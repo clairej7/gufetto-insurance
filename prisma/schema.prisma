@@ -121,6 +121,10 @@ model Copro {
   // Contact Conseil Syndical
   contactCsEmail String?
   contactCsNom   String?
+  // Membres du conseil syndical récupérés de Matera (role=council) : JSON
+  // [{ name, email }]. Sert au mail de proposition en masse (Auto 6 volet 2).
+  csMembersData     String?   @db.Text
+  csMembersSyncedAt DateTime?
 
   // Caractéristiques de l'immeuble
   surfaceDeveloppee           Float?

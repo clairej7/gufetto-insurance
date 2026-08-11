@@ -8,8 +8,10 @@ import { toast } from "sonner";
 
 type V1Row = { pipelineId: string; nom: string; adresse: string | null; gestionnaire: string | null; hasContrat: boolean; hasDevis: boolean; nbDevis: number; primeVerifiee: boolean; comparaisonFaite: boolean; pret: boolean };
 type V1 = { total: number; prets: number; rows: V1Row[] };
-type V2Row = { pipelineId: string; nom: string; adresse: string | null; passedAt: string };
-type V2 = { count: number; rows: V2Row[] };
+type CsMember = { name: string; email: string };
+type V2Row = { pipelineId: string; nom: string; adresse: string | null; passedAt: string; buildingId: string | null; csMembers: CsMember[]; csMembersSyncedAt: string | null; contactCsEmail: string | null; recoAssureur: string | null; recoPrime: number | null; primeActuelle: number | null; economie: number | null };
+type V2 = { count: number; avecMembres: number; materaConfigure: boolean; rows: V2Row[] };
+const fmtE = (n: number | null) => (n == null ? "—" : `${n.toLocaleString("fr-FR")} €`);
 type SuiviRow = { pipelineId: string; nom: string; adresse: string | null; sentAt: string; jours: number; to: string | null; convUrl: string | null };
 type Suivi = { envoyees: number; recus: number; sansReponse10j: number; rows: SuiviRow[] };
 
@@ -24,6 +26,20 @@ export function Devis6Controls({ volet1, volet2, suivi }: { volet1: V1; volet2?:
   const [passing, setPassing] = useState(false);
   const [showV2, setShowV2] = useState(false);
   const [showSuivi, setShowSuivi] = useState(false);
+  const [fetchingCs, setFetchingCs] = useState(false);
+
+  async function fetchCsMembers() {
+    if (!volet2 || volet2.count === 0) return;
+    setFetchingCs(true);
+    try {
+      const res = await fetch("/api/devis6/fetch-cs-members", { method: "POST" });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error ?? "Erreur");
+      if (d.materaConfigure === false) toast.error(d.error ?? "Accès Matera non configuré");
+      else toast.success(`${d.withMembers}/${d.processed} dossiers avec membres CS (${d.totalMembers} mails).`);
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setFetchingCs(false); }
+  }
 
   const rows = volet1.rows
     .filter((r) => !onlyReady || r.pret)
@@ -111,33 +127,71 @@ export function Devis6Controls({ volet1, volet2, suivi }: { volet1: V1; volet2?:
         <span style={{ fontSize: 11.5, color: "#A2A1AF" }}>Elles quittent le volet 1 et entrent dans la file d&apos;envoi des mails au CS.</span>
       </div>
 
-      {/* ── VOLET 2 ── */}
+      {/* ── VOLET 2 — Prévisu & envoi mail CS ── */}
       <div style={{ marginTop: 22, paddingTop: 18, borderTop: "1px solid #E8E8EC" }}>
         <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span style={PILL}>VOLET 2</span>
           <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Prévisualiser &amp; envoyer les mails au CS</span>
-          <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>Contenu à venir</span>
         </div>
-        {volet2 && volet2.count > 0 && (
-          <div style={{ marginBottom: 10 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, color: "#13762C", background: "#EAF7EE", border: "1px solid #B7E4C4" }}>✓ {volet2.count} dossier{volet2.count > 1 ? "s" : ""} en attente d&apos;envoi</span>
-            <button onClick={() => setShowV2((v) => !v)} style={{ marginLeft: 10, fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>{showV2 ? "▾ masquer" : "▸ voir la liste"}</button>
-            {showV2 && (
-              <div style={{ marginTop: 8, maxHeight: 320, overflowY: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                  <thead><tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>{["Copropriété", "Passé le"].map((h) => <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>)}</tr></thead>
-                  <tbody>{volet2.rows.map((r) => (
-                    <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
-                      <td style={{ padding: "6px 10px" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
-                      <td style={{ padding: "6px 10px", color: "#656576", whiteSpace: "nowrap" }}>{new Date(r.passedAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
-                    </tr>
-                  ))}</tbody>
-                </table>
+        {!volet2 || volet2.count === 0 ? (
+          <p style={{ fontSize: 12.5, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun dossier dans le volet 2. Utilise « → Passer les comparaisons prêtes au volet 2 » ci-dessus.</p>
+        ) : (
+          <>
+            <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginBottom: 12, alignItems: "flex-end" }}>
+              <div><div style={{ fontSize: 24, fontWeight: 800, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{volet2.count}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>en attente d&apos;envoi</div></div>
+              <div><div style={{ fontSize: 24, fontWeight: 800, color: volet2.avecMembres === volet2.count ? "#13762C" : "#B4690E", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{volet2.avecMembres}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>avec membres CS récupérés</div></div>
+            </div>
+
+            {!volet2.materaConfigure && (
+              <div style={{ margin: "0 0 10px", padding: "8px 12px", borderRadius: 8, background: "#FDF0D5", border: "1px solid #F3D9A6", fontSize: 12, color: "#8A5A00" }}>
+                ⚠️ Accès Matera non configuré (<code>MATERA_API_TOKEN</code> manquant côté serveur) → la récupération des membres du CS est indisponible tant que le token n&apos;est pas ajouté. Le reste de l&apos;écran fonctionne.
               </div>
             )}
-          </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+              <button onClick={fetchCsMembers} disabled={fetchingCs || !volet2.materaConfigure}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#fff", background: !volet2.materaConfigure ? "#B7B6E6" : "#4E49FC", border: "none", borderRadius: 8, padding: "8px 14px", cursor: fetchingCs || !volet2.materaConfigure ? "default" : "pointer" }}>
+                {fetchingCs ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Récupérer les membres du CS (Matera)
+              </button>
+              <button onClick={() => setShowV2((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>{showV2 ? "▾ masquer le détail" : "▸ voir le détail par dossier"}</button>
+            </div>
+
+            <div style={{ padding: "8px 12px", borderRadius: 8, background: "#EEF0FF", border: "1px solid #D9D9F5", fontSize: 12, color: "#3A37B8", marginBottom: 10 }}>
+              ℹ️ L&apos;<strong>envoi</strong> du mail au CS (texte de recommandation personnalisé) sera activé avec le <strong>crédit Anthropic</strong>. Ici : destinataires (membres du CS) + résumé de la proposition, prêts à l&apos;emploi.
+            </div>
+
+            {showV2 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {volet2.rows.map((r) => (
+                  <div key={r.pipelineId} style={{ border: "1px solid #E8E8EC", borderRadius: 10, padding: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
+                      <a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 600, color: "#4E49FC", textDecoration: "none" }}>{r.adresse || r.nom}</a>
+                      <span style={{ fontSize: 12, color: "#656576" }}>
+                        Proposition : <strong>{r.recoAssureur ?? "—"}</strong> · {fmtE(r.primeActuelle)} → <strong>{fmtE(r.recoPrime)}</strong>
+                        {r.economie != null && <span style={{ color: r.economie > 0 ? "#13762C" : "#CA1E12", fontWeight: 700 }}> ({r.economie > 0 ? "-" : "+"}{fmtE(Math.abs(r.economie))}/an)</span>}
+                      </span>
+                    </div>
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "#A2A1AF", marginBottom: 4 }}>Destinataires — membres du conseil syndical {r.csMembersSyncedAt ? "" : "(non récupérés)"}</div>
+                      {r.csMembers.length > 0 ? (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {r.csMembers.map((m, i) => (
+                            <span key={i} style={{ fontSize: 11.5, padding: "2px 8px", borderRadius: 999, background: "#EAF7EE", border: "1px solid #B7E4C4", color: "#13762C" }} title={m.email}>{m.name || m.email} · {m.email}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 12, color: "#A2A1AF" }}>{r.contactCsEmail ? `Contact CS connu : ${r.contactCsEmail}` : "Aucun destinataire — lance « Récupérer les membres du CS »."}</span>
+                      )}
+                    </div>
+                    <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+                      <button disabled title="Disponible avec le crédit Anthropic (génération de la reco)" style={{ fontSize: 12, fontWeight: 600, color: "#A2A1AF", background: "#F1F1F4", border: "1px solid #E8E8EC", borderRadius: 8, padding: "6px 12px", cursor: "not-allowed" }}>Prévisualiser &amp; envoyer (crédits requis)</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
-        <p style={{ fontSize: 12.5, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>À construire : encart de prévisualisation du mail au CS + récupération des mails perso des membres du Conseil Syndical + envoi en masse sur validation.</p>
       </div>
 
       {/* ── VOLET 3 — Suivi des propositions ── */}
