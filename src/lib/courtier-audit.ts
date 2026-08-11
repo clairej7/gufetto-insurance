@@ -266,6 +266,8 @@ export function prepareSendMails(courtierName: string | null, mailField: string 
   if (all.length && !mails.length) return { mails: [], hold: true, reason: "adresse interne Matera (CS/salarié) — pas un courtier" };
   if (!mails.length) return { mails: [], hold: true, reason: "pas de mail exploitable" };
   const dom = (m: string) => domainOf(m.toLowerCase());
+  // Plafond : on n'envoie jamais à plus de 2 contacts d'un même cabinet (3+ = trop).
+  const cap = (m: string[]) => m.slice(0, 2);
   const res = resolveCourtier(courtierName, idx);
   const ref = res.kind === "courtier" ? res.ref : null;
 
@@ -274,18 +276,18 @@ export function prepareSendMails(courtierName: string | null, mailField: string 
     const aReal = [...doms].some((d) => !GENERIC_DOM.has(d));
     if (aReal) {
       const kept = mails.filter((m) => doms.has(dom(m)));
-      if (kept.length) return { mails: kept, hold: false, reason: "" }; // ne garder que le domaine du courtier
+      if (kept.length) return { mails: cap(kept), hold: false, reason: "" }; // ne garder que le domaine du courtier (max 2)
       if (mails.some((m) => GENERIC_DOM.has(dom(m)))) return { mails: [], hold: true, reason: "mail perso pour un courtier connu" };
       return { mails: [], hold: true, reason: `aucun mail au domaine de ${ref.nom}` };
     }
-    return { mails, hold: false, reason: "" }; // courtier dont le mail de base est générique
+    return { mails: cap(mails), hold: false, reason: "" }; // courtier dont le mail de base est générique
   }
 
   // Hors base : heuristique nom↔domaine.
   const nameTokens = tokensOf(normNom(courtierName ?? ""));
   const byName = mails.filter((m) => nameMatchesDomain(nameTokens, dom(m)));
-  if (byName.length && byName.length < mails.length) return { mails: byName, hold: false, reason: "" };
-  if (byName.length) return { mails: byName, hold: false, reason: "" };
+  if (byName.length && byName.length < mails.length) return { mails: cap(byName), hold: false, reason: "" };
+  if (byName.length) return { mails: cap(byName), hold: false, reason: "" };
   const nonGeneric = new Set(mails.map(dom).filter((d) => !GENERIC_DOM.has(d)));
   if (nonGeneric.size >= 2) return { mails: [], hold: true, reason: "multi-cabinet ambigu (plusieurs domaines, aucun ne matche le courtier)" };
   // GARDE-FOU perso : hors base, aucun mail ne matche le courtier, et il ne reste
@@ -293,7 +295,7 @@ export function prepareSendMails(courtierName: string | null, mailField: string 
   // identifié est le plus souvent un individu / membre du CS, pas un courtier
   // (cf. incident audrey.thory@yahoo). Faux négatif (ne pas envoyer) assumé.
   if (mails.every((m) => GENERIC_DOM.has(dom(m)))) return { mails: [], hold: true, reason: "mail perso/générique seul, courtier non identifié — à vérifier" };
-  return { mails, hold: false, reason: "" };
+  return { mails: cap(mails), hold: false, reason: "" };
 }
 
 export function classify(
