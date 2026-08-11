@@ -201,7 +201,9 @@ export type Devis5Suivi = { envoyes: number; demandesTotal: number; recus: numbe
 export async function getDevis5Volet4Data(nowMs: number): Promise<Devis5Suivi> {
   const excl = await getExcludedCoproIds();
   const ev = await prisma.pipelineEvent.findMany({
-    where: { metadata: { path: ["devisType"], equals: "devis_sent" }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null } } },
+    // Exclut les dossiers repartis en ODR : l'Auto 5 ne suit jamais les ODR,
+    // même s'ils gardent un ancien event « devis envoyé ».
+    where: { metadata: { path: ["devisType"], equals: "devis_sent" }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null }, statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] } } },
     select: { createdAt: true, metadata: true, pipelineId: true, pipeline: { select: { copro: { select: { nom: true, adresse: true } } } } },
     orderBy: { createdAt: "asc" },
   });
