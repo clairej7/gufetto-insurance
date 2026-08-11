@@ -868,17 +868,27 @@ export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, us
           Pièces jointes
         </Label>
         <div className="space-y-1.5">
+          {includedDocs.map((d) => (
+            <div key={d.id} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{ background: "#F0EFFF" }}>
+              <FileText className="h-4 w-4 flex-shrink-0" style={{ color: "#4E49FC" }} />
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, color: d.kind === "rs" ? "#13762C" : "#4E49FC", background: d.kind === "rs" ? "#EAF7EE" : "#EEF0FF", border: `1px solid ${d.kind === "rs" ? "#B7E4C4" : "#D9D9F5"}` }}>{d.kind === "rs" ? "RS" : d.kind === "contrat_mri" ? "Contrat MRI" : "Doc"}{d.part ? ` p.${d.part}` : ""}</span>
+              <span className="truncate" style={{ color: "#4E49FC" }}>{storedFiles[d.id]?.name}</span>
+            </div>
+          ))}
           {contratFile && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{ background: "#F0EFFF" }}>
               <FileText className="h-4 w-4 flex-shrink-0" style={{ color: "#4E49FC" }} />
-              <span style={{ color: "#4E49FC" }}>{contratFile.name}</span>
+              <span style={{ color: "#4E49FC" }}>{contratFile.name} <span style={{ color: "#A2A1AF", fontSize: 11 }}>(ajout manuel)</span></span>
             </div>
           )}
           {rsFile && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{ background: "#F0EFFF" }}>
               <FileText className="h-4 w-4 flex-shrink-0" style={{ color: "#4E49FC" }} />
-              <span style={{ color: "#4E49FC" }}>{rsFile.name}</span>
+              <span style={{ color: "#4E49FC" }}>{rsFile.name} <span style={{ color: "#A2A1AF", fontSize: 11 }}>(ajout manuel)</span></span>
             </div>
+          )}
+          {includedDocs.length === 0 && !contratFile && !rsFile && (
+            <div className="text-xs" style={{ color: "#A2A1AF" }}>Aucune pièce jointe sélectionnée.</div>
           )}
         </div>
       </div>
