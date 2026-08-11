@@ -276,7 +276,14 @@ export function prepareSendMails(courtierName: string | null, mailField: string 
     const aReal = [...doms].some((d) => !GENERIC_DOM.has(d));
     if (aReal) {
       const kept = mails.filter((m) => doms.has(dom(m)));
-      if (kept.length) return { mails: cap(kept), hold: false, reason: "" }; // ne garder que le domaine du courtier (max 2)
+      if (kept.length) {
+        // Préférer le domaine PROPRE du courtier au domaine « cousin » du même groupe
+        // (ex. Odealim → odealim.fr plutôt qu'assurcopro.fr). primaryDoms = domaines
+        // de la fiche courtier SANS expansion de groupe.
+        const primaryDoms = new Set((ref.emailsAll ?? ref.email ?? "").split(";").map((s) => domainOf(s.trim())).filter(Boolean));
+        const primary = kept.filter((m) => primaryDoms.has(dom(m)));
+        return { mails: cap(primary.length ? primary : kept), hold: false, reason: "" }; // domaine du courtier, max 2
+      }
       if (mails.some((m) => GENERIC_DOM.has(dom(m)))) return { mails: [], hold: true, reason: "mail perso pour un courtier connu" };
       return { mails: [], hold: true, reason: `aucun mail au domaine de ${ref.nom}` };
     }
