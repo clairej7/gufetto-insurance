@@ -18,6 +18,8 @@ import { CourtierAuditControls } from "@/components/admin/courtier-audit-control
 import { getRs4Volet1Count, getRs4Volet2Data, getRs4DetectorData, getRs4Volet3Data, getRs4Volet4Data, getRs4SendHistory } from "@/lib/rs4";
 import { Rs4Controls } from "@/components/admin/rs4-controls";
 import { getDevis5Volet1Data, getDevis5DocsToLoad, getDocLoadHistory, getDevis5NoDocs, getDevis5Volet4Data, getDevis5Volet2Data } from "@/lib/devis5";
+import { getDevis6Volet1Data, getDevis6Volet2Data, getDevis6Volet3Data } from "@/lib/devis6";
+import { Devis6Controls } from "@/components/admin/devis6-controls";
 import { getDocsStats } from "@/lib/rs-docs";
 import { Devis5Controls } from "@/components/admin/devis5-controls";
 import { getExclusionState } from "@/lib/exclusions";
@@ -104,6 +106,9 @@ export default async function AutomatisationsPage() {
   const devis5NoDocs = await getDevis5NoDocs();
   const devis5Volet2 = await getDevis5Volet2Data();
   const devis5Suivi = await getDevis5Volet4Data(Date.now());
+  const devis6Volet1 = await getDevis6Volet1Data();
+  const devis6Volet2 = await getDevis6Volet2Data();
+  const devis6Suivi = await getDevis6Volet3Data(Date.now());
   const docsStats = await getDocsStats();
   const exclusionState = await getExclusionState();
   const ghcReviewLabel: Record<string, string> = { prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
@@ -370,6 +375,7 @@ export default async function AutomatisationsPage() {
                       </p>
                       <VerifyPrimesBatchButton stock={eligibleAuto6} />
                     </div>
+                    <Devis6Controls volet1={devis6Volet1} volet2={devis6Volet2} suivi={devis6Suivi} />
                   </details>
                 )}
 
