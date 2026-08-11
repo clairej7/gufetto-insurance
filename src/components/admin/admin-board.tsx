@@ -666,7 +666,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                 <div style={{ display: "flex", alignItems: "baseline", gap: 18, flexWrap: "wrap" }}>
                   <div>
                     <div style={{ fontSize: 26, fontWeight: 700, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{st.rows.length}</div>
-                    <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>dossiers</div>
+                    <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>{st.key === "devis_demandes" ? "dossiers concernés" : "dossiers"}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: 17, fontWeight: 700, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{prime > 0 ? fmtEurC(prime) : "—"}</div>
@@ -700,7 +700,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                     <div style={{ display: "flex", gap: 16 }}>
                       <div>
                         <div style={{ fontSize: 22, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisDemandes}</div>
-                        <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>devis demandés</div>
+                        <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>demandes de devis envoyées</div>
                       </div>
                       <div>
                         <div style={{ fontSize: 22, fontWeight: 700, color: "#A2A1AF", lineHeight: 1 }}>—</div>
