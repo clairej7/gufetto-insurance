@@ -609,6 +609,9 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
 
   const [editingCarac, setEditingCarac] = useState(false);
   const [showInfosCopro, setShowInfosCopro] = useState(false);
+  // Notes : repliées par défaut, SAUF si une note a déjà été écrite.
+  const hasNote = pipeline.events.some((e) => e.type === "note_ajoutee");
+  const [showNotes, setShowNotes] = useState(hasNote);
   const [activitesChecked, setActivitesChecked] = useState<string[]>([]);
   const [activitesAutre, setActivitesAutre] = useState("");
   const [caracsChecked, setCaracsChecked] = useState<string[]>([]);
@@ -1884,33 +1887,43 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
           )}
 
           <Card className="p-4">
-            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: "#26262C" }}>
+            <button onClick={() => setShowNotes((v) => !v)} className="w-full text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C", background: "none", border: "none", padding: 0, cursor: "pointer" }}>
               <MessageSquare className="h-4 w-4" />
               Notes
-            </h3>
-            {/* Notes existantes */}
-            {pipeline.events.filter(e => e.type === "note_ajoutee").length > 0 && (
-              <div className="space-y-2 mb-3">
-                {pipeline.events.filter(e => e.type === "note_ajoutee").map((event) => (
-                  <NoteItem
-                    key={event.id}
-                    event={event}
-                    pipelineId={pipeline.id}
-                    onDelete={deleteNote}
-                    onEdit={editNote}
-                  />
-                ))}
+              {hasNote && (
+                <span className="text-xs font-medium px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#EEF0FF", color: "#4E49FC" }}>
+                  {pipeline.events.filter(e => e.type === "note_ajoutee").length}
+                </span>
+              )}
+              <span className="ml-auto text-xs" style={{ color: "#A2A1AF" }}>{showNotes ? "▾" : "▸"}</span>
+            </button>
+            {showNotes && (
+              <div className="mt-3">
+                {/* Notes existantes */}
+                {hasNote && (
+                  <div className="space-y-2 mb-3">
+                    {pipeline.events.filter(e => e.type === "note_ajoutee").map((event) => (
+                      <NoteItem
+                        key={event.id}
+                        event={event}
+                        pipelineId={pipeline.id}
+                        onDelete={deleteNote}
+                        onEdit={editNote}
+                      />
+                    ))}
+                  </div>
+                )}
+                <Textarea
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  placeholder="Écrire une note..."
+                  className="text-sm min-h-20"
+                />
+                <Button size="sm" className="mt-2 w-full" onClick={handleAddNote} disabled={isPending || !noteText.trim()}>
+                  Ajouter
+                </Button>
               </div>
             )}
-            <Textarea
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              placeholder="Écrire une note..."
-              className="text-sm min-h-20"
-            />
-            <Button size="sm" className="mt-2 w-full" onClick={handleAddNote} disabled={isPending || !noteText.trim()}>
-              Ajouter
-            </Button>
           </Card>
 
           {/* Historique collapsible */}
@@ -2355,9 +2368,10 @@ function PipelineTasksCard({ tasks }: { tasks: PipelineTask[] }) {
   const todo = localTasks.filter((t) => t.status === "todo");
   const done = localTasks.filter((t) => t.status === "done");
 
+  const [open, setOpen] = useState(false);
   return (
     <Card className="p-4">
-      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: "#26262C" }}>
+      <button onClick={() => setOpen((o) => !o)} className="w-full text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C", background: "none", border: "none", padding: 0, cursor: "pointer" }}>
         <ListChecks className="h-4 w-4" />
         Tâches
         {todo.length > 0 && (
@@ -2365,11 +2379,14 @@ function PipelineTasksCard({ tasks }: { tasks: PipelineTask[] }) {
             {todo.length}
           </span>
         )}
-      </h3>
-      <div className="space-y-1.5">
-        {todo.map((task) => <TaskRow key={task.id} task={task} onToggle={toggle} />)}
-        {done.map((task) => <TaskRow key={task.id} task={task} onToggle={toggle} />)}
-      </div>
+        <span className="ml-auto text-xs" style={{ color: "#A2A1AF" }}>{open ? "▾" : "▸"}</span>
+      </button>
+      {open && (
+        <div className="space-y-1.5 mt-3">
+          {todo.map((task) => <TaskRow key={task.id} task={task} onToggle={toggle} />)}
+          {done.map((task) => <TaskRow key={task.id} task={task} onToggle={toggle} />)}
+        </div>
+      )}
     </Card>
   );
 }
