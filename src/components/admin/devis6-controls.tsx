@@ -10,7 +10,7 @@ type V1Row = { pipelineId: string; nom: string; adresse: string | null; gestionn
 type V1 = { total: number; prets: number; rows: V1Row[] };
 type V2Row = { pipelineId: string; nom: string; adresse: string | null; passedAt: string };
 type V2 = { count: number; rows: V2Row[] };
-type SuiviRow = { pipelineId: string; nom: string; adresse: string | null; sentAt: string; jours: number; statut: string };
+type SuiviRow = { pipelineId: string; nom: string; adresse: string | null; sentAt: string; jours: number; to: string | null; convUrl: string | null };
 type Suivi = { envoyees: number; recus: number; sansReponse10j: number; rows: SuiviRow[] };
 
 const PILL = { fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" as const };
@@ -152,20 +152,21 @@ export function Devis6Controls({ volet1, volet2, suivi }: { volet1: V1; volet2?:
           <>
             <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginBottom: 12 }}>
               <div><div style={{ fontSize: 24, fontWeight: 800, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.envoyees}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>propositions envoyées</div></div>
-              <div><div style={{ fontSize: 24, fontWeight: 800, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.recus}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>réponses reçues (CS avancé)</div></div>
+              <div><div style={{ fontSize: 24, fontWeight: 800, color: "#A2A1AF", lineHeight: 1 }}>—</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>réponses reçues <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>à venir</span></div></div>
               <div><div style={{ fontSize: 24, fontWeight: 800, color: suivi.sansReponse10j > 0 ? "#CA1E12" : "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.sansReponse10j}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>sans réponse depuis ≥ 10 j</div></div>
             </div>
             <button onClick={() => setShowSuivi((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>{showSuivi ? "▾" : "▸"} Détail des {suivi.rows.length} dossiers</button>
             {showSuivi && (
               <div style={{ marginTop: 8, maxHeight: 420, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                  <thead><tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>{["Copropriété", "Envoyé le", "Depuis", "Statut"].map((h) => <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>)}</tr></thead>
+                  <thead><tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>{["Copropriété", "Destinataire", "Envoyé le", "Depuis", "Conversation Front"].map((h) => <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>)}</tr></thead>
                   <tbody>{suivi.rows.map((r) => (
-                    <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4", background: r.statut === "envoye_cs" && r.jours >= 10 ? "#FDECEA" : undefined }}>
+                    <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4", background: r.jours >= 10 ? "#FDECEA" : undefined }}>
                       <td style={{ padding: "6px 10px" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
+                      <td style={{ padding: "6px 10px", color: "#656576" }}>{r.to || "—"}</td>
                       <td style={{ padding: "6px 10px", color: "#656576", whiteSpace: "nowrap" }}>{new Date(r.sentAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
-                      <td style={{ padding: "6px 10px", fontWeight: 600, color: r.statut === "envoye_cs" && r.jours >= 10 ? "#CA1E12" : "#656576" }}>J+{r.jours}</td>
-                      <td style={{ padding: "6px 10px", color: "#656576" }}>{r.statut}</td>
+                      <td style={{ padding: "6px 10px", fontWeight: 600, color: r.jours >= 10 ? "#CA1E12" : "#656576" }}>J+{r.jours}</td>
+                      <td style={{ padding: "6px 10px" }}>{r.convUrl ? <a href={r.convUrl} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none" }}>ouvrir ↗</a> : <span style={{ color: "#A2A1AF" }}>—</span>}</td>
                     </tr>
                   ))}</tbody>
                 </table>

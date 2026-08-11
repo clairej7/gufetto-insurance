@@ -93,32 +93,32 @@ export async function getDevis6Volet2Data(): Promise<Devis6Volet2> {
 }
 
 // ─── Volet 3 : suivi des propositions envoyées au CS ─────────────────────────
-// Une proposition est « envoyée » quand le dossier a franchi l'étape envoye_cs
-// (statut_change nouveauStatut=envoye_cs). « recus » = réponses du CS (à venir,
-// détection non branchée). « sansReponse10j » = envoi au CS ≥ 10 jours.
-export type Devis6SuiviRow = { pipelineId: string; nom: string; adresse: string | null; sentAt: string; jours: number; statut: string };
+// Une proposition est réellement « envoyée » UNIQUEMENT quand un mail de reco a
+// été émis (event recoType=reco_sent, avec conversationId Front). Le simple
+// passage de statut envoye_cs ne compte PAS (peut être un changement manuel).
+// « recus » = réponses du CS → à venir (détection non branchée). « sansReponse10j »
+// = mail envoyé depuis ≥ 10 jours.
+const FRONT_CONV = (cid: string | null) => (cid ? `https://app.frontapp.com/open/${cid}` : null);
+export type Devis6SuiviRow = { pipelineId: string; nom: string; adresse: string | null; sentAt: string; jours: number; to: string | null; convUrl: string | null };
 export type Devis6Suivi = { envoyees: number; recus: number; sansReponse10j: number; rows: Devis6SuiviRow[] };
 
 export async function getDevis6Volet3Data(nowMs: number): Promise<Devis6Suivi> {
   const excl = await getExcludedCoproIds();
   const ev = await prisma.pipelineEvent.findMany({
-    where: { type: "statut_change", nouveauStatut: "envoye_cs", pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null } } },
-    select: { createdAt: true, pipelineId: true, pipeline: { select: { statut: true, copro: { select: { nom: true, adresse: true } } } } },
+    where: { metadata: { path: ["recoType"], equals: "reco_sent" }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null } } },
+    select: { createdAt: true, metadata: true, pipelineId: true, pipeline: { select: { copro: { select: { nom: true, adresse: true } } } } },
     orderBy: { createdAt: "asc" },
   });
-  const byPipe = new Map<string, { pipelineId: string; nom: string; adresse: string | null; sentAt: Date; statut: string }>();
+  const byPipe = new Map<string, { pipelineId: string; nom: string; adresse: string | null; sentAt: Date; to: string | null; cid: string | null }>();
   for (const e of ev) {
+    const m = (e.metadata ?? {}) as { to?: string; conversationId?: string };
     const g = byPipe.get(e.pipelineId);
-    if (!g) byPipe.set(e.pipelineId, { pipelineId: e.pipelineId, nom: e.pipeline?.copro.nom ?? "?", adresse: e.pipeline?.copro.adresse ?? null, sentAt: e.createdAt, statut: e.pipeline?.statut ?? "?" });
-    else if (e.createdAt < g.sentAt) g.sentAt = e.createdAt;
+    if (!g) byPipe.set(e.pipelineId, { pipelineId: e.pipelineId, nom: e.pipeline?.copro.nom ?? "?", adresse: e.pipeline?.copro.adresse ?? null, sentAt: e.createdAt, to: m.to ?? null, cid: m.conversationId ?? null });
+    else if (e.createdAt < g.sentAt) { g.sentAt = e.createdAt; g.to = m.to ?? g.to; g.cid = m.conversationId ?? g.cid; }
   }
   const rows: Devis6SuiviRow[] = [...byPipe.values()].map((g) => ({
     pipelineId: g.pipelineId, nom: g.nom, adresse: g.adresse, sentAt: g.sentAt.toISOString(),
-    jours: Math.floor((nowMs - g.sentAt.getTime()) / 86400000), statut: g.statut,
+    jours: Math.floor((nowMs - g.sentAt.getTime()) / 86400000), to: g.to, convUrl: FRONT_CONV(g.cid),
   })).sort((a, b) => b.jours - a.jours);
-  // « répondu » = le dossier a avancé au-delà de envoye_cs (validation_cs et après).
-  const AFTER = new Set(["validation_cs", "contrat_signe", "resiliation_envoyee", "sepa_complete", "termine"]);
-  const recus = rows.filter((r) => AFTER.has(r.statut)).length;
-  const enAttente = rows.filter((r) => r.statut === "envoye_cs");
-  return { envoyees: rows.length, recus, sansReponse10j: enAttente.filter((r) => r.jours >= 10).length, rows };
+  return { envoyees: rows.length, recus: 0, sansReponse10j: rows.filter((r) => r.jours >= 10).length, rows };
 }
