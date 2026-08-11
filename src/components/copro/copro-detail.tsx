@@ -878,7 +878,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
       )}
 
       {/* 3-column layout — centre élargi (sauf vue comparaison devis_recus) */}
-      <div className={pipeline.statut === "devis_recus" ? "grid grid-cols-1 lg:grid-cols-3 gap-6" : "grid grid-cols-1 lg:grid-cols-[1fr_1.7fr_1fr] gap-6"}>
+      <div className={pipeline.statut === "devis_recus" ? "grid grid-cols-1 lg:grid-cols-3 gap-6" : "grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)_minmax(0,1fr)] gap-6"}>
 
         {/* Col 1: Contrat actuel (toujours visible) + Infos copro (masqué pour devis_recus qui a sa propre col) */}
         <div className="space-y-4">
@@ -953,11 +953,15 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
           {pipeline.statut !== "devis_recus" && (
             <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
-                <button onClick={() => setShowInfosCopro((v) => !v)} className="text-sm font-semibold flex items-center gap-2" style={{ color: "#26262C", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                  <Building2 className="h-4 w-4" />
-                  Infos copropriété
-                  <span style={{ color: "#A2A1AF", fontSize: 12 }}>{showInfosCopro || editingCarac ? "▾" : "▸"}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4" style={{ color: "#26262C" }} />
+                  {pipeline.copro.duomoUrl ? (
+                    <a href={pipeline.copro.duomoUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold hover:underline" style={{ color: "#26262C" }} title="Ouvrir la copro sur Matera (Duomo)">Infos copropriété ↗</a>
+                  ) : (
+                    <span className="text-sm font-semibold" style={{ color: "#26262C" }}>Infos copropriété</span>
+                  )}
+                  <button onClick={() => setShowInfosCopro((v) => !v)} style={{ color: "#A2A1AF", fontSize: 12, background: "none", border: "none", cursor: "pointer", padding: 0 }} title="Déplier / replier">{showInfosCopro || editingCarac ? "▾" : "▸"}</button>
+                </div>
                 {editingCarac ? (
                   <div className="flex gap-1">
                     <button onClick={handleSaveCarac} disabled={isPending} className="transition-colors" style={{ color: "#4E49FC" }}>
@@ -1018,15 +1022,13 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                   const isOpen = docPreview?.id === d.id;
                   return (
                     <div key={d.id} style={{ border: "1px solid #EFEFF3", borderRadius: 10, padding: 8, background: isOpen ? "#FBFBFE" : "transparent" }}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="text-xs font-medium truncate" style={{ color: "#26262C" }} title={d.fileName}>{d.fileName}</div>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 999, color: meta.c, background: meta.bg, border: `1px solid ${meta.bd}` }}>{meta.l}{d.part ? ` · partie ${d.part}` : ""}</span>
-                            {d.source === "front" && <span style={{ fontSize: 10, color: "#A2A1AF" }}>récupéré du courtier</span>}
-                          </div>
+                      <div>
+                        <div className="text-xs font-medium truncate" style={{ color: "#26262C" }} title={d.fileName}>{d.fileName}</div>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 999, color: meta.c, background: meta.bg, border: `1px solid ${meta.bd}` }}>{meta.l}{d.part ? ` · partie ${d.part}` : ""}</span>
+                          {d.source === "front" && <span style={{ fontSize: 10, color: "#A2A1AF" }}>récupéré du courtier</span>}
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                           <button
                             onClick={() => toggleDocPreview(d.id, d.storagePath)}
                             className="text-[11px] font-semibold px-2 py-1 rounded-md border"
