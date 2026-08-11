@@ -9,6 +9,7 @@
 import { prisma } from "@/lib/prisma";
 import { getExcludedCoproIds } from "@/lib/exclusions";
 import { captureDocsForPipeline } from "@/lib/rs-docs";
+import { fieldPresence, extractDevisInfoForPipeline, type DevisFieldKey } from "@/lib/devis-info";
 
 export type Devis5Row = {
   pipelineId: string;
@@ -160,15 +161,15 @@ export async function passDevis5CompletsToVolet2(actorEmail: string): Promise<{ 
   return { passed: ps.length };
 }
 
-export type Devis5Volet2Row = { pipelineId: string; nom: string; adresse: string | null; passedAt: string };
-export type Devis5Volet2 = { count: number; rows: Devis5Volet2Row[] };
+export type Devis5Volet2Row = { pipelineId: string; nom: string; adresse: string | null; passedAt: string; present: Record<DevisFieldKey, boolean>; nb: number };
+export type Devis5Volet2 = { count: number; complets: number; taux: number; toFill: number; rows: Devis5Volet2Row[] };
 
-// Dossiers déjà passés au Volet 2 (marqueur posé), pour affichage de la file.
+// Dossiers passés au Volet 2 (marqueur), avec état de complétion des 8 champs.
 export async function getDevis5Volet2Data(): Promise<Devis5Volet2> {
   const excl = await getExcludedCoproIds();
   const ev = await prisma.pipelineEvent.findMany({
     where: { metadata: { path: ["devis5Volet"], equals: 2 }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null } } },
-    select: { createdAt: true, pipelineId: true, pipeline: { select: { copro: { select: { nom: true, adresse: true } } } } },
+    select: { createdAt: true, pipelineId: true, pipeline: { select: { copro: { select: { nom: true, adresse: true, primeActuelle: true, surfaceDeveloppee: true, periodeConstruction: true, natureOccupation: true, activitesAggravantes: true, caracteristiquesParticulieres: true, proportionInoccupee: true, protectionJuridique: true } } } } },
     orderBy: { createdAt: "desc" },
   });
   const seen = new Set<string>();
@@ -176,9 +177,31 @@ export async function getDevis5Volet2Data(): Promise<Devis5Volet2> {
   for (const e of ev) {
     if (seen.has(e.pipelineId)) continue;
     seen.add(e.pipelineId);
-    rows.push({ pipelineId: e.pipelineId, nom: e.pipeline?.copro.nom ?? "?", adresse: e.pipeline?.copro.adresse ?? null, passedAt: e.createdAt.toISOString() });
+    const c = e.pipeline!.copro;
+    const present = fieldPresence(c);
+    rows.push({ pipelineId: e.pipelineId, nom: c.nom, adresse: c.adresse, passedAt: e.createdAt.toISOString(), present, nb: Object.values(present).filter(Boolean).length });
   }
-  return { count: rows.length, rows };
+  const complets = rows.filter((r) => r.nb === 8).length;
+  return { count: rows.length, complets, taux: rows.length ? Math.round((complets / rows.length) * 100) : 0, toFill: rows.filter((r) => r.nb < 8).length, rows };
+}
+
+// Ids des dossiers du Volet 2 encore incomplets (< 8 champs), à traiter en priorité.
+async function getDevis5Volet2IncompletIds(): Promise<string[]> {
+  return (await getDevis5Volet2Data()).rows.filter((r) => r.nb < 8).map((r) => r.pipelineId);
+}
+
+// Complète en masse les infos devis depuis les contrats MRI, par lots.
+export async function extractDevis5Infos(actorEmail: string, offset: number, limit: number): Promise<{ total: number; processed: number; nextOffset: number; done: boolean; filled: number; dossiersTouches: number }> {
+  const ids = await getDevis5Volet2IncompletIds();
+  const slice = ids.slice(offset, offset + limit);
+  let filled = 0, dossiersTouches = 0;
+  for (const id of slice) {
+    const r = await extractDevisInfoForPipeline(id, actorEmail);
+    filled += r.filled.length;
+    if (r.filled.length > 0) dossiersTouches++;
+  }
+  const nextOffset = offset + slice.length;
+  return { total: ids.length, processed: slice.length, nextOffset, done: nextOffset >= ids.length, filled, dossiersTouches };
 }
 
 export async function logDevis5DocLoad(actorEmail: string, dossiers: number, created: number): Promise<void> {
