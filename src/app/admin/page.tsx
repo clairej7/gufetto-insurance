@@ -47,7 +47,12 @@ export default async function AdminPage() {
   // pas seulement ceux dont le fichier est rangé. Contrats récupérés = fichiers.
   const rsRecus = (await prisma.pipelineEvent.findMany({ where: { description: { contains: "RS reçu" } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
   const { contrat: contratsRecus } = await getDocsStats();
-  const devisDemandes = await prisma.pipelineEvent.count({ where: { metadata: { path: ["devisType"], equals: "devis_sent" } } });
+  // Demandes de devis = 1 par DOSSIER (pas par envoi : 1 dossier = AXA + Mila
+  // ne compte qu'une fois). Hors ODR et archivés, cohérent avec le suivi Auto 5.
+  const devisDemandes = (await prisma.pipelineEvent.findMany({
+    where: { metadata: { path: ["devisType"], equals: "devis_sent" }, pipeline: { statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] }, copro: { archivedAt: null } } },
+    select: { pipelineId: true }, distinct: ["pipelineId"],
+  })).length;
 
   const gestionnaires = [
     ...new Set(
