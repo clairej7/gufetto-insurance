@@ -12,10 +12,13 @@ type Row = { pipelineId: string; nom: string; adresse: string | null; assureur: 
 type Data = { total: number; prets: number; docsManquants: number; rows: Row[] };
 type DocHist = { loadedAt: string; dossiers: number; created: number };
 type NoDoc = { pipelineId: string; nom: string; adresse: string | null; checkedAt: string };
+type SuiviRow = { pipelineId: string; nom: string; adresse: string | null; assureurs: string[]; sentAt: string; jours: number; convs: { assureur: string; url: string | null }[] };
+type Suivi = { envoyes: number; demandesTotal: number; recus: number; sansReponse10j: number; rows: SuiviRow[] };
 
-export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], docsStats }: { data: Data; toLoad: number; docHistory?: DocHist[]; noDocs?: NoDoc[]; docsStats?: { rs: number; contrat: number } }) {
+export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], docsStats, suivi }: { data: Data; toLoad: number; docHistory?: DocHist[]; noDocs?: NoDoc[]; docsStats?: { rs: number; contrat: number }; suivi?: Suivi }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [showSuivi, setShowSuivi] = useState(false);
   const [q, setQ] = useState("");
   const [onlyMissing, setOnlyMissing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -193,10 +196,62 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
       <div style={{ marginTop: 22, paddingTop: 18, borderTop: "1px solid #E8E8EC" }}>
         <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 3</span>
-          <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Envoi des demandes aux assureurs</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Prévisualisation &amp; envoi des mails aux assureurs</span>
           <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>Contenu à venir</span>
         </div>
-        <p style={{ fontSize: 12.5, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>À construire : envoi des demandes de devis aux assureurs (AXA / Mila) avec les infos et documents rattachés.</p>
+        <p style={{ fontSize: 12.5, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>À construire : validation rapide des brouillons (AXA / Mila) par dossier puis envoi en masse.</p>
+      </div>
+
+      {/* ── Volet 4 — Suivi des demandes de devis ── */}
+      <div style={{ marginTop: 22, paddingTop: 18, borderTop: "1px solid #E8E8EC" }}>
+        <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 4</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Suivi des demandes de devis</span>
+        </div>
+        {!suivi || suivi.envoyes === 0 ? (
+          <p style={{ fontSize: 12.5, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucune demande de devis envoyée pour l&apos;instant.</p>
+        ) : (
+          <>
+            <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginBottom: 12 }}>
+              <div><div style={{ fontSize: 24, fontWeight: 800, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.envoyes}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>dossiers avec devis envoyé</div></div>
+              <div><div style={{ fontSize: 24, fontWeight: 800, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.demandesTotal}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>demandes envoyées (AXA + Mila)</div></div>
+              <div><div style={{ fontSize: 24, fontWeight: 800, color: "#A2A1AF", lineHeight: 1 }}>—</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>devis reçus <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>à venir</span></div></div>
+              <div><div style={{ fontSize: 24, fontWeight: 800, color: suivi.sansReponse10j > 0 ? "#CA1E12" : "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.sansReponse10j}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>sans réponse depuis ≥ 10 j</div></div>
+            </div>
+            <button onClick={() => setShowSuivi((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+              {showSuivi ? "▾" : "▸"} Détail des {suivi.rows.length} dossiers
+            </button>
+            {showSuivi && (
+              <div style={{ marginTop: 8, maxHeight: 420, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                      {["Copropriété", "Envoyé le", "Depuis", "Assureurs", "Conversations Front"].map((h) => (
+                        <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {suivi.rows.map((r) => (
+                      <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4", background: r.jours >= 10 ? "#FDECEA" : undefined }}>
+                        <td style={{ padding: "6px 10px" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
+                        <td style={{ padding: "6px 10px", color: "#656576", whiteSpace: "nowrap" }}>{new Date(r.sentAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
+                        <td style={{ padding: "6px 10px", fontWeight: 600, color: r.jours >= 10 ? "#CA1E12" : "#656576" }}>J+{r.jours}</td>
+                        <td style={{ padding: "6px 10px", color: "#656576" }}>{r.assureurs.join(", ")}</td>
+                        <td style={{ padding: "6px 10px" }}>
+                          {r.convs.filter((c) => c.url).map((c, i) => (
+                            <a key={i} href={c.url!} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none", marginRight: 8 }}>{c.assureur} ↗</a>
+                          ))}
+                          {r.convs.every((c) => !c.url) && <span style={{ color: "#A2A1AF" }}>—</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

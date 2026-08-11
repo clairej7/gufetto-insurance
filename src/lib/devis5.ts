@@ -120,3 +120,38 @@ export async function getDocLoadHistory(limit = 15): Promise<{ loadedAt: string;
   const rows = await prisma.docLoadLog.findMany({ orderBy: { loadedAt: "desc" }, take: limit });
   return rows.map((r) => ({ loadedAt: r.loadedAt.toISOString(), dossiers: r.dossiers, created: r.created }));
 }
+
+// ─── Volet 4 : suivi des demandes de devis ───────────────────────────────────
+const FRONT_CONV = (cid: string | null) => (cid ? `https://app.frontapp.com/open/${cid}` : null);
+export type Devis5SuiviRow = { pipelineId: string; nom: string; adresse: string | null; assureurs: string[]; sentAt: string; jours: number; convs: { assureur: string; url: string | null }[] };
+export type Devis5Suivi = { envoyes: number; demandesTotal: number; recus: number; sansReponse10j: number; rows: Devis5SuiviRow[] };
+
+// Suivi = dossiers ayant au moins une demande de devis envoyée (event devis_sent).
+// « demandesTotal » = nb d'envois (par assureur). « recus » = à venir (détection
+// de réponse en 2e temps → 0 pour l'instant). « sansReponse10j » = envoi ≥ 10 j.
+export async function getDevis5Volet4Data(nowMs: number): Promise<Devis5Suivi> {
+  const excl = await getExcludedCoproIds();
+  const ev = await prisma.pipelineEvent.findMany({
+    where: { metadata: { path: ["devisType"], equals: "devis_sent" }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null } } },
+    select: { createdAt: true, metadata: true, pipelineId: true, pipeline: { select: { copro: { select: { nom: true, adresse: true } } } } },
+    orderBy: { createdAt: "asc" },
+  });
+  type G = { pipelineId: string; nom: string; adresse: string | null; assureurs: Set<string>; sentAt: Date; convs: { assureur: string; url: string | null }[] };
+  const byPipe = new Map<string, G>();
+  let demandesTotal = 0;
+  for (const e of ev) {
+    demandesTotal++;
+    const m = (e.metadata ?? {}) as { assureur?: string; conversationId?: string };
+    const ass = (m.assureur ?? "?").toUpperCase();
+    let g = byPipe.get(e.pipelineId);
+    if (!g) { g = { pipelineId: e.pipelineId, nom: e.pipeline?.copro.nom ?? "?", adresse: e.pipeline?.copro.adresse ?? null, assureurs: new Set(), sentAt: e.createdAt, convs: [] }; byPipe.set(e.pipelineId, g); }
+    g.assureurs.add(ass);
+    g.convs.push({ assureur: ass, url: FRONT_CONV(m.conversationId ?? null) });
+    if (e.createdAt < g.sentAt) g.sentAt = e.createdAt;
+  }
+  const rows: Devis5SuiviRow[] = [...byPipe.values()].map((g) => ({
+    pipelineId: g.pipelineId, nom: g.nom, adresse: g.adresse, assureurs: [...g.assureurs], sentAt: g.sentAt.toISOString(),
+    jours: Math.floor((nowMs - g.sentAt.getTime()) / 86400000), convs: g.convs,
+  })).sort((a, b) => b.jours - a.jours);
+  return { envoyes: byPipe.size, demandesTotal, recus: 0, sansReponse10j: rows.filter((r) => r.jours >= 10).length, rows };
+}
