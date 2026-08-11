@@ -45,6 +45,14 @@ export function Devis6Controls({ volet1, volet2, suivi }: { volet1: V1; volet2?:
 
   return (
     <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+      {/* ── ALERTE STAND BY ── */}
+      <div style={{ marginBottom: 18, padding: "12px 14px", borderRadius: 10, background: "#FDECEA", border: "1.5px solid #F4A9A0" }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#B4243A", display: "flex", alignItems: "center", gap: 8 }}>⛔ STAND BY — ne pas envoyer de propositions au CS</div>
+        <div style={{ fontSize: 12.5, color: "#8A1F2E", marginTop: 6, lineHeight: "18px" }}>
+          Les <strong>crédits API Anthropic sont épuisés</strong> → la mise à jour de la prime et la recommandation <strong>ne se régénèrent pas</strong>. Une proposition envoyée maintenant partirait avec un <strong>montant potentiellement erroné</strong>. <strong>N&apos;envoie aucun mail au CS</strong> (ni ici, ni depuis une fiche) tant que les crédits ne sont pas rechargés. La préparation (comparaisons, membres du CS) reste OK.
+        </div>
+      </div>
+
       {/* ── VOLET 1 ── */}
       <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span style={PILL}>VOLET 1</span>
