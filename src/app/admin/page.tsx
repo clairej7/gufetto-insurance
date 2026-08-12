@@ -57,18 +57,19 @@ export default async function AdminPage() {
   const { getExcludedCoproIds } = await import("@/lib/exclusions");
   const exclCoproIds = await getExcludedCoproIds();
   const excludedCount = await prisma.insurancePipeline.count({ where: { coproId: { in: exclCoproIds }, copro: { archivedAt: null } } });
-  // Chiffres de la carte « Demande de devis » SCOPÉS À L'ÉTAPE (pas de cumul
-  // cross-étape, sinon 79 − « mails envoyés » ne tombe pas juste) :
-  //  - mails partis = dossiers ENCORE en devis_demandes avec une demande envoyée
-  //    (en attente d'un devis) ;
-  //  - à demander = dossiers en devis_demandes sans demande, hors exclus (= volets 1+2).
+  // Chiffres de la carte « Demande de devis » : PARTITION EXACTE des dossiers de
+  // l'étape (leur somme = le total « dossiers » de la carte). Aucune exclusion
+  // ici, sinon la somme ne retombe pas sur le total affiché.
+  //  - en attente = demande DÉJÀ partie, pas encore de devis (le dossier reste
+  //    dans l'étape jusqu'à réception ; les reçus sont passés en « Comparaison ») ;
+  //  - à envoyer  = demande PAS ENCORE partie.
   const SENT_EVENT = { some: { metadata: { path: ["devisType"], equals: "devis_sent" } } };
   const NO_SENT_EVENT = { none: { metadata: { path: ["devisType"], equals: "devis_sent" } } };
   const devisMailsEnvoyes = await prisma.insurancePipeline.count({
     where: { statut: "devis_demandes", copro: { archivedAt: null }, events: SENT_EVENT },
   });
   const devisAReclamer = await prisma.insurancePipeline.count({
-    where: { statut: "devis_demandes", copro: { archivedAt: null }, coproId: { notIn: exclCoproIds }, events: NO_SENT_EVENT },
+    where: { statut: "devis_demandes", copro: { archivedAt: null }, events: NO_SENT_EVENT },
   });
 
   const gestionnaires = [
