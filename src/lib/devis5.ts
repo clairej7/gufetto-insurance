@@ -430,25 +430,27 @@ export async function confirmDevisReply(eventId: string, kind: DevisReplyKind, a
 // Miroir du graphe RS, côté devis. Par jour et PAR DOSSIER :
 //   - sent  = dossiers dont la 1re demande de devis (mail à un assureur) est partie
 //             ce jour-là (event devisType=devis_sent).
-//   - recus = dossiers ayant obtenu leur 1er devis ce jour-là (1er signal parmi :
-//             event devisObtenu, DevisRecu, ou document devis_axa/devis_mila).
-// Totaux renvoyés pour l'encart « taux de réception » (par dossier, cohérent avec
-// la carte du dashboard). Alimenté en direct par l'activité Gufetto (aucun cache).
+//   - recus = dossiers ayant leur 1er devis « acté » ce jour-là (1er doc devis_axa/
+//             devis_mila ou 1er DevisRecu enregistré). Note : c'est la date
+//             d'enregistrement dans Gufetto, pas la date d'arrivée sur Front.
+// IMPORTANT : mêmes filtres que les cartes du dashboard pour que les TOTAUX
+// coïncident — demandes = devisDemandes (hors ODR + archivés), reçus =
+// getDevisRecusStats (docs devis + DevisRecu, hors ODR). Live (aucun cache).
 export type DevisFlowDay = { date: string; label: string; sent: number; recus: number };
 export async function getDevisFlowDaily(): Promise<{ rows: DevisFlowDay[]; demandesTotal: number; recusTotal: number }> {
-  const notArchived = { pipeline: { copro: { archivedAt: null } } };
-  const [sentEv, obtenuEv, devisDocs, devisRecus] = await Promise.all([
-    prisma.pipelineEvent.findMany({ where: { metadata: { path: ["devisType"], equals: "devis_sent" }, ...notArchived }, select: { pipelineId: true, createdAt: true } }),
-    prisma.pipelineEvent.findMany({ where: { metadata: { path: ["devisObtenu"], equals: true }, ...notArchived }, select: { pipelineId: true, createdAt: true } }),
-    prisma.pipelineDocument.findMany({ where: { kind: { in: ["devis_axa", "devis_mila"] }, pipeline: { copro: { archivedAt: null } } }, select: { pipelineId: true, createdAt: true } }),
-    prisma.devisRecu.findMany({ where: { pipeline: { copro: { archivedAt: null } } }, select: { pipelineId: true, createdAt: true } }),
+  const [sentEv, devisDocs, devisRecus] = await Promise.all([
+    // Demandes : hors statuts ODR ET archivés (cohérent avec la carte « demandes envoyées »).
+    prisma.pipelineEvent.findMany({ where: { metadata: { path: ["devisType"], equals: "devis_sent" }, pipeline: { statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] }, copro: { archivedAt: null } } }, select: { pipelineId: true, createdAt: true } }),
+    // Reçus : docs devis + DevisRecu, hors statuts ODR (cohérent avec getDevisRecusStats).
+    prisma.pipelineDocument.findMany({ where: { kind: { in: ["devis_axa", "devis_mila"] }, pipeline: { statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] } } }, select: { pipelineId: true, createdAt: true } }),
+    prisma.devisRecu.findMany({ where: { pipeline: { statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] } } }, select: { pipelineId: true, createdAt: true } }),
   ]);
 
   // 1er jour d'envoi et 1er jour de réception, par dossier (min des createdAt).
   const firstSent = new Map<string, Date>();
   for (const e of sentEv) { const cur = firstSent.get(e.pipelineId); if (!cur || e.createdAt < cur) firstSent.set(e.pipelineId, e.createdAt); }
   const firstRecu = new Map<string, Date>();
-  for (const e of [...obtenuEv, ...devisDocs, ...devisRecus]) { const cur = firstRecu.get(e.pipelineId); if (!cur || e.createdAt < cur) firstRecu.set(e.pipelineId, e.createdAt); }
+  for (const e of [...devisDocs, ...devisRecus]) { const cur = firstRecu.get(e.pipelineId); if (!cur || e.createdAt < cur) firstRecu.set(e.pipelineId, e.createdAt); }
 
   const dayKey = (d: Date) => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris" }).format(d); // YYYY-MM-DD
   const sentBy = new Map<string, number>(); const recuBy = new Map<string, number>();
