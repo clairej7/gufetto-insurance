@@ -571,6 +571,21 @@ export async function renvoiAuto3(actorEmail: string, pipelineId: string, clearM
   return { ok: true };
 }
 
+// Cas « redirection » : le contact nous renvoie vers un autre mail. On CLÔTURE
+// la conversation Front actuelle (archive) et on renvoie le dossier au Volet 1,
+// mail effacé, pour un nouvel envoi au bon contact. La nouvelle demande RS créera
+// une nouvelle conversation qui sera automatiquement rattachée au dossier
+// (le détecteur lit toujours le DERNIER draft_sent → dernière conversationId).
+export async function closeRedirectConversation(actorEmail: string, pipelineId: string): Promise<{ ok: boolean; archived: number }> {
+  const p = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, select: { rsBatchAt: true, coproId: true, copro: { select: { contactCourtierEmail: true } } } });
+  if (!p) return { ok: false, archived: 0 };
+  const archived = await archiveConversationsFor(pipelineId);
+  await prisma.copro.update({ where: { id: p.coproId }, data: { contactCourtierEmail: null } });
+  await prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { rsBatchAt: p.rsBatchAt ?? new Date(), rs4Volet2At: null, rs4SentAt: null, rs4RelanceAt: null, rs4EnCoursAt: null, rs4ReplyKind: null, rs4ReplyAt: null, rs4ReplySnippet: null, rs4ReplyMsgId: null, rs4ReplyConvId: null, rs4ReplyScanAt: null } });
+  await prisma.pipelineEvent.create({ data: { pipelineId, type: "action_manuelle", description: `Conversation clôturée (redirection vers un autre contact) — renvoyé au Volet 1 pour nouvel envoi${p.copro.contactCourtierEmail ? ` (ancien contact effacé : ${p.copro.contactCourtierEmail})` : ""}`, metadata: { auto: "rs4_close_redirect", before: p.copro.contactCourtierEmail, archived }, createdBy: actorEmail } });
+  return { ok: true, archived };
+}
+
 // Envoie la relance n° `relanceNum` aux dossiers éligibles (J+seuil atteint et
 // relance pas encore envoyée). Les dossiers restent au volet 3 jusqu'au RS reçu.
 export async function sendRelance(actorEmail: string, relanceNum: number, subjectTpl: string, bodyTpl: string, nowMs: number): Promise<{ sent: number; failed: number; errors: string[] }> {
