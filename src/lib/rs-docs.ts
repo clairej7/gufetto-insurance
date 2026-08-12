@@ -176,6 +176,20 @@ export async function getDocsStats(): Promise<{ rs: number; contrat: number }> {
   return { rs: await distinctPipes("rs"), contrat: await distinctPipes("contrat_mri") };
 }
 
+// Devis reçus = dossiers ayant AU MOINS un devis reçu (doc devis capturé OU
+// DevisRecu saisi), hors ODR. + détail par assureur (AXA / Mila).
+export async function getDevisRecusStats(): Promise<{ total: number; axa: number; mila: number }> {
+  const idsByKind = async (kind: DocKind) =>
+    (await prisma.pipelineDocument.findMany({ where: { kind, pipeline: { statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] } } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).map((d) => d.pipelineId);
+  const axaSet = new Set(await idsByKind("devis_axa"));
+  const milaSet = new Set(await idsByKind("devis_mila"));
+  const totalSet = new Set([...axaSet, ...milaSet]);
+  // DevisRecu saisis manuellement (comparaison) — l'assureur est dans le champ.
+  const dr = await prisma.devisRecu.findMany({ where: { pipeline: { statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] } } }, select: { pipelineId: true, assureur: true } });
+  for (const d of dr) { const a = (d.assureur || "").toLowerCase(); totalSet.add(d.pipelineId); if (a.includes("mila")) milaSet.add(d.pipelineId); else if (a.includes("axa")) axaSet.add(d.pipelineId); }
+  return { total: totalSet.size, axa: axaSet.size, mila: milaSet.size };
+}
+
 // Ajout MANUEL d'un document (upload depuis le Drive). Typé automatiquement par
 // contenu (corrigeable ensuite via le menu type). source = "manuel".
 export async function addManualDoc(opts: { pipelineId: string; coproId: string; adresse: string; buffer: Buffer; filename: string; createdBy?: string }): Promise<{ ok: boolean; kind?: DocKind; fileName?: string; error?: string }> {

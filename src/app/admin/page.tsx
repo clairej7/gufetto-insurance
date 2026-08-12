@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { AdminBoard } from "@/components/admin/admin-board";
 import { getPrimeByStage } from "@/lib/prime";
-import { getDocsStats } from "@/lib/rs-docs";
+import { getDocsStats, getDevisRecusStats } from "@/lib/rs-docs";
 import { getOdrByInsurerBoard } from "@/lib/odr";
 
 export default async function AdminPage() {
@@ -49,6 +49,7 @@ export default async function AdminPage() {
   const rsRecus = (await prisma.pipelineEvent.findMany({ where: { description: { contains: "RS reçu" } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
   const { contrat: contratsRecus } = await getDocsStats();
   const odrByInsurer = await getOdrByInsurerBoard();
+  const devisRecus = await getDevisRecusStats();
   // Demandes de devis = 1 par DOSSIER (pas par envoi : 1 dossier = AXA + Mila
   // ne compte qu'une fois). Hors ODR et archivés, cohérent avec le suivi Auto 5.
   const devisDemandes = (await prisma.pipelineEvent.findMany({
@@ -104,6 +105,7 @@ export default async function AdminPage() {
           contratsRecus={contratsRecus}
           devisDemandes={devisDemandes}
           odrByInsurer={odrByInsurer}
+          devisRecus={devisRecus}
         />
       </main>
     </div>
