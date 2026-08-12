@@ -225,15 +225,15 @@ const scanEligible = (to: string | null | undefined) => {
   return t.includes(AXA_ADDR) || t.includes(MILA_ADDR);
 };
 
-export type DevisReplyKind = "devis_obtenu" | "traiter_manuel" | "pas_de_reponse" | "non_scanne";
+export type DevisReplyKind = "devis_obtenu" | "refus_assureur" | "traiter_manuel" | "pas_de_reponse" | "non_scanne";
 export type Devis5Demande = {
   eventId: string; pipelineId: string; nom: string; adresse: string | null;
   assureur: string; to: string | null; sentAt: string; jours: number; convUrl: string | null; scanEligible: boolean;
   replyKind: DevisReplyKind; replyConfirmed: boolean; replySnippet: string | null; scanned: boolean;
 };
 export type Devis5Suivi = {
-  envoyes: number; demandesTotal: number; devisObtenus: number; aTraiter: number; pasReponse: number;
-  sansReponse10j: number; lastScanAt: string | null; demandes: Devis5Demande[];
+  envoyes: number; demandesTotal: number; devisObtenus: number; refus: number; aTraiter: number; pasReponse: number;
+  sansReponse10j: number; pretsAuto6: number; lastScanAt: string | null; demandes: Devis5Demande[];
 };
 
 type DevisSentMeta = { assureur?: string; to?: string; conversationId?: string; replyKind?: DevisReplyKind; replyConfirmed?: boolean; replySnippet?: string; replyScanAt?: string };
@@ -263,12 +263,50 @@ export async function getDevis5Volet4Data(nowMs: number): Promise<Devis5Suivi> {
     };
   }).sort((a, b) => b.jours - a.jours);
   const cnt = (k: DevisReplyKind) => demandes.filter((d) => d.replyKind === k).length;
+  const pretsAuto6 = (await getReadyForAuto6(nowMs)).length;
   return {
     envoyes: pipes.size, demandesTotal: demandes.length,
-    devisObtenus: cnt("devis_obtenu"), aTraiter: cnt("traiter_manuel"), pasReponse: cnt("pas_de_reponse"),
+    devisObtenus: cnt("devis_obtenu"), refus: cnt("refus_assureur"), aTraiter: cnt("traiter_manuel"), pasReponse: cnt("pas_de_reponse"),
     sansReponse10j: demandes.filter((d) => (d.replyKind === "pas_de_reponse" || d.replyKind === "non_scanne") && d.jours >= 10).length,
-    lastScanAt: lastScan ? new Date(lastScan).toISOString() : null, demandes,
+    pretsAuto6, lastScanAt: lastScan ? new Date(lastScan).toISOString() : null, demandes,
   };
+}
+
+// Un dossier est « prêt pour l'Auto 6 » quand, sur ses demandes (AXA + Mila) :
+//   - au moins une = devis obtenu, ET
+//   - chaque autre est résolue = devis obtenu, refus assureur, ou pas de réponse ≥ 10 j.
+// (donc : les 2 devis reçus, OU 1 reçu + l'autre refus/sans réponse 10j.)
+// Renvoie les pipelines prêts PAS ENCORE envoyés à l'Auto 6 (sans marqueur auto6Ready).
+async function getReadyForAuto6(nowMs: number): Promise<{ id: string; statut: string }[]> {
+  const excl = await getExcludedCoproIds();
+  const ev = await prisma.pipelineEvent.findMany({
+    where: { metadata: { path: ["devisType"], equals: "devis_sent" }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null }, statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] } } },
+    select: { createdAt: true, metadata: true, pipelineId: true, pipeline: { select: { statut: true } } },
+  });
+  const byPipe = new Map<string, { statut: string; demandes: { kind: DevisReplyKind; jours: number }[] }>();
+  for (const e of ev) {
+    const m = (e.metadata ?? {}) as DevisSentMeta;
+    const g = byPipe.get(e.pipelineId) ?? { statut: e.pipeline?.statut ?? "?", demandes: [] };
+    g.demandes.push({ kind: (m.replyKind ?? "non_scanne") as DevisReplyKind, jours: Math.floor((nowMs - e.createdAt.getTime()) / 86400000) });
+    byPipe.set(e.pipelineId, g);
+  }
+  const resolved = (k: DevisReplyKind, j: number) => k === "devis_obtenu" || k === "refus_assureur" || (k === "pas_de_reponse" && j >= 10);
+  const ready = [...byPipe.entries()].filter(([, g]) => g.demandes.some((d) => d.kind === "devis_obtenu") && g.demandes.every((d) => resolved(d.kind, d.jours)));
+  const readyIds = ready.map(([id]) => id);
+  if (!readyIds.length) return [];
+  const marked = new Set((await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto6Ready"], equals: true }, pipelineId: { in: readyIds } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).map((e) => e.pipelineId));
+  return ready.filter(([id]) => !marked.has(id)).map(([id, g]) => ({ id, statut: g.statut }));
+}
+
+// Envoie à l'Auto 6 (comparaison) les dossiers prêts : marqueur auto6Ready +
+// garantit le statut devis_recus (déplace ceux encore en « demande de devis »).
+export async function sendReadyToAuto6(actorEmail: string): Promise<{ sent: number }> {
+  const ready = await getReadyForAuto6(Date.now());
+  for (const p of ready) {
+    if (p.statut === "devis_demandes") await prisma.insurancePipeline.update({ where: { id: p.id }, data: { statut: "devis_recus" } });
+    await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: "Devis collectés — envoyé à l'automatisation 6 (comparaison des devis)", metadata: { auto6Ready: true }, createdBy: actorEmail } });
+  }
+  return { sent: ready.length };
 }
 
 // ── Détecteur de réponses (AXA/Mila) ──────────────────────────────────────
@@ -281,8 +319,11 @@ function hasRealDoc(atts: { content_type?: string; contentType?: string; filenam
   });
 }
 const DEVIS_TXT = /devis|proposition (commerciale|tarifaire|d'?assurance)|tarification|cotisation propos|projet de contrat|offre (tarifaire|commerciale)|ci-?joint.*(devis|proposition|tarif|offre)/i;
+// Refus d'assurer — patterns observés sur Front (surtout Mila / Pierre Quantin).
+const REFUS_TXT = /(?:pas\s+en\s+mesure\s+d['’ ]assurer|ne\s+(?:pouvons|pourrons|sommes)\s+pas\s+(?:en\s+mesure\s+)?(?:d['’ ]assurer|donner\s+(?:une\s+)?suite|assurer|garantir|r[ée]pondre\s+favorablement)|ne\s+souhait\w+\s+pas\s+(?:assurer|donner\s+suite|poursuivre|retenir)|d[ée]clin\w+\s+(?:votre|le|la|l['’]|cette|toute|ce)|refus\w*\s+(?:d['’ ]assurer|de\s+garantir|votre\s+demande)|risque\s+(?:non|in)\s?assurable|non\s+assurable|zone\s+inondable\s+à\s+risque\s+tr[eè]s\s+[ée]lev[ée])/i;
 function classifyDevisReply(body: string, hasDoc: boolean, hasInbound: boolean, bounce: boolean): DevisReplyKind {
   if (!hasInbound) return bounce ? "traiter_manuel" : "pas_de_reponse";
+  if (REFUS_TXT.test(body)) return "refus_assureur";
   if (hasDoc) return "devis_obtenu";
   if (DEVIS_TXT.test(body)) return "devis_obtenu";
   return "traiter_manuel";

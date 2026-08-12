@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { confirmDevisReply, type DevisReplyKind } from "@/lib/devis5";
 
-const KINDS = ["devis_obtenu", "traiter_manuel", "pas_de_reponse"];
+const KINDS = ["devis_obtenu", "refus_assureur", "traiter_manuel", "pas_de_reponse"];
 
 // POST /api/devis5/confirm-reply { eventId, kind } — confirme/corrige le statut
 // d'une demande de devis via le menu déroulant.

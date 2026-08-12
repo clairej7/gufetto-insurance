@@ -12,15 +12,16 @@ type Row = { pipelineId: string; nom: string; adresse: string | null; assureur: 
 type Data = { total: number; prets: number; docsManquants: number; rows: Row[] };
 type DocHist = { loadedAt: string; dossiers: number; created: number };
 type NoDoc = { pipelineId: string; nom: string; adresse: string | null; checkedAt: string };
-type DevisReplyKind = "devis_obtenu" | "traiter_manuel" | "pas_de_reponse" | "non_scanne";
+type DevisReplyKind = "devis_obtenu" | "refus_assureur" | "traiter_manuel" | "pas_de_reponse" | "non_scanne";
 type Demande = { eventId: string; pipelineId: string; nom: string; adresse: string | null; assureur: string; to: string | null; sentAt: string; jours: number; convUrl: string | null; scanEligible: boolean; replyKind: DevisReplyKind; replyConfirmed: boolean; replySnippet: string | null; scanned: boolean };
-type Suivi = { envoyes: number; demandesTotal: number; devisObtenus: number; aTraiter: number; pasReponse: number; sansReponse10j: number; lastScanAt: string | null; demandes: Demande[] };
+type Suivi = { envoyes: number; demandesTotal: number; devisObtenus: number; refus: number; aTraiter: number; pasReponse: number; sansReponse10j: number; pretsAuto6: number; lastScanAt: string | null; demandes: Demande[] };
 const AXA_ADDR = "achille.leboeuf@axa.fr";
 const MILA_ADDR = "souscription@mila.fr";
 const DR_META: Record<DevisReplyKind, { label: string; color: string; bg: string }> = {
   devis_obtenu: { label: "Devis obtenu", color: "#13762C", bg: "#EAF7EE" },
+  refus_assureur: { label: "Refus de l'assureur", color: "#B4243A", bg: "#FDECEA" },
   traiter_manuel: { label: "À traiter manuellement", color: "#B4690E", bg: "#FDF0D5" },
-  pas_de_reponse: { label: "Pas de réponse", color: "#8A1F2E", bg: "#FDECEA" },
+  pas_de_reponse: { label: "Pas de réponse", color: "#656576", bg: "#F1F1F4" },
   non_scanne: { label: "Non scanné", color: "#A2A1AF", bg: "#F7F7F8" },
 };
 type FieldKey = "prime" | "surface" | "periode" | "nature" | "activites" | "caracteristiques" | "proportion" | "pj";
@@ -64,6 +65,19 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
       toast.success("Statut confirmé.");
       router.refresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); }
+  }
+
+  const [sendingA6, setSendingA6] = useState(false);
+  async function sendToAuto6() {
+    if (!suivi || suivi.pretsAuto6 === 0) return;
+    setSendingA6(true);
+    try {
+      const res = await fetch("/api/devis5/send-to-auto6", { method: "POST" });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error ?? "Erreur");
+      toast.success(`${d.sent} dossier(s) envoyé(s) à l'automatisation 6.`);
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setSendingA6(false); }
   }
   const [q, setQ] = useState("");
   const [onlyMissing, setOnlyMissing] = useState(false);
@@ -371,7 +385,8 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
               <div><div style={{ fontSize: 24, fontWeight: 800, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.envoyes}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>dossiers avec devis envoyé</div></div>
               <div><div style={{ fontSize: 24, fontWeight: 800, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.demandesTotal}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>demandes (AXA + Mila)</div></div>
               <div><div style={{ fontSize: 24, fontWeight: 800, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.devisObtenus}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>devis obtenus</div></div>
-              <div><div style={{ fontSize: 24, fontWeight: 800, color: suivi.aTraiter > 0 ? "#B4690E" : "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.aTraiter}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>à traiter manuellement</div></div>
+              <div><div style={{ fontSize: 24, fontWeight: 800, color: suivi.refus > 0 ? "#B4243A" : "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.refus}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>refus assureur</div></div>
+              <div><div style={{ fontSize: 24, fontWeight: 800, color: suivi.aTraiter > 0 ? "#B4690E" : "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.aTraiter}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>à traiter</div></div>
               <div><div style={{ fontSize: 24, fontWeight: 800, color: suivi.sansReponse10j > 0 ? "#CA1E12" : "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{suivi.sansReponse10j}</div><div style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>sans réponse ≥ 10 j</div></div>
             </div>
 
@@ -380,9 +395,14 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#fff", background: "#4E49FC", border: "none", borderRadius: 8, padding: "8px 14px", cursor: scanningR ? "default" : "pointer" }}>
                 {scanningR ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Détecter les réponses (AXA / Mila)
               </button>
+              <button onClick={sendToAuto6} disabled={sendingA6 || suivi.pretsAuto6 === 0}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#fff", background: suivi.pretsAuto6 === 0 ? "#A9D9B8" : "#13762C", border: "none", borderRadius: 8, padding: "8px 14px", cursor: sendingA6 || suivi.pretsAuto6 === 0 ? "default" : "pointer" }}>
+                {sendingA6 ? <Loader2 size={15} className="animate-spin" /> : <span style={{ fontSize: 15 }}>→</span>} Envoyer les {suivi.pretsAuto6} dossiers prêts à l&apos;automatisation 6
+              </button>
               <button onClick={() => setShowSuivi((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>{showSuivi ? "▾ masquer" : `▸ détail des ${suivi.demandesTotal} demandes`}</button>
               {suivi.lastScanAt && <span style={{ fontSize: 11.5, color: "#A2A1AF" }}>dernier scan {new Date(suivi.lastScanAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>}
             </div>
+            <p style={{ fontSize: 11.5, color: "#A2A1AF", margin: "0 0 8px" }}>Prêt pour l&apos;Auto 6 = les 2 devis reçus, <strong>ou</strong> 1 reçu + l&apos;autre en refus assureur ou sans réponse depuis ≥ 10 j.</p>
             {scanningR && scanProg && (
               <div style={{ margin: "2px 0 10px", maxWidth: 420 }}>
                 <div style={{ fontSize: 12, color: "#656576", marginBottom: 4 }}>Scan Front… {scanProg.done}{scanProg.total ? ` / ${scanProg.total}` : ""}</div>
@@ -417,6 +437,7 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
                                 style={{ fontSize: 11.5, fontWeight: 600, border: `1px solid ${DR_META[d.replyKind].bg}`, borderRadius: 8, padding: "4px 6px", background: DR_META[d.replyKind].bg, color: DR_META[d.replyKind].color, cursor: "pointer" }}>
                                 <option value="" disabled>— à définir —</option>
                                 <option value="devis_obtenu">Devis obtenu</option>
+                                <option value="refus_assureur">Refus de l&apos;assureur</option>
                                 <option value="traiter_manuel">À traiter manuellement</option>
                                 <option value="pas_de_reponse">Pas de réponse</option>
                               </select>
