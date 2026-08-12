@@ -47,7 +47,10 @@ interface AdminBoardProps {
   rsDemandes: number;
   rsRecus: number;
   contratsRecus: number;
-  devisDemandes: number;
+  // Scopés à l'étape « Demande de devis » (pas de cumul cross-étape) :
+  // mails déjà partis (en attente) vs dossiers encore à demander (volets 1+2).
+  devisMailsEnvoyes: number;
+  devisAReclamer: number;
   // Vue « ODR par assureur » calculée côté serveur (même logique que l'Auto 2 :
   // marqueur ou fallback assureur + exclusions) → chiffres alignés sur l'automatisation.
   odrByInsurer: { key: string; label: string; count: number; montant: number; arr: number; stages: { label: string; count: number; montant: number; arr: number; color: string }[] }[];
@@ -152,7 +155,7 @@ function PartTitle({ n, title, first }: { n: number; title: string; first?: bool
   );
 }
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRecus, contratsRecus, devisDemandes, odrByInsurer, devisRecus, rsFlow, devisFlow, excludedCount }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRecus, contratsRecus, devisMailsEnvoyes, devisAReclamer, odrByInsurer, devisRecus, rsFlow, devisFlow, excludedCount }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
@@ -697,8 +700,12 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                   <div style={{ marginTop: 9, paddingTop: 9, borderTop: "1px dashed #E8E8EC" }}>
                     <div style={{ display: "flex", gap: 16 }}>
                       <div>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisDemandes}</div>
-                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>dont mails envoyés</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisMailsEnvoyes}</div>
+                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>mails partis (en attente)</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "#B4690E", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisAReclamer}</div>
+                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>à demander (volets 1+2)</div>
                       </div>
                       <div>
                         <div style={{ fontSize: 18, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisRecus.total}</div>
