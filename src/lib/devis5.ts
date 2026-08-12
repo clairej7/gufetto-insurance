@@ -8,7 +8,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getExcludedCoproIds } from "@/lib/exclusions";
-import { captureDocsForPipeline } from "@/lib/rs-docs";
+import { captureDocsForPipeline, captureReplyDocs } from "@/lib/rs-docs";
 import { fieldPresence, extractDevisInfoForPipeline, type DevisFieldKey } from "@/lib/devis-info";
 
 export type Devis5Row = {
@@ -362,7 +362,7 @@ export async function scanDevisReplies(offset: number, limit: number): Promise<{
   const excl = await getExcludedCoproIds();
   const ev = await prisma.pipelineEvent.findMany({
     where: { metadata: { path: ["devisType"], equals: "devis_sent" }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null }, statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] } } },
-    select: { id: true, createdAt: true, metadata: true }, orderBy: { createdAt: "asc" },
+    select: { id: true, createdAt: true, metadata: true, pipelineId: true, pipeline: { select: { coproId: true, copro: { select: { nom: true, adresse: true } } } } }, orderBy: { createdAt: "asc" },
   });
   const eligible = ev.filter((e) => scanEligible((e.metadata as DevisSentMeta | null)?.to));
   const slice = eligible.slice(offset, offset + limit);
@@ -392,6 +392,17 @@ export async function scanDevisReplies(offset: number, limit: number): Promise<{
     }
     const kind = classifyDevisReply(body, hasDoc, inbound.length > 0, bounce);
     await setMeta({ replyKind: kind, replySnippet: snippet || (bounce ? "Échec de remise (bounce)" : undefined) });
+    // Devis reçu avec PJ → on capture le PDF dans le dossier, type forcé selon
+    // l'assureur (Devis AXA / Devis Mila), sans IA. Idempotent, best-effort.
+    if (kind === "devis_obtenu" && hasDoc) {
+      try {
+        const forceKind = (m.to || "").toLowerCase().includes("souscription@mila.fr") ? "devis_mila" : "devis_axa";
+        const cp = e.pipeline?.copro;
+        if (e.pipeline?.coproId && cp) {
+          await captureReplyDocs({ pipelineId: e.pipelineId, coproId: e.pipeline.coproId, adresse: cp.adresse || cp.nom, msgIds: inbound.map((x) => x.id), forceKind, createdBy: "auto:scan_devis" });
+        }
+      } catch { /* capture best-effort */ }
+    }
     counts[kind] = (counts[kind] ?? 0) + 1;
   }
   const nextOffset = offset + slice.length;
