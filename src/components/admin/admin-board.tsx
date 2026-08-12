@@ -655,53 +655,55 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
           {classicStages.map(st => {
             const prime = sumPrime(st.rows);
             return (
-              <div key={st.key} style={{ border: "1px solid #E8E8EC", borderTop: `3px solid ${st.color}`, borderRadius: 8, padding: "16px 18px", background: "#fff" }}>
-                <div style={{ fontSize: 12, fontWeight: 600, fontFamily: FONT_MONO, textTransform: "uppercase", letterSpacing: "0.04em", color: st.color, marginBottom: 12 }}>{st.label}</div>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 18, flexWrap: "wrap" }}>
+              <div key={st.key} style={{ border: "1px solid #E8E8EC", borderTop: `3px solid ${st.color}`, borderRadius: 8, padding: "11px 14px", background: "#fff" }}>
+                <div style={{ fontSize: 11.5, fontWeight: 600, fontFamily: FONT_MONO, textTransform: "uppercase", letterSpacing: "0.04em", color: st.color, marginBottom: 8 }}>{st.label}</div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
                   <div>
-                    <div style={{ fontSize: 26, fontWeight: 700, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{st.rows.length}</div>
-                    <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>dossiers</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{st.rows.length}</div>
+                    <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>dossiers</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 17, fontWeight: 700, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{prime > 0 ? fmtEurC(prime) : "—"}</div>
-                    <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>en jeu</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{prime > 0 ? fmtEurC(prime) : "—"}</div>
+                    <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>en jeu</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 17, fontWeight: 700, color: st.color, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{prime > 0 ? fmtEurC(prime * 0.25) : "—"}</div>
-                    <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>ARR potentiel</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: st.color, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{prime > 0 ? fmtEurC(prime * 0.25) : "—"}</div>
+                    <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>ARR potentiel</div>
                   </div>
                 </div>
 
                 {st.key === "rs_en_cours" && (
-                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px dashed #E8E8EC" }}>
-                    <div style={{ fontSize: 26, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsDemandes}</div>
-                    <div style={{ fontSize: 12, color: "#656576", marginTop: 3 }}>demandes de RS/contrats envoyées</div>
-                    <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
+                  <div style={{ marginTop: 9, paddingTop: 9, borderTop: "1px dashed #E8E8EC" }}>
+                    <div style={{ display: "flex", gap: 16, alignItems: "baseline", flexWrap: "wrap" }}>
                       <div>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsRecus}</div>
-                        <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>RS reçus</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsDemandes}</div>
+                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>demandes envoyées</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{contratsRecus}</div>
-                        <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>contrats récupérés</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsRecus}</div>
+                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>RS reçus</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{contratsRecus}</div>
+                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>contrats récupérés</div>
                       </div>
                     </div>
                   </div>
                 )}
 
                 {st.key === "devis_demandes" && (
-                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px dashed #E8E8EC" }}>
+                  <div style={{ marginTop: 9, paddingTop: 9, borderTop: "1px dashed #E8E8EC" }}>
                     <div style={{ display: "flex", gap: 16 }}>
                       <div>
-                        <div style={{ fontSize: 22, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisDemandes}</div>
-                        <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>demandes de devis envoyées</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisDemandes}</div>
+                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>demandes envoyées</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 22, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisRecus.total}</div>
-                        <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>devis reçus</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisRecus.total}</div>
+                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>devis reçus</div>
                       </div>
                     </div>
-                    <div style={{ marginTop: 8, fontSize: 11, color: "#656576", display: "flex", gap: 12 }}>
+                    <div style={{ marginTop: 6, fontSize: 10.5, color: "#656576", display: "flex", gap: 12 }}>
                       <span><strong style={{ color: "#0A6BB8" }}>{devisRecus.axa}</strong> devis AXA</span>
                       <span><strong style={{ color: "#8A4FC7" }}>{devisRecus.mila}</strong> devis Mila</span>
                     </div>
@@ -714,13 +716,13 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                   const autres = wonClassic.length - axa - sada - mila;
                   const rows: [string, number][] = [["AXA", axa], ["Mila", mila], ["SADA", sada], ["Autres", autres]];
                   return (
-                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px dashed #E8E8EC" }}>
-                      <div style={{ fontSize: 11, color: "#A2A1AF", marginBottom: 6 }}>Assureurs des {wonClassic.length} gagnés</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                        {rows.filter(([, n]) => n > 0).map(([label, n]) => (
-                          <div key={label} style={{ fontSize: 13, color: "#26262C" }}>
+                    <div style={{ marginTop: 9, paddingTop: 9, borderTop: "1px dashed #E8E8EC" }}>
+                      <div style={{ fontSize: 10.5, color: "#A2A1AF", marginBottom: 6 }}>Assureurs des {wonClassic.length} gagnés</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
+                        {rows.map(([label, n]) => (
+                          <span key={label} style={{ fontSize: 12.5, color: n > 0 ? "#26262C" : "#C7C7D1" }}>
                             <strong style={{ fontVariantNumeric: "tabular-nums" }}>{n}</strong> {label}
-                          </div>
+                          </span>
                         ))}
                       </div>
                     </div>
@@ -836,6 +838,9 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
         </div>
       )}
 
+      {/* Espace de défilement : permet de remonter la dernière partie en haut de
+          l'écran pour la voir seule (comme les autres parties). */}
+      <div aria-hidden style={{ height: "70vh" }} />
     </div>
   );
 }
