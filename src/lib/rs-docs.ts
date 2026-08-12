@@ -73,7 +73,7 @@ function docName(adresse: string, kind: DocKind, part: number | null): string {
 
 // Capture toutes les PJ PDF des messages entrants donnés → Supabase + PipelineDocument.
 // Idempotent (skip si frontAttachmentId déjà stocké). Renvoie le nombre de docs créés.
-export async function captureReplyDocs(opts: { pipelineId: string; coproId: string; adresse: string; msgIds: string[]; createdBy?: string; onlyRsContrat?: boolean; forceKind?: DocKind }): Promise<{ created: number; docs: { kind: DocKind; fileName: string }[] }> {
+export async function captureReplyDocs(opts: { pipelineId: string; coproId: string; adresse: string; msgIds: string[]; createdBy?: string; onlyRsContrat?: boolean; forceKind?: DocKind; onlyLast?: boolean }): Promise<{ created: number; docs: { kind: DocKind; fileName: string }[] }> {
   if (!FRONT_TOKEN) return { created: 0, docs: [] };
   const existing = await prisma.pipelineDocument.findMany({ where: { pipelineId: opts.pipelineId }, select: { frontAttachmentId: true, kind: true } });
   const seen = new Set(existing.map((d) => d.frontAttachmentId).filter(Boolean) as string[]);
@@ -85,6 +85,10 @@ export async function captureReplyDocs(opts: { pipelineId: string; coproId: stri
     const full = await frontGetMessage(msgId);
     for (const a of full?.attachments ?? []) if (isRealDoc(a) && a.id && a.url && !seen.has(a.id)) { candidates.push({ att: a, msgId }); seen.add(a.id); }
   }
+  // Cas devis : l'assureur (AXA) renvoie souvent les PJ qu'on lui avait transmises
+  // AVEC le devis → on ne garde que la DERNIÈRE PJ (le devis), pas les doublons.
+  // (msgIds passés en ordre chronologique → dernière PJ = celle du dernier message.)
+  if (opts.onlyLast && candidates.length > 1) candidates.splice(0, candidates.length - 1);
   if (!candidates.length) return { created: 0, docs: [] };
 
   // Télécharge + classe.

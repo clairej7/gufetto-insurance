@@ -41,7 +41,10 @@ export async function getDevis6Volet1Data(): Promise<Devis6Volet1> {
   });
   const rows: Devis6Row[] = ps.map((p) => {
     const hasContrat = p.documents.some((d) => d.kind === "contrat_mri") || !!(p.contratActuelData && p.contratActuelData.trim());
-    const nbDevis = p.devisRecus.length;
+    // « Devis » présent = soit un DevisRecu structuré (comparaison), soit au moins
+    // un DOC de devis chargé (Devis AXA / Devis Mila) même sans données extraites.
+    const devisDocs = p.documents.filter((d) => d.kind === "devis_axa" || d.kind === "devis_mila").length;
+    const nbDevis = p.devisRecus.length + devisDocs;
     const hasDevis = nbDevis > 0;
     const primeVerifiee = p.copro.primeActuelle != null && !p.copro.primeAVerifier;
     const comparaisonFaite = p.devisRecus.some((d) => d.recommande);

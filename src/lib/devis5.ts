@@ -399,7 +399,8 @@ export async function scanDevisReplies(offset: number, limit: number): Promise<{
         const forceKind = (m.to || "").toLowerCase().includes("souscription@mila.fr") ? "devis_mila" : "devis_axa";
         const cp = e.pipeline?.copro;
         if (e.pipeline?.coproId && cp) {
-          await captureReplyDocs({ pipelineId: e.pipelineId, coproId: e.pipeline.coproId, adresse: cp.adresse || cp.nom, msgIds: inbound.map((x) => x.id), forceKind, createdBy: "auto:scan_devis" });
+          const chrono = [...inbound].sort((a, b) => a.created_at - b.created_at).map((x) => x.id);
+          await captureReplyDocs({ pipelineId: e.pipelineId, coproId: e.pipeline.coproId, adresse: cp.adresse || cp.nom, msgIds: chrono, forceKind, onlyLast: true, createdBy: "auto:scan_devis" });
         }
       } catch { /* capture best-effort */ }
     }
