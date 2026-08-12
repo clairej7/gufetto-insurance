@@ -171,7 +171,7 @@ export async function getDevis5Volet2Data(): Promise<Devis5Volet2> {
     // Exclut les dossiers dont la demande de devis a DÉJÀ été envoyée (event
     // devis_sent) : ils sont passés au suivi (Volet 4), ils n'ont plus rien à
     // faire au Volet 2 (préparation des infos).
-    where: { metadata: { path: ["devis5Volet"], equals: 2 }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null }, events: { none: { metadata: { path: ["devisType"], equals: "devis_sent" } } } } },
+    where: { metadata: { path: ["devis5Volet"], equals: 2 }, pipeline: { statut: "devis_demandes", coproId: { notIn: excl }, copro: { archivedAt: null }, events: { none: { metadata: { path: ["devisType"], equals: "devis_sent" } } } } },
     select: { createdAt: true, pipelineId: true, pipeline: { select: { copro: { select: { nom: true, adresse: true, primeActuelle: true, surfaceDeveloppee: true, periodeConstruction: true, natureOccupation: true, activitesAggravantes: true, caracteristiquesParticulieres: true, proportionInoccupee: true, protectionJuridique: true } } } } },
     orderBy: { createdAt: "desc" },
   });
@@ -408,10 +408,20 @@ export async function scanDevisReplies(offset: number, limit: number): Promise<{
 }
 
 // Confirme (ou corrige) le statut d'une demande via le menu déroulant.
-export async function confirmDevisReply(eventId: string, kind: DevisReplyKind, actorEmail: string): Promise<{ ok: boolean }> {
-  const e = await prisma.pipelineEvent.findUnique({ where: { id: eventId }, select: { metadata: true } });
+export async function confirmDevisReply(eventId: string, kind: DevisReplyKind, actorEmail: string): Promise<{ ok: boolean; moved?: boolean }> {
+  const e = await prisma.pipelineEvent.findUnique({ where: { id: eventId }, select: { metadata: true, pipelineId: true, pipeline: { select: { statut: true } } } });
   if (!e) return { ok: false };
   const base = (e.metadata ?? {}) as DevisSentMeta;
   await prisma.pipelineEvent.update({ where: { id: eventId }, data: { metadata: { ...base, replyKind: kind, replyConfirmed: true, replyConfirmedBy: actorEmail, replyConfirmedAt: new Date().toISOString() } as object } });
-  return { ok: true };
+  // « Devis obtenu » validé → passage AUTO en « Comparaison des devis » (comme la
+  // détection « RS reçu »), même si on attend encore l'autre assureur.
+  let moved = false;
+  if (kind === "devis_obtenu" && e.pipeline?.statut === "devis_demandes") {
+    await prisma.$transaction([
+      prisma.insurancePipeline.update({ where: { id: e.pipelineId }, data: { statut: "devis_recus" } }),
+      prisma.pipelineEvent.create({ data: { pipelineId: e.pipelineId, type: "statut_change", ancienStatut: "devis_demandes", nouveauStatut: "devis_recus", description: "Devis obtenu (détecteur) — passage à la comparaison des devis", metadata: { devisObtenu: true }, createdBy: actorEmail } }),
+    ]);
+    moved = true;
+  }
+  return { ok: true, moved };
 }
