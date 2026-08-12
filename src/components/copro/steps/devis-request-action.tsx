@@ -7,8 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Check, CheckCircle2, ChevronRight, FileText, Paperclip, Upload, X } from "lucide-react";
-import { updateCoproCaracteristiques, logDevisSent, advanceStatut, getPdfSignedUrl } from "@/lib/actions";
+import { updateCoproCaracteristiques, logDevisSent, marquerDevisObtenu, getPdfSignedUrl } from "@/lib/actions";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 type DroppedFile = { file: File; name: string };
 
@@ -322,6 +323,7 @@ export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, us
   const [bodyMila, setBodyMila] = useState("");
 
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
   const [sent, setSent] = useState(false);
   const [showLog, setShowLog] = useState(true);
 
@@ -417,7 +419,8 @@ export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, us
 
       if (allOk) {
         setSent(true);
-        await advanceStatut(pipelineId, true);
+        // L'envoi ne fait PLUS avancer le dossier : il reste en « Demande de devis »
+        // tant qu'aucun devis n'est reçu (bouton « Devis obtenu » ou détecteur).
         toast.success(
           toSend.length === 2
             ? "Demandes de devis envoyées à AXA et Mila !"
@@ -481,6 +484,15 @@ export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, us
             <EmailLogCard key={e.id} assureur={assureur} to={to} body={body} date={date} />
           );
         })}
+        <button
+          type="button"
+          onClick={() => startTransition(async () => { await marquerDevisObtenu(pipelineId); toast.success("Devis obtenu — dossier passé en « Comparaison des devis »"); router.refresh(); })}
+          disabled={isPending}
+          className="w-full text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-60"
+          style={{ background: "#EAF7EE", color: "#13762C", border: "1px solid #B7E4C4" }}
+        >
+          {isPending ? "…" : "✓ Devis obtenu → passer en « Comparaison des devis »"}
+        </button>
         <button
           type="button"
           onClick={() => setShowLog(false)}

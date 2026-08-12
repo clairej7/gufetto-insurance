@@ -330,6 +330,22 @@ export async function marquerRSRecu(pipelineId: string) {
   return advanceStatut(pipelineId, true, "RS reçu — passage aux devis");
 }
 
+// Un devis a été obtenu (même si on attend encore l'autre assureur) → le dossier
+// passe à « Comparaison des devis ». Idempotent (ne fait rien si déjà en compa).
+export async function marquerDevisObtenu(pipelineId: string) {
+  const session = await getSession();
+  const p = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, select: { statut: true } });
+  if (!p) throw new Error("Pipeline introuvable");
+  if (p.statut === "devis_recus") { revalidatePath(`/pipeline/${pipelineId}`); return { success: true }; }
+  await prisma.$transaction([
+    prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { statut: "devis_recus" } }),
+    prisma.pipelineEvent.create({ data: { pipelineId, type: "statut_change", ancienStatut: p.statut, nouveauStatut: "devis_recus", description: "Devis obtenu — passage à la comparaison des devis", metadata: { devisObtenu: true }, createdBy: session.user.email! } }),
+  ]);
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
 export async function createAppelCourtierTask(pipelineId: string) {
   const session = await getSession();
 

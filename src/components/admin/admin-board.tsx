@@ -696,7 +696,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                     <div style={{ display: "flex", gap: 16 }}>
                       <div>
                         <div style={{ fontSize: 18, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisDemandes}</div>
-                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>demandes envoyées</div>
+                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>dont mails envoyés</div>
                       </div>
                       <div>
                         <div style={{ fontSize: 18, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisRecus.total}</div>
