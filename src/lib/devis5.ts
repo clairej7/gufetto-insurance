@@ -8,7 +8,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getExcludedCoproIds } from "@/lib/exclusions";
-import { captureDocsForPipeline, captureReplyDocs } from "@/lib/rs-docs";
+import { captureDocsForPipeline, captureReplyDocs, isDevisFilename } from "@/lib/rs-docs";
 import { fieldPresence, extractDevisInfoForPipeline, type DevisFieldKey } from "@/lib/devis-info";
 
 export type Devis5Row = {
@@ -332,13 +332,6 @@ export async function sendReadyToAuto6(actorEmail: string): Promise<{ sent: numb
 
 // ── Détecteur de réponses (AXA/Mila) ──────────────────────────────────────
 const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ").trim();
-function hasRealDoc(atts: { content_type?: string; contentType?: string; filename?: string }[]): boolean {
-  return (atts ?? []).some((a) => {
-    const ct = (a.content_type || a.contentType || "").toLowerCase(); const fn = (a.filename || "").toLowerCase();
-    const inline = /^image\d+\.(png|gif|jpe?g)$/.test(fn) || /logo|signature/.test(fn);
-    return !inline && (ct.includes("pdf") || ct.includes("word") || ct.includes("sheet") || ct.includes("excel") || /\.(pdf|docx?|xlsx?)$/.test(fn));
-  });
-}
 const DEVIS_TXT = /devis|proposition (commerciale|tarifaire|d'?assurance)|tarification|cotisation propos|projet de contrat|offre (tarifaire|commerciale)|ci-?joint.*(devis|proposition|tarif|offre)/i;
 // Refus d'assurer — patterns observés sur Front (surtout Mila / Pierre Quantin).
 const REFUS_TXT = /(?:pas\s+en\s+mesure\s+d['’ ]assurer|ne\s+(?:pouvons|pourrons|sommes)\s+pas\s+(?:en\s+mesure\s+)?(?:d['’ ]assurer|donner\s+(?:une\s+)?suite|assurer|garantir|r[ée]pondre\s+favorablement)|ne\s+souhait\w+\s+pas\s+(?:assurer|donner\s+suite|poursuivre|retenir)|d[ée]clin\w+\s+(?:votre|le|la|l['’]|cette|toute|ce)|refus\w*\s+(?:d['’ ]assurer|de\s+garantir|votre\s+demande)|risque\s+(?:non|in)\s?assurable|non\s+assurable|zone\s+inondable\s+à\s+risque\s+tr[eè]s\s+[ée]lev[ée])/i;
@@ -376,31 +369,32 @@ export async function scanDevisReplies(offset: number, limit: number): Promise<{
     if (!cid) { await setMeta({ replyKind: "non_scanne" }); counts["non_scanne"] = (counts["non_scanne"] ?? 0) + 1; continue; }
     const sentMs = e.createdAt.getTime();
     const list = await frontGetJson(`/conversations/${cid}/messages?limit=20`);
-    const results = ((list?._results as unknown[]) ?? []) as { id: string; is_inbound: boolean; created_at: number; error_type?: string; blurb?: string; attachments?: { content_type?: string; filename?: string }[]; author?: { email?: string }; recipients?: { role: string; handle: string }[] }[];
+    const results = ((list?._results as unknown[]) ?? []) as { id: string; is_inbound: boolean; created_at: number; error_type?: string; blurb?: string; author?: { email?: string }; recipients?: { role: string; handle: string }[] }[];
     const bounce = results.some((x) => !x.is_inbound && x.error_type);
     const inbound = results.filter((x) => {
       const from = (x.recipients ?? []).find((r) => r.role === "from")?.handle || x.author?.email || "";
       return x.is_inbound && x.created_at * 1000 > sentMs && !isFromMateraH(from);
-    });
-    let body = "", snippet = "", hasDoc = inbound.some((x) => hasRealDoc(x.attachments ?? []));
-    const last = inbound.sort((a, b) => b.created_at - a.created_at)[0];
-    if (last) {
-      const full = (await frontGetJson(`/messages/${last.id}`)) as { content?: string; attachments?: { content_type?: string; filename?: string }[] } | null;
-      body = stripHtml(full?.content || last.blurb || "").slice(0, 500);
-      snippet = body.slice(0, 160);
-      if (full?.attachments && hasRealDoc(full.attachments)) hasDoc = true;
-    }
-    const kind = classifyDevisReply(body, hasDoc, inbound.length > 0, bounce);
+    }).sort((a, b) => a.created_at - b.created_at);
+    // Lecture des messages entrants (corps + PJ) : on distingue un VRAI devis
+    // (fichier « Projet/Conditions particulières/… ») des RS/contrats que
+    // l'assureur nous a simplement re-transmis.
+    const fulls: { id: string; content?: string; blurb?: string; attachments?: { content_type?: string; filename?: string }[] }[] = [];
+    for (const x of inbound) { const full = (await frontGetJson(`/messages/${x.id}`)) as { content?: string; attachments?: { content_type?: string; filename?: string }[] } | null; fulls.push({ id: x.id, content: full?.content, blurb: x.blurb, attachments: full?.attachments }); }
+    const allAtts = fulls.flatMap((f) => f.attachments ?? []);
+    const hasDevisDoc = allAtts.some((a) => isDevisFilename(a.filename || ""));
+    const lastF = fulls[fulls.length - 1];
+    const body = stripHtml(lastF?.content || lastF?.blurb || "").slice(0, 500);
+    const snippet = body.slice(0, 160);
+    const kind = classifyDevisReply(body, hasDevisDoc, inbound.length > 0, bounce);
     await setMeta({ replyKind: kind, replySnippet: snippet || (bounce ? "Échec de remise (bounce)" : undefined) });
-    // Devis reçu avec PJ → on capture le PDF dans le dossier, type forcé selon
-    // l'assureur (Devis AXA / Devis Mila), sans IA. Idempotent, best-effort.
-    if (kind === "devis_obtenu" && hasDoc) {
+    // Devis réel présent → on capture UNIQUEMENT le fichier devis (par nom),
+    // type forcé selon l'assureur (Devis AXA / Devis Mila), sans IA. Best-effort.
+    if (kind === "devis_obtenu" && hasDevisDoc) {
       try {
         const forceKind = (m.to || "").toLowerCase().includes("souscription@mila.fr") ? "devis_mila" : "devis_axa";
         const cp = e.pipeline?.copro;
         if (e.pipeline?.coproId && cp) {
-          const chrono = [...inbound].sort((a, b) => a.created_at - b.created_at).map((x) => x.id);
-          await captureReplyDocs({ pipelineId: e.pipelineId, coproId: e.pipeline.coproId, adresse: cp.adresse || cp.nom, msgIds: chrono, forceKind, onlyLast: true, createdBy: "auto:scan_devis" });
+          await captureReplyDocs({ pipelineId: e.pipelineId, coproId: e.pipeline.coproId, adresse: cp.adresse || cp.nom, msgIds: inbound.map((x) => x.id), forceKind, devisOnly: true, createdBy: "auto:scan_devis" });
         }
       } catch { /* capture best-effort */ }
     }

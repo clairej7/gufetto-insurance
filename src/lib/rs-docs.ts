@@ -66,6 +66,16 @@ export async function classifyInsuranceDoc(pdf: Buffer, filename: string): Promi
   } catch { return byName(); }
 }
 
+// Reconnaît un VRAI fichier de devis par son nom (sans IA). L'assureur (AXA)
+// renvoie souvent nos propres PJ (« … - RS.pdf » / « … - Contrat MRI.pdf ») AVEC
+// le devis (« ProjetConditionsParticulieres….pdf »). On ne veut QUE le devis.
+export function isDevisFilename(filename: string): boolean {
+  const f = (filename || "").toLowerCase();
+  // Exclut nos docs re-transmis + tout ce qui est RS / contrat / attestation.
+  if (/relev|sinistr|statistiq|[ée]tat\s+des\s+sinistres|\s-\s?rs\b|-\s?rs\.|contrat\s*mri|conditions\s+g[ée]n[ée]rales|attestation/.test(f)) return false;
+  return /projet|conditions?\s*particuli|devis|proposition|tarif|cotisation|offre|chiffrage/.test(f);
+}
+
 function docName(adresse: string, kind: DocKind, part: number | null): string {
   const base = `${adresse} - ${DOC_LABEL[kind]}`;
   return part ? `${base} partie ${part}` : base;
@@ -73,7 +83,7 @@ function docName(adresse: string, kind: DocKind, part: number | null): string {
 
 // Capture toutes les PJ PDF des messages entrants donnés → Supabase + PipelineDocument.
 // Idempotent (skip si frontAttachmentId déjà stocké). Renvoie le nombre de docs créés.
-export async function captureReplyDocs(opts: { pipelineId: string; coproId: string; adresse: string; msgIds: string[]; createdBy?: string; onlyRsContrat?: boolean; forceKind?: DocKind; onlyLast?: boolean }): Promise<{ created: number; docs: { kind: DocKind; fileName: string }[] }> {
+export async function captureReplyDocs(opts: { pipelineId: string; coproId: string; adresse: string; msgIds: string[]; createdBy?: string; onlyRsContrat?: boolean; forceKind?: DocKind; onlyLast?: boolean; devisOnly?: boolean }): Promise<{ created: number; docs: { kind: DocKind; fileName: string }[] }> {
   if (!FRONT_TOKEN) return { created: 0, docs: [] };
   const existing = await prisma.pipelineDocument.findMany({ where: { pipelineId: opts.pipelineId }, select: { frontAttachmentId: true, kind: true } });
   const seen = new Set(existing.map((d) => d.frontAttachmentId).filter(Boolean) as string[]);
@@ -85,11 +95,13 @@ export async function captureReplyDocs(opts: { pipelineId: string; coproId: stri
     const full = await frontGetMessage(msgId);
     for (const a of full?.attachments ?? []) if (isRealDoc(a) && a.id && a.url && !seen.has(a.id)) { candidates.push({ att: a, msgId }); seen.add(a.id); }
   }
-  // Cas devis : l'assureur (AXA) renvoie souvent les PJ qu'on lui avait transmises
-  // AVEC le devis → on ne garde que la DERNIÈRE PJ (le devis), pas les doublons.
-  // (msgIds passés en ordre chronologique → dernière PJ = celle du dernier message.)
-  if (opts.onlyLast && candidates.length > 1) candidates.splice(0, candidates.length - 1);
-  if (!candidates.length) return { created: 0, docs: [] };
+  // Cas devis : ne garder que les VRAIS fichiers de devis (par nom), pas les RS /
+  // contrats que l'assureur nous a re-transmis avec sa proposition.
+  let cand = candidates;
+  if (opts.devisOnly) cand = cand.filter((c) => isDevisFilename(c.att.filename || ""));
+  if (opts.onlyLast && cand.length > 1) cand = cand.slice(-1);
+  if (!cand.length) return { created: 0, docs: [] };
+  candidates.length = 0; candidates.push(...cand);
 
   // Télécharge + classe.
   const classified: { att: FrontAttachment; msgId: string; kind: DocKind; buf: Buffer }[] = [];
