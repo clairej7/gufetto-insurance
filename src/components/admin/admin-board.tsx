@@ -54,7 +54,9 @@ interface AdminBoardProps {
   // Devis reçus = dossiers avec au moins 1 devis reçu (+ détail par assureur).
   devisRecus: { total: number; axa: number; mila: number };
   // Flux RS par jour (demandes envoyées vs RS reçus) pour le graphe du bas.
-  rsFlow: { date: string; label: string; sent: number; recus: number }[];
+  rsFlow: { date: string; label: string; sent: number; relances: number; recus: number }[];
+  // Nb de dossiers exclus des automatisations (à re-traiter plus tard).
+  excludedCount: number;
 }
 
 
@@ -137,7 +139,18 @@ const TD_RIGHT: React.CSSProperties = { ...TD, textAlign: "right" };
 
 type KpiFilter = "actifs" | "gagnes" | "perdus" | null;
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRecus, contratsRecus, devisDemandes, odrByInsurer, devisRecus, rsFlow }: AdminBoardProps) {
+// Grand en-tête de section « Partie N — Titre » (sépare nettement les 5 parties).
+function PartTitle({ n, title, first }: { n: number; title: string; first?: boolean }) {
+  return (
+    <div style={{ marginTop: first ? 0 : 44, display: "flex", alignItems: "center", gap: 12 }}>
+      <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.8, color: "#fff", background: "#4E49FC", borderRadius: 999, padding: "5px 13px", whiteSpace: "nowrap" }}>PARTIE {n}</span>
+      <span style={{ fontSize: 20, fontWeight: 800, color: "#26262C", letterSpacing: "-0.01em", whiteSpace: "nowrap" }}>{title}</span>
+      <span style={{ flex: 1, height: 2, background: "#ECECF3", borderRadius: 2 }} />
+    </div>
+  );
+}
+
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRecus, contratsRecus, devisDemandes, odrByInsurer, devisRecus, rsFlow, excludedCount }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
@@ -365,6 +378,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
         })()}
       </div>
 
+      <PartTitle n={1} title="État des lieux du pipe" first />
+
       {/* ── KPIs ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
         {([
@@ -462,6 +477,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
         </div>
       </div>
 
+      <PartTitle n={2} title="Revenus — montants en jeu" />
+
       {/* ── Revenus — montants en jeu ── */}
       <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
         <div style={{ marginBottom: 20 }}>
@@ -533,6 +550,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
           Total : <strong style={{ color: "#26262C" }}>{primeAvecTotal}</strong> / {primeTotalDossiers} dossiers avec prime renseignée · <strong style={{ color: "#CA1E12" }}>{primeSansTotal}</strong> primes manquantes
         </div>
       </div>
+
+      <PartTitle n={3} title="Suivi des ODR" />
 
       {/* ── Suivi des ODR ── */}
       <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
@@ -617,6 +636,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
           })}
         </div>
       </div>
+
+      <PartTitle n={4} title="Suivi des changements d'assureur" />
 
       {/* ── Suivi des changements d'assureur (dossiers classiques, hors ODR) ── */}
       <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
@@ -718,7 +739,18 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
           </div>
         </div>
 
-        <RsFlowChart data={rsFlow} />
+        <RsFlowChart data={rsFlow} recusTotal={rsRecus} demandesTotal={rsDemandes} />
+      </div>
+
+      <PartTitle n={5} title="Autres" />
+
+      {/* ── Dossiers exclus des automatisations ── */}
+      <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "16px 20px", boxShadow: "0 1px 2px rgba(13,22,63,.05)", display: "flex", alignItems: "center", gap: 18 }}>
+        <div style={{ fontSize: 30, fontWeight: 800, color: excludedCount > 0 ? "#B4690E" : "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{excludedCount}</div>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Dossiers exclus des automatisations</div>
+          <div style={{ fontSize: 12, color: "#656576", marginTop: 2 }}>Copros mises de côté (gestionnaires/dossiers exclus). À re-traiter à la main plus tard — elles ne partent dans aucune automatisation.</div>
+        </div>
       </div>
 
       {/* ── Évolution semaine par semaine ── */}
