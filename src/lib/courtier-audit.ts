@@ -57,6 +57,12 @@ export const isMateraInternal = (email: string) => {
 // demande pas de relevé de sinistralité. À bloquer partout à l'envoi de RS.
 export const isDevisContact = (email: string) => /achille\.leboeuf|souscription@mila\.fr/i.test(email.toLowerCase());
 
+// Assureur = Wakam ou « Matera Assurance(s) » → on ÉTAIT l'assureur (contrat
+// Matera/Wakam), pas un vrai contrat externe : demander un RS n'a pas de sens.
+// À écarter de l'échantillon (infos erronées) pour vérification manuelle.
+export const isExInsurerAssureur = (assureur: string | null | undefined) =>
+  /wakam|matera\s*assurances?/i.test((assureur ?? "").toLowerCase());
+
 // Distance de Levenshtein bornée (retourne >max dès dépassement).
 function lev(a: string, b: string, max = 1): number {
   if (Math.abs(a.length - b.length) > max) return max + 1;
@@ -273,14 +279,30 @@ function nameMatchesDomain(nameTokens: string[], domain: string): boolean {
 //    (ex. Top Bridging → topbridging.com) ; sinon si plusieurs cabinets distincts
 //    (≥2 domaines non génériques, aucun ne matchant le nom) → hold (ambigu).
 export type SendMailPlan = { mails: string[]; hold: boolean; reason: string };
-export function prepareSendMails(courtierName: string | null, mailField: string | null, idx: CourtierIndex): SendMailPlan {
+export function prepareSendMails(courtierName: string | null, mailField: string | null, idx: CourtierIndex, assureur?: string | null): SendMailPlan {
+  // GARDE-FOU assureur : Wakam / « Matera Assurance(s) » = on était l'assureur →
+  // pas de RS à demander. Bloqué (à vérifier manuellement).
+  if (isExInsurerAssureur(assureur)) return { mails: [], hold: true, reason: "assureur Wakam / Matera Assurance — on était l'assureur, RS non pertinent (à vérifier)" };
   const all = (mailField ?? "").split(/[;,]/).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s));
   // GARDE-FOU : toute adresse @matera.eu / *.matera.eu est INTERNE (CS, salarié,
   // bonjour@, canal Gufetto) — jamais un courtier. On la retire systématiquement.
-  const mails = all.filter((m) => !isMateraInternal(m) && !isDevisContact(m));
+  let mails = all.filter((m) => !isMateraInternal(m) && !isDevisContact(m));
   if (all.length && !mails.length) return { mails: [], hold: true, reason: "adresse interne Matera ou contact devis (Achille AXA / Mila) — pas un courtier RS" };
   if (!mails.length) return { mails: [], hold: true, reason: "pas de mail exploitable" };
   const dom = (m: string) => domainOf(m.toLowerCase());
+  const courTokens = tokensOf(normNom(courtierName ?? ""));
+  // GARDE-FOU assureur (bis) : retirer les mails du DOMAINE DE L'ASSUREUR
+  // (ex. contact@april.com quand l'assureur est APRIL) — on veut le courtier, pas
+  // l'assureur. On ne retire pas un mail qui matche aussi le nom du courtier.
+  const assTokens = tokensOf(normNom(assureur ?? ""));
+  if (assTokens.length) {
+    const notAss = mails.filter((m) => !(nameMatchesDomain(assTokens, dom(m)) && !nameMatchesDomain(courTokens, dom(m))));
+    if (notAss.length) mails = notAss;
+  }
+  // GARDE-FOU perso : dès qu'un mail PRO existe, on jette les mails perso/génériques
+  // (gmail, yahoo…) — un courtier n'écrit pas depuis un gmail (cf. mail « unknown@ »).
+  const nonPerso = mails.filter((m) => !GENERIC_DOM.has(dom(m)));
+  if (nonPerso.length && nonPerso.length < mails.length) mails = nonPerso;
   // Plafond : on n'envoie jamais à plus de 2 contacts d'un même cabinet (3+ = trop).
   const cap = (m: string[]) => m.slice(0, 2);
   const res = resolveCourtier(courtierName, idx);

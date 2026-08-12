@@ -8,7 +8,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSignatureHtml, tagConversation, assignConversation, resolveTeammateId } from "@/lib/front";
-import { getCourtierIndex, prepareSendMails, isMateraInternal } from "@/lib/courtier-audit";
+import { getCourtierIndex, prepareSendMails, isMateraInternal, isExInsurerAssureur } from "@/lib/courtier-audit";
 import { getExcludedCoproIds } from "@/lib/exclusions";
 import { captureReplyDocs } from "@/lib/rs-docs";
 
@@ -127,19 +127,28 @@ export async function getRs4Sample(): Promise<Rs4Sample> {
     select: { id: true, rsBatchAt: true, copro: { select: { nom: true, assureurActuel: true, numeroContrat: true, courtierActuel: true, contactCourtierEmail: true } } },
     orderBy: { rsBatchAt: "desc" },
   });
+  const idx = await getCourtierIndex();
 
   const completeRows: Rs4Row[] = [];
   const incompleteRows: Rs4Row[] = [];
   for (const p of ps) {
     const c = p.copro;
-    const mail = c.contactCourtierEmail?.trim() || null;
     const assureur = c.assureurActuel?.trim() || null;
     const numeroContrat = c.numeroContrat?.trim() || null;
+    // On passe le mail par les MÊMES garde-fous qu'à l'envoi (prepareSendMails) :
+    // retire interne Matera / contacts devis / mail assureur / perso, ne garde que
+    // le(s) mail(s) courtier réellement envoyables. `hold` = cas erroné (Wakam,
+    // mails d'autres cabinets, aucun mail courtier fiable…).
+    const plan = prepareSendMails(c.courtierActuel, c.contactCourtierEmail, idx, assureur);
+    const cleanMail = plan.mails.join(", ") || null;
     const manque: string[] = [];
-    if (!mail) manque.push("mail courtier");
+    if (plan.hold) manque.push(plan.reason);            // erroné (Wakam / mails incohérents…)
+    else if (!cleanMail) manque.push("mail courtier");  // aucun mail courtier exploitable
     if (!assureur) manque.push("assureur");
     if (!numeroContrat) manque.push("n° de contrat");
-    const row: Rs4Row = { pipelineId: p.id, nom: c.nom, assureur, numeroContrat, courtier: c.courtierActuel?.trim() || null, mail, manque };
+    // Affiche le mail NETTOYÉ (ce qui partira), pas le champ brut pollué.
+    const displayMail = cleanMail ?? (c.contactCourtierEmail?.trim() || null);
+    const row: Rs4Row = { pipelineId: p.id, nom: c.nom, assureur, numeroContrat, courtier: c.courtierActuel?.trim() || null, mail: displayMail, manque };
     (manque.length === 0 ? completeRows : incompleteRows).push(row);
   }
 
@@ -215,7 +224,7 @@ export async function getRs4Volet2Data(): Promise<Volet2Data> {
   const rows: Volet2Row[] = ps
     .filter((p) => p.events.length === 0)
     .map((p) => {
-      const plan = prepareSendMails(p.copro.courtierActuel, p.copro.contactCourtierEmail, idx);
+      const plan = prepareSendMails(p.copro.courtierActuel, p.copro.contactCourtierEmail, idx, p.copro.assureurActuel);
       return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, assureur: p.copro.assureurActuel, numeroContrat: p.copro.numeroContrat, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, sendMail: plan.hold ? null : plan.mails.join(", "), hold: plan.hold, holdReason: plan.reason, gestionnaire: gestionnaireLabel(p.copro.gestionnaireNom, p.copro.gestionnaireEmail) };
     });
   return { total: ps.length, nouveaux: ps.length - dejaEnvoyes, dejaEnvoyes, sent, rows };
@@ -239,7 +248,7 @@ export async function sendVolet2(actorEmail: string, subjectTpl: string, bodyTpl
 
   for (const p of toSend) {
     const c = p.copro;
-    const plan = prepareSendMails(c.courtierActuel, c.contactCourtierEmail, idx);
+    const plan = prepareSendMails(c.courtierActuel, c.contactCourtierEmail, idx, c.assureurActuel);
     if (plan.hold) { failed++; errors.push(`${c.nom} : ${plan.reason} (${c.contactCourtierEmail}) — non envoyé`); continue; }
     const toList = plan.mails;
     const to = toList.join(", ");
@@ -600,7 +609,7 @@ export async function sendRelance(actorEmail: string, relanceNum: number, subjec
     const jours = Math.floor((nowMs - new Date(p.rs4SentAt!).getTime()) / 86400000);
     if (jours < stage.day || relanceCountOf(p.events) >= relanceNum) continue;
     const c = p.copro;
-    const plan = prepareSendMails(c.courtierActuel, c.contactCourtierEmail, idx);
+    const plan = prepareSendMails(c.courtierActuel, c.contactCourtierEmail, idx, c.assureurActuel);
     if (plan.hold) { failed++; errors.push(`${c.nom} : ${plan.reason} — non relancé`); continue; }
     const toList = plan.mails;
     const to = toList.join(", ");

@@ -412,7 +412,7 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
               </div>
               <div style={{ border: "1px solid #F3D9A6", background: "#FDF0D5", borderRadius: 10, padding: "12px 14px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#B4690E" }}><AlertTriangle size={16} /><span style={{ fontSize: 24, fontWeight: 800, lineHeight: 1 }}>{sample.incomplete}</span></div>
-                <div style={{ fontSize: 12, color: "#656576", marginTop: 6 }}>Infos incomplètes (au moins un champ manquant)</div>
+                <div style={{ fontSize: 12, color: "#656576", marginTop: 6 }}>Infos incomplètes / erronées (à vérifier avant envoi)</div>
               </div>
             </div>
             <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -424,7 +424,7 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
               )}
               {sample.incomplete > 0 && (
                 <div>
-                  <button onClick={() => setShowIncomplete((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#B4690E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>{showIncomplete ? "▾" : "▸"} Détail des {sample.incomplete} dossiers incomplets</button>
+                  <button onClick={() => setShowIncomplete((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#B4690E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>{showIncomplete ? "▾" : "▸"} Détail des {sample.incomplete} dossiers à vérifier (incomplets / erronés)</button>
                   {showIncomplete && <V1Table rows={sample.incompleteRows} showManque />}
                 </div>
               )}
