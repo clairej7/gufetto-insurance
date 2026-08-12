@@ -17,7 +17,7 @@ type OrangeRow = { pipelineId: string; nom: string; adresse: string | null; assu
 type ReadyRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; mail: string | null; rsSent: boolean };
 type RougeRow = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; courtier: string | null; mail: string | null; reason: string };
 type HistRow = { sentAt: string; count: number };
-type Audit = { counts: Counts; total: number; stepTotal: number; fillable: number; orange: OrangeRow[]; rouge: RougeRow[]; ready: ReadyRow[]; history: HistRow[] };
+type Audit = { counts: Counts; total: number; stepTotal: number; fillable: number; orange: OrangeRow[]; rouge: RougeRow[]; ready: ReadyRow[]; rsSentReview: ReadyRow[]; history: HistRow[] };
 
 function Buckets({ counts, total }: { counts: Counts; total: number }) {
   const items = [
@@ -52,10 +52,12 @@ export function CourtierAuditControls() {
   const [filling, setFilling] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendingRsSent, setSendingRsSent] = useState(false);
   const [loaded, setLoaded] = useState<number | null>(null);
   const [showOrange, setShowOrange] = useState(false);
   const [showRouge, setShowRouge] = useState(false);
   const [showReady, setShowReady] = useState(false);
+  const [showRsSent, setShowRsSent] = useState(false);
 
   const nonFillable = audit ? audit.orange.filter((r) => !r.fillable).length : 0;
   const isClean = !!audit && audit.counts.orange === 0;
@@ -107,6 +109,24 @@ export function CourtierAuditControls() {
       toast.error(e instanceof Error ? e.message : "Échec du chargement");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function sendRsSentToAuto4() {
+    if (!audit || !audit.rsSentReview.length) return;
+    if (!window.confirm(`⚠️ Ces ${audit.rsSentReview.length} dossier(s) ont DÉJÀ reçu une demande de RS.\n\nNe les charge dans l'automatisation 4 QUE si tu as vérifié qu'un renvoi/suivi est justifié. Continuer ?`)) return;
+    setSendingRsSent(true);
+    try {
+      const res = await fetch("/api/courtier/send-rssent-to-auto4", { method: "POST" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      const data = await res.json();
+      toast.success(`${data.loaded} dossier(s) « RS déjà envoyée » chargé(s) dans l'automatisation 4.`);
+      router.refresh();
+      await verify();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Échec du chargement");
+    } finally {
+      setSendingRsSent(false);
     }
   }
 
@@ -243,7 +263,7 @@ export function CourtierAuditControls() {
           {/* Échantillon clean prêt pour l'auto 4 (courtier + mail, RS non envoyée). */}
           <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #F1F1F4" }}>
             <button onClick={() => setShowReady((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#13762C", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-              {showReady ? "▾" : "▸"} Échantillon clean pour l&apos;auto 4 — {audit.ready.length} dossier(s){audit.ready.some((r) => r.rsSent) ? ` (dont ${audit.ready.filter((r) => r.rsSent).length} RS déjà envoyée)` : ""}
+              {showReady ? "▾" : "▸"} Échantillon clean pour l&apos;auto 4 — {audit.ready.length} dossier(s) (RS non encore envoyée)
             </button>
             {showReady && (
               <div style={{ marginTop: 8, maxHeight: 340, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
@@ -288,6 +308,48 @@ export function CourtierAuditControls() {
                 </p>
               )}
             </div>
+
+            {/* RS déjà envoyée : NE PASSENT PAS l'échantillon clean automatiquement.
+                Vérification manuelle obligatoire avant tout chargement (anti-doublon). */}
+            {audit.rsSentReview.length > 0 && (
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #F1F1F4" }}>
+                <button onClick={() => setShowRsSent((v) => !v)} style={{ fontSize: 12, fontWeight: 700, color: "#1F6FE0", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                  {showRsSent ? "▾" : "▸"} ⚠ {audit.rsSentReview.length} dossier(s) « RS déjà envoyée » — à vérifier à la main
+                </button>
+                <p style={{ fontSize: 11.5, color: "#656576", margin: "4px 0 0" }}>
+                  Une demande de RS a déjà été envoyée pour ces dossiers. Ils <strong>ne sont pas</strong> chargés automatiquement dans l&apos;auto 4 (anti-doublon). Vérifie chaque cas, puis charge-les manuellement si un suivi/renvoi est justifié.
+                </p>
+                {showRsSent && (
+                  <div style={{ marginTop: 8, maxHeight: 300, overflowY: "auto", overflowX: "auto", border: "1px solid #CFE1FB", borderRadius: 8, background: "#F7FAFF" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#EEF5FE" }}>
+                          {["Adresse", "Assureur", "Courtier", "Mail courtier"].map((h) => (
+                            <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#EEF5FE" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {audit.rsSentReview.map((r) => (
+                          <tr key={r.pipelineId} style={{ borderTop: "1px solid #E3EDFB" }}>
+                            <td style={{ padding: "6px 10px" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#1F6FE0", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
+                            <td style={{ padding: "6px 10px", color: "#656576" }}>{r.assureur || "—"}</td>
+                            <td style={{ padding: "6px 10px", color: "#656576" }}>{r.courtier || "—"}</td>
+                            <td style={{ padding: "6px 10px", color: "#13762C" }}>{r.mail || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div style={{ marginTop: 10 }}>
+                  <Button onClick={sendRsSentToAuto4} disabled={sendingRsSent} size="sm" variant="outline">
+                    {sendingRsSent ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                    Charger ces {audit.rsSentReview.length} (vérifiés) dans l&apos;auto 4
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {audit.history.length > 0 && (
               <div style={{ marginTop: 12 }}>
