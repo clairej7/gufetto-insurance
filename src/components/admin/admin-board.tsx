@@ -50,6 +50,8 @@ interface AdminBoardProps {
   // Vue « ODR par assureur » calculée côté serveur (même logique que l'Auto 2 :
   // marqueur ou fallback assureur + exclusions) → chiffres alignés sur l'automatisation.
   odrByInsurer: { key: string; label: string; count: number; montant: number; arr: number; stages: { label: string; count: number; montant: number; arr: number; color: string }[] }[];
+  // Devis reçus = dossiers avec au moins 1 devis reçu (+ détail par assureur).
+  devisRecus: { total: number; axa: number; mila: number };
 }
 
 
@@ -132,7 +134,7 @@ const TD_RIGHT: React.CSSProperties = { ...TD, textAlign: "right" };
 
 type KpiFilter = "actifs" | "gagnes" | "perdus" | null;
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRecus, contratsRecus, devisDemandes, odrByInsurer }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRecus, contratsRecus, devisDemandes, odrByInsurer, devisRecus }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
@@ -671,9 +673,13 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                         <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>demandes de devis envoyées</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 22, fontWeight: 700, color: "#A2A1AF", lineHeight: 1 }}>—</div>
-                        <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>devis reçus <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>à venir</span></div>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisRecus.total}</div>
+                        <div style={{ fontSize: 11, color: "#656576", marginTop: 3 }}>devis reçus</div>
                       </div>
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 11, color: "#656576", display: "flex", gap: 12 }}>
+                      <span><strong style={{ color: "#0A6BB8" }}>{devisRecus.axa}</strong> devis AXA</span>
+                      <span><strong style={{ color: "#8A4FC7" }}>{devisRecus.mila}</strong> devis Mila</span>
                     </div>
                   </div>
                 )}
