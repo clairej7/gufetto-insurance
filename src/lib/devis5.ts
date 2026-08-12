@@ -168,7 +168,10 @@ export type Devis5Volet2 = { count: number; complets: number; taux: number; toFi
 export async function getDevis5Volet2Data(): Promise<Devis5Volet2> {
   const excl = await getExcludedCoproIds();
   const ev = await prisma.pipelineEvent.findMany({
-    where: { metadata: { path: ["devis5Volet"], equals: 2 }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null } } },
+    // Exclut les dossiers dont la demande de devis a DÉJÀ été envoyée (event
+    // devis_sent) : ils sont passés au suivi (Volet 4), ils n'ont plus rien à
+    // faire au Volet 2 (préparation des infos).
+    where: { metadata: { path: ["devis5Volet"], equals: 2 }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null }, events: { none: { metadata: { path: ["devisType"], equals: "devis_sent" } } } } },
     select: { createdAt: true, pipelineId: true, pipeline: { select: { copro: { select: { nom: true, adresse: true, primeActuelle: true, surfaceDeveloppee: true, periodeConstruction: true, natureOccupation: true, activitesAggravantes: true, caracteristiquesParticulieres: true, proportionInoccupee: true, protectionJuridique: true } } } } },
     orderBy: { createdAt: "desc" },
   });
