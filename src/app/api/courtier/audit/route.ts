@@ -28,10 +28,11 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => Number(b.fillable) - Number(a.fillable));
   // Échantillon clean pour l'auto 4 : TOUS les verts (courtier + mail), déjà-envoyés
   // inclus (l'auto 4 triera nouvel envoi vs relance via draft_sent).
-  const ready = audit.rows
-    .filter((r) => r.bucket === "vert")
-    // mail nettoyé (domaine courtier uniquement) — c'est ce qui sera envoyé.
-    .map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, assureur: r.assureur, courtier: r.courtier, mail: r.cleanMail ?? r.mail, rsSent: r.rsSent }));
+  // Échantillon clean AUTO = verts, RS NON envoyée. Les « RS déjà envoyée »
+  // partent dans une liste séparée (rsSentReview) → chargement manuel après vérif.
+  const mapRow = (r: typeof audit.rows[number]) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, assureur: r.assureur, courtier: r.courtier, mail: r.cleanMail ?? r.mail, rsSent: r.rsSent });
+  const ready = audit.rows.filter((r) => r.bucket === "vert" && !r.rsSent).map(mapRow);
+  const rsSentReview = audit.rows.filter((r) => r.bucket === "vert" && r.rsSent).map(mapRow);
   // Détail du bucket ROUGE (sans courtier / assureur à la place) pour contrôle.
   const rouge = audit.rows
     .filter((r) => r.bucket === "rouge")
@@ -39,5 +40,5 @@ export async function GET(req: NextRequest) {
   const history = await getRsBatchHistory();
   // Total de l'étape (dossiers déjà envoyés à l'auto 4 inclus) vs. encore à vérifier.
   const stepTotal = audit.total + (await getRsBatchCount());
-  return NextResponse.json({ counts: audit.counts, total: audit.total, stepTotal, fillable: audit.fillable, orange, rouge, ready, history });
+  return NextResponse.json({ counts: audit.counts, total: audit.total, stepTotal, fillable: audit.fillable, orange, rouge, ready, rsSentReview, history });
 }
