@@ -55,13 +55,21 @@ export default async function AdminPage() {
   const { getDevisFlowDaily } = await import("@/lib/devis5");
   const devisFlow = await getDevisFlowDaily();
   const { getExcludedCoproIds } = await import("@/lib/exclusions");
-  const excludedCount = await prisma.insurancePipeline.count({ where: { coproId: { in: await getExcludedCoproIds() }, copro: { archivedAt: null } } });
-  // Demandes de devis = 1 par DOSSIER (pas par envoi : 1 dossier = AXA + Mila
-  // ne compte qu'une fois). Hors ODR et archivés, cohérent avec le suivi Auto 5.
-  const devisDemandes = (await prisma.pipelineEvent.findMany({
-    where: { metadata: { path: ["devisType"], equals: "devis_sent" }, pipeline: { statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] }, copro: { archivedAt: null } } },
-    select: { pipelineId: true }, distinct: ["pipelineId"],
-  })).length;
+  const exclCoproIds = await getExcludedCoproIds();
+  const excludedCount = await prisma.insurancePipeline.count({ where: { coproId: { in: exclCoproIds }, copro: { archivedAt: null } } });
+  // Chiffres de la carte « Demande de devis » SCOPÉS À L'ÉTAPE (pas de cumul
+  // cross-étape, sinon 79 − « mails envoyés » ne tombe pas juste) :
+  //  - mails partis = dossiers ENCORE en devis_demandes avec une demande envoyée
+  //    (en attente d'un devis) ;
+  //  - à demander = dossiers en devis_demandes sans demande, hors exclus (= volets 1+2).
+  const SENT_EVENT = { some: { metadata: { path: ["devisType"], equals: "devis_sent" } } };
+  const NO_SENT_EVENT = { none: { metadata: { path: ["devisType"], equals: "devis_sent" } } };
+  const devisMailsEnvoyes = await prisma.insurancePipeline.count({
+    where: { statut: "devis_demandes", copro: { archivedAt: null }, events: SENT_EVENT },
+  });
+  const devisAReclamer = await prisma.insurancePipeline.count({
+    where: { statut: "devis_demandes", copro: { archivedAt: null }, coproId: { notIn: exclCoproIds }, events: NO_SENT_EVENT },
+  });
 
   const gestionnaires = [
     ...new Set(
@@ -109,7 +117,8 @@ export default async function AdminPage() {
           rsDemandes={rsDemandes}
           rsRecus={rsRecus}
           contratsRecus={contratsRecus}
-          devisDemandes={devisDemandes}
+          devisMailsEnvoyes={devisMailsEnvoyes}
+          devisAReclamer={devisAReclamer}
           odrByInsurer={odrByInsurer}
           devisRecus={devisRecus}
           rsFlow={rsFlow}
