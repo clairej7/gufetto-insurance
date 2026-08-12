@@ -120,6 +120,31 @@ export type Rs4Sample = {
 // passé au Volet 2 (rs4Volet2At null).
 const volet1Where = (excl: string[]) => ({ statut: "rs_en_cours" as const, rsBatchAt: { not: null }, rs4Volet2At: null, coproId: { notIn: excl }, copro: { archivedAt: null } });
 
+// Série quotidienne pour le graphe du dashboard : par jour, nb de demandes de RS
+// envoyées (event draft_sent) et nb de RS reçus « actés » (event description ~ « RS reçu »).
+// Alimenté en direct par l'activité Gufetto (aucun cache).
+export type RsFlowDay = { date: string; label: string; sent: number; recus: number };
+export async function getRsFlowDaily(): Promise<RsFlowDay[]> {
+  const [sentEv, recuEv] = await Promise.all([
+    prisma.pipelineEvent.findMany({ where: { metadata: { path: ["rsType"], equals: "draft_sent" }, pipeline: { copro: { archivedAt: null } } }, select: { createdAt: true } }),
+    prisma.pipelineEvent.findMany({ where: { description: { contains: "RS reçu" }, pipeline: { copro: { archivedAt: null } } }, select: { createdAt: true } }),
+  ]);
+  const dayKey = (d: Date) => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris" }).format(d); // YYYY-MM-DD
+  const sentBy = new Map<string, number>(); const recuBy = new Map<string, number>();
+  for (const e of sentEv) sentBy.set(dayKey(e.createdAt), (sentBy.get(dayKey(e.createdAt)) ?? 0) + 1);
+  for (const e of recuEv) recuBy.set(dayKey(e.createdAt), (recuBy.get(dayKey(e.createdAt)) ?? 0) + 1);
+  const all = [...sentBy.keys(), ...recuBy.keys()].sort();
+  if (!all.length) return [];
+  const start = new Date(all[0] + "T12:00:00Z");
+  const end = new Date(dayKey(new Date()) + "T12:00:00Z");
+  const rows: RsFlowDay[] = [];
+  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    const k = d.toISOString().slice(0, 10);
+    rows.push({ date: k, label: `${k.slice(8, 10)}/${k.slice(5, 7)}`, sent: sentBy.get(k) ?? 0, recus: recuBy.get(k) ?? 0 });
+  }
+  return rows;
+}
+
 export async function getRs4Sample(): Promise<Rs4Sample> {
   const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({

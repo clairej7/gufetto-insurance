@@ -6,6 +6,7 @@ import type { PrimeStageRow } from "@/lib/prime";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { gestionnaireLabel } from "@/lib/gestionnaire";
 import { EvolutionChart } from "./evolution-chart";
+import { RsFlowChart } from "./rs-flow-chart";
 
 type Pipeline = {
   id: string;
@@ -52,6 +53,8 @@ interface AdminBoardProps {
   odrByInsurer: { key: string; label: string; count: number; montant: number; arr: number; stages: { label: string; count: number; montant: number; arr: number; color: string }[] }[];
   // Devis reçus = dossiers avec au moins 1 devis reçu (+ détail par assureur).
   devisRecus: { total: number; axa: number; mila: number };
+  // Flux RS par jour (demandes envoyées vs RS reçus) pour le graphe du bas.
+  rsFlow: { date: string; label: string; sent: number; recus: number }[];
 }
 
 
@@ -134,7 +137,7 @@ const TD_RIGHT: React.CSSProperties = { ...TD, textAlign: "right" };
 
 type KpiFilter = "actifs" | "gagnes" | "perdus" | null;
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRecus, contratsRecus, devisDemandes, odrByInsurer, devisRecus }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRecus, contratsRecus, devisDemandes, odrByInsurer, devisRecus, rsFlow }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
@@ -714,6 +717,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
             <div style={{ fontSize: 12, color: "#8A5A08", marginTop: 2 }}>La répartition par assureur se base sur l&apos;assureur actuel (souvent l&apos;ancien porteur, d&apos;où un « Autres » élevé). Elle sera fiabilisée via l&apos;enrichissement Matera (contrats fournisseurs).</div>
           </div>
         </div>
+
+        <RsFlowChart data={rsFlow} />
       </div>
 
       {/* ── Évolution semaine par semaine ── */}

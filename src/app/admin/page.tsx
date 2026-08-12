@@ -50,6 +50,8 @@ export default async function AdminPage() {
   const { contrat: contratsRecus } = await getDocsStats();
   const odrByInsurer = await getOdrByInsurerBoard();
   const devisRecus = await getDevisRecusStats();
+  const { getRsFlowDaily } = await import("@/lib/rs4");
+  const rsFlow = await getRsFlowDaily();
   // Demandes de devis = 1 par DOSSIER (pas par envoi : 1 dossier = AXA + Mila
   // ne compte qu'une fois). Hors ODR et archivés, cohérent avec le suivi Auto 5.
   const devisDemandes = (await prisma.pipelineEvent.findMany({
@@ -106,6 +108,7 @@ export default async function AdminPage() {
           devisDemandes={devisDemandes}
           odrByInsurer={odrByInsurer}
           devisRecus={devisRecus}
+          rsFlow={rsFlow}
         />
       </main>
     </div>
