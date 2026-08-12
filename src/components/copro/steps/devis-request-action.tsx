@@ -292,6 +292,9 @@ export function DevisRequestAction({ pipelineId, coproId, devisEvents, copro, us
       const map: Record<string, DroppedFile> = {};
       const inc = new Set<string>();
       for (const d of documents) {
+        // On ne joint que le contrat MRI et le RS (les inputs de la demande) ;
+        // les devis reçus (devis_axa / devis_mila) ne doivent JAMAIS repartir vers l'assureur.
+        if (d.kind !== "rs" && d.kind !== "contrat_mri") continue;
         const url = await getPdfSignedUrl(d.storagePath);
         if (!url) continue;
         const res = await fetch(url).catch(() => null);

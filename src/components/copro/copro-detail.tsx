@@ -1018,7 +1018,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
               )}
               <div className="space-y-2.5">
                 {documents.map((d) => {
-                  const meta = d.kind === "rs" ? { l: "RS", c: "#13762C", bg: "#EAF7EE", bd: "#B7E4C4" } : d.kind === "contrat_mri" ? { l: "Contrat MRI", c: "#4E49FC", bg: "#EEF0FF", bd: "#D9D9F5" } : { l: "Document", c: "#656576", bg: "#F1F1F4", bd: "#E8E8EC" };
+                  const meta = d.kind === "rs" ? { l: "RS", c: "#13762C", bg: "#EAF7EE", bd: "#B7E4C4" } : d.kind === "contrat_mri" ? { l: "Contrat MRI", c: "#4E49FC", bg: "#EEF0FF", bd: "#D9D9F5" } : d.kind === "devis_axa" ? { l: "Devis AXA", c: "#0A6BB8", bg: "#E7F2FB", bd: "#BEDDF3" } : d.kind === "devis_mila" ? { l: "Devis Mila", c: "#8A4FC7", bg: "#F2EAFB", bd: "#DDC9F0" } : { l: "Document", c: "#656576", bg: "#F1F1F4", bd: "#E8E8EC" };
                   const isOpen = docPreview?.id === d.id;
                   return (
                     <div key={d.id} style={{ position: "relative", border: "1px solid #EFEFF3", borderRadius: 10, padding: 8, background: isOpen ? "#FBFBFE" : "transparent" }}>
@@ -1044,7 +1044,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                           >{isOpen ? "▾ Masquer" : "▸ Aperçu"}</button>
                           <select
                             value={d.kind}
-                            onChange={(e) => startTransition(async () => { await retypeDocumentAction(d.id, e.target.value as "rs" | "contrat_mri" | "autre", pipeline.id); toast.success("Type du document corrigé"); })}
+                            onChange={(e) => startTransition(async () => { await retypeDocumentAction(d.id, e.target.value as "rs" | "contrat_mri" | "devis_axa" | "devis_mila" | "autre", pipeline.id); toast.success("Type du document corrigé"); })}
                             disabled={isPending}
                             className="text-[11px] border rounded-md px-1.5 py-1 bg-white"
                             style={{ borderColor: "#E4E4EB", color: "#656576" }}
@@ -1052,6 +1052,8 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                           >
                             <option value="rs">RS</option>
                             <option value="contrat_mri">Contrat MRI</option>
+                            <option value="devis_axa">Devis AXA</option>
+                            <option value="devis_mila">Devis Mila</option>
                             <option value="autre">Autre</option>
                           </select>
                         </div>

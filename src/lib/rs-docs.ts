@@ -9,8 +9,8 @@ const FRONT_API_URL = "https://api2.frontapp.com";
 const FRONT_TOKEN = process.env.FRONT_API_TOKEN;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export type DocKind = "rs" | "contrat_mri" | "autre";
-export const DOC_LABEL: Record<DocKind, string> = { rs: "RS", contrat_mri: "Contrat MRI", autre: "Document" };
+export type DocKind = "rs" | "contrat_mri" | "devis_axa" | "devis_mila" | "autre";
+export const DOC_LABEL: Record<DocKind, string> = { rs: "RS", contrat_mri: "Contrat MRI", devis_axa: "Devis AXA", devis_mila: "Devis Mila", autre: "Document" };
 
 type FrontAttachment = { id?: string; filename?: string; url?: string; content_type?: string; size?: number };
 
@@ -73,7 +73,7 @@ function docName(adresse: string, kind: DocKind, part: number | null): string {
 
 // Capture toutes les PJ PDF des messages entrants donnés → Supabase + PipelineDocument.
 // Idempotent (skip si frontAttachmentId déjà stocké). Renvoie le nombre de docs créés.
-export async function captureReplyDocs(opts: { pipelineId: string; coproId: string; adresse: string; msgIds: string[]; createdBy?: string; onlyRsContrat?: boolean }): Promise<{ created: number; docs: { kind: DocKind; fileName: string }[] }> {
+export async function captureReplyDocs(opts: { pipelineId: string; coproId: string; adresse: string; msgIds: string[]; createdBy?: string; onlyRsContrat?: boolean; forceKind?: DocKind }): Promise<{ created: number; docs: { kind: DocKind; fileName: string }[] }> {
   if (!FRONT_TOKEN) return { created: 0, docs: [] };
   const existing = await prisma.pipelineDocument.findMany({ where: { pipelineId: opts.pipelineId }, select: { frontAttachmentId: true, kind: true } });
   const seen = new Set(existing.map((d) => d.frontAttachmentId).filter(Boolean) as string[]);
@@ -92,7 +92,8 @@ export async function captureReplyDocs(opts: { pipelineId: string; coproId: stri
   for (const c of candidates) {
     const buf = await downloadAttachment(c.att.url!);
     if (!buf) continue;
-    const kind = await classifyInsuranceDoc(buf, c.att.filename || "");
+    // forceKind : type connu d'avance (ex. devis AXA/Mila) → pas d'appel IA.
+    const kind = opts.forceKind ?? await classifyInsuranceDoc(buf, c.att.filename || "");
     classified.push({ ...c, kind, buf });
   }
   const totalRs = rsCount + classified.filter((c) => c.kind === "rs").length;
