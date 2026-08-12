@@ -123,24 +123,29 @@ const volet1Where = (excl: string[]) => ({ statut: "rs_en_cours" as const, rsBat
 // Série quotidienne pour le graphe du dashboard : par jour, nb de demandes de RS
 // envoyées (event draft_sent) et nb de RS reçus « actés » (event description ~ « RS reçu »).
 // Alimenté en direct par l'activité Gufetto (aucun cache).
-export type RsFlowDay = { date: string; label: string; sent: number; recus: number };
+export type RsFlowDay = { date: string; label: string; sent: number; relances: number; recus: number };
 export async function getRsFlowDaily(): Promise<RsFlowDay[]> {
-  const [sentEv, recuEv] = await Promise.all([
-    prisma.pipelineEvent.findMany({ where: { metadata: { path: ["rsType"], equals: "draft_sent" }, pipeline: { copro: { archivedAt: null } } }, select: { createdAt: true } }),
+  const [draftEv, recuEv] = await Promise.all([
+    prisma.pipelineEvent.findMany({ where: { metadata: { path: ["rsType"], equals: "draft_sent" }, pipeline: { copro: { archivedAt: null } } }, select: { createdAt: true, metadata: true } }),
     prisma.pipelineEvent.findMany({ where: { description: { contains: "RS reçu" }, pipeline: { copro: { archivedAt: null } } }, select: { createdAt: true } }),
   ]);
   const dayKey = (d: Date) => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris" }).format(d); // YYYY-MM-DD
-  const sentBy = new Map<string, number>(); const recuBy = new Map<string, number>();
-  for (const e of sentEv) sentBy.set(dayKey(e.createdAt), (sentBy.get(dayKey(e.createdAt)) ?? 0) + 1);
+  const sentBy = new Map<string, number>(); const relBy = new Map<string, number>(); const recuBy = new Map<string, number>();
+  for (const e of draftEv) {
+    const k = dayKey(e.createdAt);
+    const relanceNum = Number((e.metadata as { relanceNum?: number } | null)?.relanceNum ?? 0);
+    if (relanceNum > 0) relBy.set(k, (relBy.get(k) ?? 0) + 1);
+    else sentBy.set(k, (sentBy.get(k) ?? 0) + 1);
+  }
   for (const e of recuEv) recuBy.set(dayKey(e.createdAt), (recuBy.get(dayKey(e.createdAt)) ?? 0) + 1);
-  const all = [...sentBy.keys(), ...recuBy.keys()].sort();
+  const all = [...sentBy.keys(), ...relBy.keys(), ...recuBy.keys()].sort();
   if (!all.length) return [];
   const start = new Date(all[0] + "T12:00:00Z");
   const end = new Date(dayKey(new Date()) + "T12:00:00Z");
   const rows: RsFlowDay[] = [];
   for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
     const k = d.toISOString().slice(0, 10);
-    rows.push({ date: k, label: `${k.slice(8, 10)}/${k.slice(5, 7)}`, sent: sentBy.get(k) ?? 0, recus: recuBy.get(k) ?? 0 });
+    rows.push({ date: k, label: `${k.slice(8, 10)}/${k.slice(5, 7)}`, sent: sentBy.get(k) ?? 0, relances: relBy.get(k) ?? 0, recus: recuBy.get(k) ?? 0 });
   }
   return rows;
 }
