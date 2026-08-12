@@ -753,9 +753,9 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
           <FlowChart
             data={devisFlow.rows}
             title="Flux des demandes de devis — par jour"
-            subtitle="Demandes de devis envoyées (barres) vs devis reçus (ligne). Maj automatique."
+            subtitle="Demandes de devis envoyées (barres) vs devis reçus « actés » (ligne, date d'enregistrement Gufetto). Maj automatique."
             sentLabel="Demandes de devis envoyées"
-            recusLabel="Devis reçus"
+            recusLabel="Devis reçus (actés)"
             recusTotal={devisFlow.recusTotal}
             demandesTotal={devisFlow.demandesTotal}
             tauxTitle="Taux de réception des devis"
