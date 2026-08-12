@@ -6,7 +6,7 @@ import type { PrimeStageRow } from "@/lib/prime";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { gestionnaireLabel } from "@/lib/gestionnaire";
 import { EvolutionChart } from "./evolution-chart";
-import { RsFlowChart } from "./rs-flow-chart";
+import { FlowChart } from "./rs-flow-chart";
 
 type Pipeline = {
   id: string;
@@ -55,6 +55,8 @@ interface AdminBoardProps {
   devisRecus: { total: number; axa: number; mila: number };
   // Flux RS par jour (demandes envoyées vs RS reçus) pour le graphe du bas.
   rsFlow: { date: string; label: string; sent: number; relances: number; recus: number }[];
+  // Flux devis par jour (demandes vs devis reçus) + totaux pour le taux de réception.
+  devisFlow: { rows: { date: string; label: string; sent: number; recus: number }[]; demandesTotal: number; recusTotal: number };
   // Nb de dossiers exclus des automatisations (à re-traiter plus tard).
   excludedCount: number;
 }
@@ -150,7 +152,7 @@ function PartTitle({ n, title, first }: { n: number; title: string; first?: bool
   );
 }
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRecus, contratsRecus, devisDemandes, odrByInsurer, devisRecus, rsFlow, excludedCount }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRecus, contratsRecus, devisDemandes, odrByInsurer, devisRecus, rsFlow, devisFlow, excludedCount }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
@@ -734,7 +736,33 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
         </div>
 
 
-        <RsFlowChart data={rsFlow} recusTotal={rsRecus} demandesTotal={rsDemandes} />
+        {/* Flux par jour — RS (gauche) et devis (droite), côte à côte. */}
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #EFEFF3", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 24, alignItems: "start" }}>
+          <FlowChart
+            data={rsFlow}
+            title="Flux des relevés de sinistralité — par jour"
+            subtitle="Demandes de RS envoyées + relances (barres) vs RS reçus « actés » (ligne). Maj automatique."
+            sentLabel="Demandes de RS envoyées"
+            recusLabel="RS reçus (actés)"
+            recusTotal={rsRecus}
+            demandesTotal={rsDemandes}
+            tauxTitle="Taux de récupération du RS"
+            recusUnit="RS reçus"
+            demandesUnit="demandes"
+          />
+          <FlowChart
+            data={devisFlow.rows}
+            title="Flux des demandes de devis — par jour"
+            subtitle="Demandes de devis envoyées (barres) vs devis reçus (ligne). Maj automatique."
+            sentLabel="Demandes de devis envoyées"
+            recusLabel="Devis reçus"
+            recusTotal={devisFlow.recusTotal}
+            demandesTotal={devisFlow.demandesTotal}
+            tauxTitle="Taux de réception des devis"
+            recusUnit="devis reçus"
+            demandesUnit="demandes"
+          />
+        </div>
       </div>
 
       <PartTitle n={5} title="Autres" />
