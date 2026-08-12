@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, STORAGE_BUCKET } from "@/lib/supabase";
 import { prisma } from "@/lib/prisma";
-import { resolveTeammateId, assignConversation, tagConversation } from "@/lib/front";
+import { resolveTeammateId, assignConversation, tagConversation, getSignatureHtml } from "@/lib/front";
+import { auth } from "@/lib/auth";
 
 const FRONT_API_URL = "https://api2.frontapp.com";
 const FRONT_TOKEN = process.env.FRONT_API_TOKEN;
@@ -36,15 +37,21 @@ export async function POST(req: NextRequest) {
     ? `<span style="display:none;font-size:0;line-height:0;color:transparent">gufetto-ref:${refTag}</span>`
     : "";
 
+  // Expéditeur = l'utilisateur connecté (Quentin, …), pas une adresse de service.
+  // Sa signature Front est ajoutée en pied de mail.
+  const session = await auth();
+  const authorEmail = session?.user?.email || FRONT_AUTHOR_EMAIL;
+  const signatureHtml = await getSignatureHtml(authorEmail);
+
   const htmlBody = body
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .split(/\n\n+/)
     .map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`)
-    .join("") + hiddenRef;
+    .join("") + (signatureHtml ? `<br>${signatureHtml}` : "") + hiddenRef;
 
   // Création du brouillon en multipart pour supporter les PJ
   const draftForm = new FormData();
-  draftForm.append("author_id", `alt:email:${FRONT_AUTHOR_EMAIL}`);
+  draftForm.append("author_id", `alt:email:${authorEmail}`);
   draftForm.append("to[]", to);
   draftForm.append("subject", subject);
   draftForm.append("body", htmlBody);
@@ -117,6 +124,13 @@ export async function POST(req: NextRequest) {
         console.error("[front/draft] assign error:", e);
       }
     }
+    // Passe la conversation en « resolved » (archived) — APRÈS le tag/assignation
+    // (l'assignation la remet « open »). Une réponse du destinataire la rouvrira.
+    await fetch(`${FRONT_API_URL}/conversations/${conversationId}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "archived" }),
+    }).catch(() => {});
   }
 
   return NextResponse.json({ success: true, messageId: message.id, conversationId });
