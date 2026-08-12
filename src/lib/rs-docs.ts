@@ -101,11 +101,10 @@ export async function captureReplyDocs(opts: { pipelineId: string; coproId: stri
   if (opts.devisOnly) cand = cand.filter((c) => isDevisFilename(c.att.filename || ""));
   if (opts.onlyLast && cand.length > 1) cand = cand.slice(-1);
   if (!cand.length) return { created: 0, docs: [] };
-  candidates.length = 0; candidates.push(...cand);
 
   // Télécharge + classe.
   const classified: { att: FrontAttachment; msgId: string; kind: DocKind; buf: Buffer }[] = [];
-  for (const c of candidates) {
+  for (const c of cand) {
     const buf = await downloadAttachment(c.att.url!);
     if (!buf) continue;
     // forceKind : type connu d'avance (ex. devis AXA/Mila) → pas d'appel IA.
