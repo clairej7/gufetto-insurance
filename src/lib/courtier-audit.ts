@@ -510,7 +510,9 @@ export async function sendRsSentSampleToAuto4(actorEmail: string): Promise<{ loa
 
 // Nb de dossiers actuellement chargés pour l'auto 4 (encore en Récupération du RS).
 export async function getRsBatchCount(): Promise<number> {
-  return prisma.insurancePipeline.count({ where: { statut: RS_STATUT, rsBatchAt: { not: null }, copro: { archivedAt: null } } });
+  // Exclut les coproId exclus (Lynda/Emilie) — MÊME périmètre que l'audit, sinon
+  // le « total étape » mélange deux comptes (audit hors-exclus + batch avec-exclus).
+  return prisma.insurancePipeline.count({ where: { statut: RS_STATUT, rsBatchAt: { not: null }, copro: { archivedAt: null }, coproId: { notIn: await getExcludedCoproIds() } } });
 }
 
 // Historique des envois vers l'auto 4 (date + nombre), le plus récent d'abord.
