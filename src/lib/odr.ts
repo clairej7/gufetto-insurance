@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { matchPartner, extractInsuranceInfoFromFront } from "@/lib/front-insurance";
 import { ODR_SENT_DOCS, OdrSentRecord } from "@/lib/odr-sent-data";
 import { getExcludedCoproIds } from "@/lib/exclusions";
+import { categoriseDossier } from "@/lib/pipeline";
 import { ODR_MANUAL_SENDS_DOCS } from "@/lib/odr-manual-sends-data";
 
 export const ODR_PARTNERS = [
@@ -88,6 +89,46 @@ export async function getOdrByPartner(): Promise<OdrPartnerBucket[]> {
   }
 
   return ODR_PARTNERS.map((p) => buckets.get(p.key)!);
+}
+
+// Vue « ODR par assureur » du dashboard — MÊME logique que l'Auto 2 (normPartner
+// = marqueur ou fallback assureur, + exclusions + copro active) pour que les
+// chiffres du dashboard et de l'automatisation soient identiques. Répartit par
+// étape (en cours / envoyé / accepté / clos).
+export type OdrInsurerStage = { label: string; count: number; montant: number; arr: number; color: string };
+export type OdrInsurerBoard = { key: OdrPartnerKey; label: string; count: number; montant: number; arr: number; stages: OdrInsurerStage[] };
+export async function getOdrByInsurerBoard(): Promise<OdrInsurerBoard[]> {
+  const excl = await getExcludedCoproIds();
+  const rows = await prisma.insurancePipeline.findMany({
+    where: { coproId: { notIn: excl }, copro: { archivedAt: null }, statut: { notIn: ["abandonne", "refuse", "non_assurable"] } },
+    select: { statut: true, odrPartenaire: true, copro: { select: { assureurActuel: true, primeActuelle: true, clientMriStatut: true, dateEcheance: true } } },
+  });
+  const STAGES = [
+    { id: "enCours", label: "ODR en cours", color: "#955804" },
+    { id: "envoye", label: "ODR envoyé", color: "#8A4B04" },
+    { id: "accepte", label: "ODR accepté", color: "#13762C" },
+    { id: "clos", label: "ODR clos", color: "#0E5D22" },
+  ] as const;
+  const acc = new Map<OdrPartnerKey, Record<string, { n: number; mt: number }>>();
+  for (const p of ODR_PARTNERS) acc.set(p.key, { enCours: { n: 0, mt: 0 }, envoye: { n: 0, mt: 0 }, accepte: { n: 0, mt: 0 }, clos: { n: 0, mt: 0 } });
+  for (const r of rows) {
+    const key = normPartner(r.odrPartenaire, r.copro.assureurActuel);
+    if (!key) continue;
+    let stage: string | null = null;
+    if (r.statut === "odr_en_cours") stage = "enCours";
+    else if (r.statut === "odr_envoye") stage = "envoye";
+    else if (r.statut === "odr_accepte") stage = "accepte";
+    else if (categoriseDossier({ statut: r.statut, dateEcheance: r.copro.dateEcheance, clientMriStatut: r.copro.clientMriStatut, assureurActuel: r.copro.assureurActuel }) === "clos") stage = "clos";
+    if (!stage) continue;
+    const a = acc.get(key)![stage]; a.n++; a.mt += r.copro.primeActuelle ?? 0;
+  }
+  return ODR_PARTNERS.map((p) => {
+    const s = acc.get(p.key)!;
+    const stages: OdrInsurerStage[] = STAGES.map((st) => ({ label: st.label, count: s[st.id].n, montant: s[st.id].mt, arr: s[st.id].mt * 0.25, color: st.color }));
+    const count = STAGES.reduce((n, st) => n + s[st.id].n, 0);
+    const montant = STAGES.reduce((m, st) => m + s[st.id].mt, 0);
+    return { key: p.key, label: p.label, count, montant, arr: montant * 0.25, stages };
+  });
 }
 
 // Dossiers qui iront dans la lettre : les prêts, + éventuellement les ex-flaggés

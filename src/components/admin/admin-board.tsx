@@ -47,6 +47,9 @@ interface AdminBoardProps {
   rsRecus: number;
   contratsRecus: number;
   devisDemandes: number;
+  // Vue « ODR par assureur » calculée côté serveur (même logique que l'Auto 2 :
+  // marqueur ou fallback assureur + exclusions) → chiffres alignés sur l'automatisation.
+  odrByInsurer: { key: string; label: string; count: number; montant: number; arr: number; stages: { label: string; count: number; montant: number; arr: number; color: string }[] }[];
 }
 
 
@@ -103,20 +106,6 @@ const FONT_MONO = "ui-monospace, Menlo, Consolas, monospace";
 // `pipeline.odrPartenaire` (posé au traitement d'une liste ODR) — fiable à travers
 // toutes les étapes, y compris une fois le dossier clos (contrairement à l'assureur
 // seul : un clos AXA n'est pas forcément un ODR).
-const ODR_INSURERS: { key: string; label: string }[] = [
-  { key: "axa",      label: "AXA" },
-  { key: "generali", label: "Generali" },
-  { key: "sada",     label: "SADA" },
-  { key: "mila",     label: "Mila" },
-];
-const odrPartenaireKey = (marqueur: string | null): string | null => {
-  const v = (marqueur ?? "").toUpperCase();
-  if (v.includes("AXA")) return "axa";
-  if (/GEN[EÉ]?RALI/.test(v)) return "generali";
-  if (v.includes("SADA")) return "sada";
-  if (v.includes("MILA")) return "mila";
-  return null;
-};
 
 // Filtre échéance (même modèle que la page Pipeline).
 const selectStyle: React.CSSProperties = {
@@ -143,7 +132,7 @@ const TD_RIGHT: React.CSSProperties = { ...TD, textAlign: "right" };
 
 type KpiFilter = "actifs" | "gagnes" | "perdus" | null;
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRecus, contratsRecus, devisDemandes }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRecus, contratsRecus, devisDemandes, odrByInsurer }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
@@ -253,30 +242,9 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
     { key: "accepte", label: "ODR acceptés",  rows: aggAccepte, color: "#13762C" },
     { key: "clos",    label: "ODR clos",      rows: aggClos,    color: "#0E5D22" },
   ];
-  // Par assureur (marqueur) — bloc du haut :
-  const mkEnCours = odrRows.filter(p => p.statut === "odr_en_cours");
-  const mkEnvoye  = odrRows.filter(p => p.statut === "odr_envoye");
-  const mkAccepte = odrRows.filter(p => p.statut === "odr_accepte");
-  const mkClos    = aggClos;
-  const insurerRows = (key: string, rows: Pipeline[]) => rows.filter(p => odrPartenaireKey(p.odrPartenaire) === key);
-  const stageMt = (rows: Pipeline[], label: string, color: string) => { const mt = sumPrime(rows); return { label, count: rows.length, montant: mt, arr: mt * 0.25, color }; };
-  const odrByInsurer = ODR_INSURERS.map(ins => {
-    const enCours = insurerRows(ins.key, mkEnCours);
-    const envoye  = insurerRows(ins.key, mkEnvoye);
-    const accepte = insurerRows(ins.key, mkAccepte);
-    const clos    = insurerRows(ins.key, mkClos);
-    const all = [...enCours, ...envoye, ...accepte, ...clos];
-    const montant = sumPrime(all);
-    return {
-      label: ins.label, count: all.length, montant, arr: montant * 0.25,
-      stages: [
-        stageMt(enCours, "ODR en cours", "#955804"),
-        stageMt(envoye,  "ODR envoyé",   "#8A4B04"),
-        stageMt(accepte, "ODR accepté",  "#13762C"),
-        stageMt(clos,    "ODR clos",     "#0E5D22"),
-      ],
-    };
-  });
+  // Par assureur (bloc du haut) : `odrByInsurer` vient désormais du SERVEUR
+  // (même logique que l'Auto 2 : normPartner + exclusions) → chiffres identiques
+  // entre le dashboard et l'automatisation.
 
   // Regroupement visuel du graphe en 4 zones (contenu identique, juste l'affichage).
   const byStatut = Object.fromEntries(barData.map(b => [b.statut, b] as const));
@@ -569,11 +537,11 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
         <div style={{ fontSize: 12, color: "#656576", marginBottom: 18 }}>
           Avancement des ordres de remplacement chez nos 4 partenaires.
           <br />
-          <span style={{ color: "#A2A1AF" }}>ℹ️ Le <b>pipeline ODR</b> (en bas) compte tous les dossiers par étape (aligné sur la Répartition). La vue <b>par assureur</b> s&apos;appuie sur le marqueur ODR posé sur chaque dossier — comme l&apos;assureur n&apos;est pas toujours renseigné, la somme des 4 assureurs est normalement inférieure au total. « ODR clos » = ODR accepté et en vigueur (récupération passée) ou devenu client. Refusés / perdus jamais comptés.</span>
+          <span style={{ color: "#A2A1AF" }}>ℹ️ Le <b>pipeline ODR</b> (en bas) compte tous les dossiers par étape (aligné sur la Répartition). La vue <b>par assureur</b> suit la <b>même logique que l&apos;automatisation ODR</b> (marqueur ODR, sinon assureur du contrat ; hors dossiers exclus) → les chiffres sont alignés. La somme des 4 assureurs peut rester inférieure au total (dossiers sans partenaire identifiable). « ODR clos » = ODR accepté et en vigueur (récupération passée) ou devenu client. Refusés / perdus jamais comptés.</span>
         </div>
 
         {/* Par assureur : nb dossiers + montant en jeu + ARR, puis répartition par stade */}
-        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginBottom: 10 }}>Dossiers ODR par assureur — toutes étapes (par marqueur)</div>
+        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginBottom: 10 }}>Dossiers ODR par assureur — toutes étapes (aligné sur l&apos;automatisation ODR)</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12, marginBottom: 24 }}>
           {odrByInsurer.map(ins => (
             <div key={ins.label} style={{ border: "1px solid #E8E8EC", borderRadius: 8, padding: "14px 16px", background: "#FBFBFB" }}>
