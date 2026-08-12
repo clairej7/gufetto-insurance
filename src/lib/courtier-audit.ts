@@ -51,6 +51,12 @@ export const isMateraInternal = (email: string) => {
   return d === "matera.eu" || d.endsWith(".matera.eu");
 };
 
+// Contacts de DEVIS (nos propres destinataires AXA/Mila) : Achille Leboeuf côté
+// AXA (achille.leboeuf@axa.fr et variantes type service.achille.leboeuf@axa.fr)
+// et souscription@mila.fr. Ce ne sont JAMAIS des courtiers RS — on ne leur
+// demande pas de relevé de sinistralité. À bloquer partout à l'envoi de RS.
+export const isDevisContact = (email: string) => /achille\.leboeuf|souscription@mila\.fr/i.test(email.toLowerCase());
+
 // Distance de Levenshtein bornée (retourne >max dès dépassement).
 function lev(a: string, b: string, max = 1): number {
   if (Math.abs(a.length - b.length) > max) return max + 1;
@@ -206,12 +212,21 @@ function mailCoherent(field: string, res: Resolution, idx: CourtierIndex): boole
 // est celui du courtier (ou de son groupe). Renvoie le champ inchangé si : courtier
 // hors base, un seul mail, ou aucun mail au bon domaine (rien à élaguer sûrement).
 function keepCourtierDomainMails(field: string, res: Resolution, idx: CourtierIndex): string {
-  if (res.kind !== "courtier" || !res.ref) return field;
-  const mails = field.split(/[;,]/).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s));
-  if (mails.length <= 1) return field;
-  const doms = expandDomains((res.ref.emailsAll ?? res.ref.email ?? "").split(";").map((s) => domainOf(s.trim())).filter(Boolean));
-  const kept = mails.filter((m) => doms.has(domainOf(m)));
-  if (kept.length === 0 || kept.length === mails.length) return field;
+  const mails0 = field.split(/[;,]/).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s));
+  // TOUJOURS retirer les adresses internes Matera et les contacts de devis
+  // (Achille AXA / souscription Mila) — jamais des courtiers RS, quel que soit le
+  // courtier (même hors base).
+  const clean = mails0.filter((m) => !isMateraInternal(m) && !isDevisContact(m));
+  const strippedBad = clean.length !== mails0.length;
+  let kept = clean;
+  // Courtier connu en base + plusieurs mails → ne garder que son domaine.
+  if (res.kind === "courtier" && res.ref && clean.length > 1) {
+    const doms = expandDomains((res.ref.emailsAll ?? res.ref.email ?? "").split(";").map((s) => domainOf(s.trim())).filter(Boolean));
+    const domKept = clean.filter((m) => doms.has(domainOf(m)));
+    if (domKept.length && domKept.length < clean.length) kept = domKept;
+  }
+  if (!strippedBad && kept.length === mails0.length) return field; // rien retiré → champ inchangé
+  if (!kept.length) return field; // ne pas vider : le garde-fou d'envoi bloquera
   return kept.join(", ");
 }
 
@@ -262,8 +277,8 @@ export function prepareSendMails(courtierName: string | null, mailField: string 
   const all = (mailField ?? "").split(/[;,]/).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s));
   // GARDE-FOU : toute adresse @matera.eu / *.matera.eu est INTERNE (CS, salarié,
   // bonjour@, canal Gufetto) — jamais un courtier. On la retire systématiquement.
-  const mails = all.filter((m) => !isMateraInternal(m));
-  if (all.length && !mails.length) return { mails: [], hold: true, reason: "adresse interne Matera (CS/salarié) — pas un courtier" };
+  const mails = all.filter((m) => !isMateraInternal(m) && !isDevisContact(m));
+  if (all.length && !mails.length) return { mails: [], hold: true, reason: "adresse interne Matera ou contact devis (Achille AXA / Mila) — pas un courtier RS" };
   if (!mails.length) return { mails: [], hold: true, reason: "pas de mail exploitable" };
   const dom = (m: string) => domainOf(m.toLowerCase());
   // Plafond : on n'envoie jamais à plus de 2 contacts d'un même cabinet (3+ = trop).
