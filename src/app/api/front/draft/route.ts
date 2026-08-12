@@ -8,6 +8,11 @@ const FRONT_API_URL = "https://api2.frontapp.com";
 const FRONT_TOKEN = process.env.FRONT_API_TOKEN;
 const FRONT_CHANNEL_ID = process.env.FRONT_CHANNEL_ID;
 const FRONT_AUTHOR_EMAIL = process.env.FRONT_AUTHOR_EMAIL || "bonjour@matera.eu";
+// Le canal d'envoi est rattaché à l'inbox CSM : sans action, la conversation
+// naît dans « CSM » (et la règle Front sur le tag ne fait que l'AJOUTER à
+// Gufetto → elle apparaît dans les deux). On la déplace explicitement dans
+// l'inbox « Assurance Pro - Gufetto » pour qu'elle n'atterrisse QUE là.
+const FRONT_GUFETTO_INBOX_ID = process.env.FRONT_GUFETTO_INBOX || "inb_601dy";
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
@@ -124,12 +129,14 @@ export async function POST(req: NextRequest) {
         console.error("[front/draft] assign error:", e);
       }
     }
-    // Passe la conversation en « resolved » (archived) — APRÈS le tag/assignation
-    // (l'assignation la remet « open »). Une réponse du destinataire la rouvrira.
+    // Déplace dans l'inbox Gufetto ET passe en « resolved » (archived) dans le
+    // MÊME PATCH — APRÈS le tag/assignation (qui remettent « open »). Un seul
+    // appel atomique : le move seul rouvrirait la conversation. Une réponse du
+    // destinataire la rouvrira. best-effort, ne bloque jamais l'envoi.
     await fetch(`${FRONT_API_URL}/conversations/${conversationId}`, {
       method: "PATCH",
       headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "archived" }),
+      body: JSON.stringify({ inbox_id: FRONT_GUFETTO_INBOX_ID, status: "archived" }),
     }).catch(() => {});
   }
 
