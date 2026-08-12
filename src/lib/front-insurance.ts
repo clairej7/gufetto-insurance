@@ -221,9 +221,13 @@ function senderHandle(msg: FrontMessage): string | null {
   return (from || msg.author?.handle || null)?.toLowerCase() ?? null;
 }
 
+// Contacts de DEVIS (nos destinataires AXA/Mila : Achille Leboeuf, souscription
+// Mila) — jamais un courtier RS. On ne les retient donc jamais comme mail courtier.
+const DEVIS_CONTACT_RE = /achille\.leboeuf|souscription@mila\.fr/i;
 function isUsableEmail(email: string | null): boolean {
   if (!email) return false;
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return false;
+  if (DEVIS_CONTACT_RE.test(email)) return false;
   return !JUNK_EMAIL.some((re) => re.test(email));
 }
 
