@@ -15,6 +15,7 @@ type NoDoc = { pipelineId: string; nom: string; adresse: string | null; checkedA
 type DevisReplyKind = "devis_obtenu" | "refus_assureur" | "traiter_manuel" | "pas_de_reponse" | "non_scanne";
 type Demande = { eventId: string; pipelineId: string; nom: string; adresse: string | null; assureur: string; to: string | null; sentAt: string; jours: number; convUrl: string | null; scanEligible: boolean; replyKind: DevisReplyKind; replyConfirmed: boolean; replySnippet: string | null; scanned: boolean };
 type Suivi = { envoyes: number; demandesTotal: number; devisObtenus: number; refus: number; aTraiter: number; pasReponse: number; sansReponse10j: number; pretsAuto6: number; lastScanAt: string | null; demandes: Demande[] };
+type Auto6HistRow = { pipelineId: string; nom: string; adresse: string | null; sentAt: string };
 const AXA_ADDR = "achille.leboeuf@axa.fr";
 const MILA_ADDR = "souscription@mila.fr";
 const DR_META: Record<DevisReplyKind, { label: string; color: string; bg: string }> = {
@@ -32,10 +33,12 @@ const V2_FIELDS: { key: FieldKey; label: string }[] = [
   { key: "activites", label: "Activités" }, { key: "caracteristiques", label: "Caract." }, { key: "proportion", label: "Inoccupé" }, { key: "pj", label: "PJ" },
 ];
 
-export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], docsStats, volet2, suivi }: { data: Data; toLoad: number; docHistory?: DocHist[]; noDocs?: NoDoc[]; docsStats?: { rs: number; contrat: number }; volet2?: Volet2; suivi?: Suivi }) {
+export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], docsStats, volet2, suivi, auto6History = [] }: { data: Data; toLoad: number; docHistory?: DocHist[]; noDocs?: NoDoc[]; docsStats?: { rs: number; contrat: number }; volet2?: Volet2; suivi?: Suivi; auto6History?: Auto6HistRow[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [showSuivi, setShowSuivi] = useState(false);
+  const [showHist6, setShowHist6] = useState(false);
+  const [openDay, setOpenDay] = useState<string | null>(null);
   const [scanningR, setScanningR] = useState(false);
   const [scanProg, setScanProg] = useState<{ done: number; total: number } | null>(null);
 
@@ -377,7 +380,7 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 4</span>
           <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Suivi des demandes de devis</span>
         </div>
-        {!suivi || suivi.envoyes === 0 ? (
+        {!suivi || (suivi.envoyes === 0 && auto6History.length === 0) ? (
           <p style={{ fontSize: 12.5, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucune demande de devis envoyée pour l&apos;instant.</p>
         ) : (
           <>
@@ -452,6 +455,44 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
                 </table>
               </div>
             )}
+
+            {/* Historique des envois vers l'Auto 6 (dossiers sortis de cette étape) */}
+            {auto6History.length > 0 && (() => {
+              const byDay = new Map<string, Auto6HistRow[]>();
+              for (const r of auto6History) {
+                const day = new Date(r.sentAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+                if (!byDay.has(day)) byDay.set(day, []);
+                byDay.get(day)!.push(r);
+              }
+              return (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dashed #E8E8EC" }}>
+                  <button onClick={() => setShowHist6((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                    {showHist6 ? "▾" : "▸"} Historique — {auto6History.length} dossier{auto6History.length > 1 ? "s" : ""} envoyé{auto6History.length > 1 ? "s" : ""} à l&apos;automatisation 6
+                  </button>
+                  {showHist6 && (
+                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                      {[...byDay.entries()].map(([day, rows]) => (
+                        <div key={day} style={{ border: "1px solid #EFEFF3", borderRadius: 8, overflow: "hidden" }}>
+                          <button onClick={() => setOpenDay(openDay === day ? null : day)} style={{ width: "100%", textAlign: "left", fontSize: 12.5, fontWeight: 600, color: "#13762C", background: "#F4FBF6", border: "none", cursor: "pointer", padding: "7px 12px" }}>
+                            {openDay === day ? "▾" : "▸"} {rows.length} dossier{rows.length > 1 ? "s" : ""} complet{rows.length > 1 ? "s" : ""} envoyé{rows.length > 1 ? "s" : ""} à l&apos;automatisation 6 le {day}
+                          </button>
+                          {openDay === day && (
+                            <div style={{ padding: "4px 12px 8px" }}>
+                              {rows.map((r) => (
+                                <div key={r.pipelineId} style={{ fontSize: 12, padding: "3px 0", borderTop: "1px solid #F5F5F8" }}>
+                                  <a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none" }}>{r.adresse || r.nom}</a>
+                                  <span style={{ color: "#A2A1AF", marginLeft: 8 }}>{new Date(r.sentAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </>
         )}
       </div>
