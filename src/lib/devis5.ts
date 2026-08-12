@@ -243,8 +243,10 @@ type DevisSentMeta = { assureur?: string; to?: string; conversationId?: string; 
 export async function getDevis5Volet4Data(nowMs: number): Promise<Devis5Suivi> {
   const excl = await getExcludedCoproIds();
   const ev = await prisma.pipelineEvent.findMany({
-    // Exclut les dossiers repartis en ODR : l'Auto 5 ne suit jamais les ODR.
-    where: { metadata: { path: ["devisType"], equals: "devis_sent" }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null }, statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] } } },
+    // Exclut : les dossiers ODR (jamais suivis en Auto 5) ET ceux déjà envoyés à
+    // l'Auto 6 (marqueur auto6Ready) → le suivi + les compteurs ne reflètent que
+    // les dossiers ENCORE à cette étape. Les envoyés basculent dans l'historique.
+    where: { metadata: { path: ["devisType"], equals: "devis_sent" }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null }, statut: { notIn: ["odr_en_cours", "odr_envoye", "odr_accepte", "odr_en_vigueur"] }, events: { none: { metadata: { path: ["auto6Ready"], equals: true } } } } },
     select: { id: true, createdAt: true, metadata: true, pipelineId: true, pipeline: { select: { copro: { select: { nom: true, adresse: true } } } } },
     orderBy: { createdAt: "asc" },
   });
@@ -296,6 +298,25 @@ async function getReadyForAuto6(nowMs: number): Promise<{ id: string; statut: st
   if (!readyIds.length) return [];
   const marked = new Set((await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto6Ready"], equals: true }, pipelineId: { in: readyIds } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).map((e) => e.pipelineId));
   return ready.filter(([id]) => !marked.has(id)).map(([id, g]) => ({ id, statut: g.statut }));
+}
+
+// Historique des envois vers l'Auto 6 (un event auto6Ready par dossier envoyé).
+export type Auto6HistoryRow = { pipelineId: string; nom: string; adresse: string | null; sentAt: string };
+export async function getDevis5Auto6History(): Promise<Auto6HistoryRow[]> {
+  const excl = await getExcludedCoproIds();
+  const ev = await prisma.pipelineEvent.findMany({
+    where: { metadata: { path: ["auto6Ready"], equals: true }, pipeline: { coproId: { notIn: excl }, copro: { archivedAt: null } } },
+    select: { createdAt: true, pipelineId: true, pipeline: { select: { copro: { select: { nom: true, adresse: true } } } } },
+    orderBy: { createdAt: "desc" },
+  });
+  const seen = new Set<string>();
+  const rows: Auto6HistoryRow[] = [];
+  for (const e of ev) {
+    if (seen.has(e.pipelineId)) continue;
+    seen.add(e.pipelineId);
+    rows.push({ pipelineId: e.pipelineId, nom: e.pipeline?.copro.nom ?? "?", adresse: e.pipeline?.copro.adresse ?? null, sentAt: e.createdAt.toISOString() });
+  }
+  return rows;
 }
 
 // Envoie à l'Auto 6 (comparaison) les dossiers prêts : marqueur auto6Ready +

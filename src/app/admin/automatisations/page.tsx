@@ -17,7 +17,7 @@ import { getCourtierRefState, getCourtierRefSample } from "@/lib/courtier-ref";
 import { CourtierAuditControls } from "@/components/admin/courtier-audit-controls";
 import { getRs4Volet1Count, getRs4Volet2Data, getRs4DetectorData, getRs4Volet3Data, getRs4Volet4Data, getRs4SendHistory } from "@/lib/rs4";
 import { Rs4Controls } from "@/components/admin/rs4-controls";
-import { getDevis5Volet1Data, getDevis5DocsToLoad, getDocLoadHistory, getDevis5NoDocs, getDevis5Volet4Data, getDevis5Volet2Data } from "@/lib/devis5";
+import { getDevis5Volet1Data, getDevis5DocsToLoad, getDocLoadHistory, getDevis5NoDocs, getDevis5Volet4Data, getDevis5Volet2Data, getDevis5Auto6History } from "@/lib/devis5";
 import { getDevis6Volet1Data, getDevis6Volet2Data, getDevis6Volet3Data } from "@/lib/devis6";
 import { Devis6Controls } from "@/components/admin/devis6-controls";
 import { getDocsStats } from "@/lib/rs-docs";
@@ -106,6 +106,7 @@ export default async function AutomatisationsPage() {
   const devis5NoDocs = await getDevis5NoDocs();
   const devis5Volet2 = await getDevis5Volet2Data();
   const devis5Suivi = await getDevis5Volet4Data(Date.now());
+  const devis5Auto6History = await getDevis5Auto6History();
   const devis6Volet1 = await getDevis6Volet1Data();
   const devis6Volet2 = await getDevis6Volet2Data();
   const devis6Suivi = await getDevis6Volet3Data(Date.now());
@@ -273,7 +274,7 @@ export default async function AutomatisationsPage() {
                 {a.n === 5 && (
                   <details style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
                     <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content" }}>Contrôles admin</summary>
-                    <Devis5Controls data={devis5Volet1} toLoad={devis5ToLoad} docHistory={devis5DocHistory} noDocs={devis5NoDocs} docsStats={docsStats} volet2={devis5Volet2} suivi={devis5Suivi} />
+                    <Devis5Controls data={devis5Volet1} toLoad={devis5ToLoad} docHistory={devis5DocHistory} noDocs={devis5NoDocs} docsStats={docsStats} volet2={devis5Volet2} suivi={devis5Suivi} auto6History={devis5Auto6History} />
                   </details>
                 )}
 
