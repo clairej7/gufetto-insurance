@@ -8,6 +8,7 @@ import { AdminBoard } from "@/components/admin/admin-board";
 import { getPrimeByStage } from "@/lib/prime";
 import { getDocsStats, getDevisRecusStats } from "@/lib/rs-docs";
 import { getOdrByInsurerBoard } from "@/lib/odr";
+import { isCloturePourClient } from "@/lib/pipeline";
 
 export default async function AdminPage() {
   const session = await auth();
@@ -57,19 +58,24 @@ export default async function AdminPage() {
   const { getExcludedCoproIds } = await import("@/lib/exclusions");
   const exclCoproIds = await getExcludedCoproIds();
   const excludedCount = await prisma.insurancePipeline.count({ where: { coproId: { in: exclCoproIds }, copro: { archivedAt: null } } });
-  // Chiffres de la carte « Demande de devis » : PARTITION EXACTE des dossiers de
-  // l'étape (leur somme = le total « dossiers » de la carte). Aucune exclusion
-  // ici, sinon la somme ne retombe pas sur le total affiché.
+  // Chiffres de la carte « Demande de devis » : PARTITION EXACTE des dossiers
+  // ACTIFS de l'étape (leur somme = le total « dossiers » de la carte).
+  // On aligne sur le board : les copros déjà clientes MRI (« Insurance client »
+  // hors Wakam) sont bucketées « clos » et sorties de l'étape active → on les
+  // exclut aussi ici, sinon en attente + à envoyer ne retombe pas sur le total.
   //  - en attente = demande DÉJÀ partie, pas encore de devis (le dossier reste
   //    dans l'étape jusqu'à réception ; les reçus sont passés en « Comparaison ») ;
   //  - à envoyer  = demande PAS ENCORE partie.
+  const closClientDevisIds = pipelines
+    .filter((p) => p.statut === "devis_demandes" && isCloturePourClient(p.copro.clientMriStatut, p.copro.assureurActuel))
+    .map((p) => p.id);
   const SENT_EVENT = { some: { metadata: { path: ["devisType"], equals: "devis_sent" } } };
   const NO_SENT_EVENT = { none: { metadata: { path: ["devisType"], equals: "devis_sent" } } };
   const devisMailsEnvoyes = await prisma.insurancePipeline.count({
-    where: { statut: "devis_demandes", copro: { archivedAt: null }, events: SENT_EVENT },
+    where: { statut: "devis_demandes", copro: { archivedAt: null }, id: { notIn: closClientDevisIds }, events: SENT_EVENT },
   });
   const devisAReclamer = await prisma.insurancePipeline.count({
-    where: { statut: "devis_demandes", copro: { archivedAt: null }, events: NO_SENT_EVENT },
+    where: { statut: "devis_demandes", copro: { archivedAt: null }, id: { notIn: closClientDevisIds }, events: NO_SENT_EVENT },
   });
 
   const gestionnaires = [
