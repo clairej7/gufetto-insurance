@@ -701,20 +701,23 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                     <div style={{ display: "flex", gap: 16 }}>
                       <div>
                         <div style={{ fontSize: 18, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisMailsEnvoyes}</div>
-                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>mails partis (en attente)</div>
+                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>demandes envoyées</div>
                       </div>
                       <div>
                         <div style={{ fontSize: 18, fontWeight: 700, color: "#B4690E", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisAReclamer}</div>
-                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>à demander (volets 1+2)</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisRecus.total}</div>
-                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>devis reçus</div>
+                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>demandes restantes</div>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {st.key === "devis_recus" && (
+                  <div style={{ marginTop: 9, paddingTop: 9, borderTop: "1px dashed #E8E8EC" }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisRecus.total}</div>
+                    <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>devis reçus</div>
                     <div style={{ marginTop: 6, fontSize: 10.5, color: "#656576", display: "flex", gap: 12 }}>
-                      <span><strong style={{ color: "#0A6BB8" }}>{devisRecus.axa}</strong> devis AXA</span>
-                      <span><strong style={{ color: "#8A4FC7" }}>{devisRecus.mila}</strong> devis Mila</span>
+                      <span><strong style={{ color: "#0A6BB8" }}>{devisRecus.axa}</strong> AXA</span>
+                      <span><strong style={{ color: "#8A4FC7" }}>{devisRecus.mila}</strong> Mila</span>
                     </div>
                   </div>
                 )}
