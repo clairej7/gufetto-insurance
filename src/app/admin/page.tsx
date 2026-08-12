@@ -52,6 +52,8 @@ export default async function AdminPage() {
   const devisRecus = await getDevisRecusStats();
   const { getRsFlowDaily } = await import("@/lib/rs4");
   const rsFlow = await getRsFlowDaily();
+  const { getDevisFlowDaily } = await import("@/lib/devis5");
+  const devisFlow = await getDevisFlowDaily();
   const { getExcludedCoproIds } = await import("@/lib/exclusions");
   const excludedCount = await prisma.insurancePipeline.count({ where: { coproId: { in: await getExcludedCoproIds() }, copro: { archivedAt: null } } });
   // Demandes de devis = 1 par DOSSIER (pas par envoi : 1 dossier = AXA + Mila
@@ -111,6 +113,7 @@ export default async function AdminPage() {
           odrByInsurer={odrByInsurer}
           devisRecus={devisRecus}
           rsFlow={rsFlow}
+          devisFlow={devisFlow}
           excludedCount={excludedCount}
         />
       </main>

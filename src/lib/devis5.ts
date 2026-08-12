@@ -425,3 +425,44 @@ export async function confirmDevisReply(eventId: string, kind: DevisReplyKind, a
   }
   return { ok: true, moved };
 }
+
+// ─── Graphe « Flux des demandes de devis — par jour » ────────────────────────
+// Miroir du graphe RS, côté devis. Par jour et PAR DOSSIER :
+//   - sent  = dossiers dont la 1re demande de devis (mail à un assureur) est partie
+//             ce jour-là (event devisType=devis_sent).
+//   - recus = dossiers ayant obtenu leur 1er devis ce jour-là (1er signal parmi :
+//             event devisObtenu, DevisRecu, ou document devis_axa/devis_mila).
+// Totaux renvoyés pour l'encart « taux de réception » (par dossier, cohérent avec
+// la carte du dashboard). Alimenté en direct par l'activité Gufetto (aucun cache).
+export type DevisFlowDay = { date: string; label: string; sent: number; recus: number };
+export async function getDevisFlowDaily(): Promise<{ rows: DevisFlowDay[]; demandesTotal: number; recusTotal: number }> {
+  const notArchived = { pipeline: { copro: { archivedAt: null } } };
+  const [sentEv, obtenuEv, devisDocs, devisRecus] = await Promise.all([
+    prisma.pipelineEvent.findMany({ where: { metadata: { path: ["devisType"], equals: "devis_sent" }, ...notArchived }, select: { pipelineId: true, createdAt: true } }),
+    prisma.pipelineEvent.findMany({ where: { metadata: { path: ["devisObtenu"], equals: true }, ...notArchived }, select: { pipelineId: true, createdAt: true } }),
+    prisma.pipelineDocument.findMany({ where: { kind: { in: ["devis_axa", "devis_mila"] }, pipeline: { copro: { archivedAt: null } } }, select: { pipelineId: true, createdAt: true } }),
+    prisma.devisRecu.findMany({ where: { pipeline: { copro: { archivedAt: null } } }, select: { pipelineId: true, createdAt: true } }),
+  ]);
+
+  // 1er jour d'envoi et 1er jour de réception, par dossier (min des createdAt).
+  const firstSent = new Map<string, Date>();
+  for (const e of sentEv) { const cur = firstSent.get(e.pipelineId); if (!cur || e.createdAt < cur) firstSent.set(e.pipelineId, e.createdAt); }
+  const firstRecu = new Map<string, Date>();
+  for (const e of [...obtenuEv, ...devisDocs, ...devisRecus]) { const cur = firstRecu.get(e.pipelineId); if (!cur || e.createdAt < cur) firstRecu.set(e.pipelineId, e.createdAt); }
+
+  const dayKey = (d: Date) => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris" }).format(d); // YYYY-MM-DD
+  const sentBy = new Map<string, number>(); const recuBy = new Map<string, number>();
+  for (const d of firstSent.values()) sentBy.set(dayKey(d), (sentBy.get(dayKey(d)) ?? 0) + 1);
+  for (const d of firstRecu.values()) recuBy.set(dayKey(d), (recuBy.get(dayKey(d)) ?? 0) + 1);
+
+  const all = [...sentBy.keys(), ...recuBy.keys()].sort();
+  if (!all.length) return { rows: [], demandesTotal: 0, recusTotal: 0 };
+  const start = new Date(all[0] + "T12:00:00Z");
+  const end = new Date(dayKey(new Date()) + "T12:00:00Z");
+  const rows: DevisFlowDay[] = [];
+  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    const k = d.toISOString().slice(0, 10);
+    rows.push({ date: k, label: `${k.slice(8, 10)}/${k.slice(5, 7)}`, sent: sentBy.get(k) ?? 0, recus: recuBy.get(k) ?? 0 });
+  }
+  return { rows, demandesTotal: firstSent.size, recusTotal: firstRecu.size };
+}
