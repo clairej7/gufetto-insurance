@@ -138,25 +138,27 @@ async function frontSend(opts: { toList: string[]; subject: string; html: string
 }
 
 // Envoi d'une RÉPONSE dans une conversation existante (reste dans le même fil).
-// Barrière finale interne Matera. options.archive=true (défaut) → conv archivée
-// après envoi ; une réponse ultérieure du courtier la rouvrira.
+// Ordre important : (1) déplacer dans l'inbox Gufetto, (2) envoyer la réponse,
+// (3) APRÈS un court délai (l'envoi Front est asynchrone : 202 accepted), forcer
+// « resolved ». Archiver trop tôt = course avec l'envoi qui rouvre la conv.
 async function frontReply(opts: { conversationId: string; toList: string[]; subject: string; html: string; authorEmail: string }): Promise<{ ok: boolean; error?: string }> {
   if (!FRONT_TOKEN) return { ok: false, error: "Front non configuré" };
   const to = opts.toList.filter((t) => !isMateraInternal(t));
   if (!to.length) return { ok: false, error: "aucun destinataire" };
+  const patch = (bodyObj: object) => fetch(`${FRONT_API_URL}/conversations/${opts.conversationId}`, { method: "PATCH", headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify(bodyObj) }).catch(() => {});
+  // 1) Inbox Gufetto (avant l'envoi ; le move seul peut rouvrir → réglé en 3).
+  await patch({ inbox_id: GUFETTO_INBOX });
+  // 2) Réponse dans le fil.
   const res = await fetch(`${FRONT_API_URL}/conversations/${opts.conversationId}/messages`, {
     method: "POST",
     headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" },
     body: JSON.stringify({ author_id: `alt:email:${opts.authorEmail || FRONT_AUTHOR_EMAIL}`, to, subject: opts.subject, body: opts.html, options: { archive: false } }),
   });
   if (!res.ok && res.status !== 202) return { ok: false, error: await res.text() };
-  // Force l'inbox Gufetto + resolved dans le MÊME PATCH (un move seul rouvrirait).
-  // Garantit que la relance reste dans l'inbox Gufetto, quel que soit l'inbox du fil.
-  await fetch(`${FRONT_API_URL}/conversations/${opts.conversationId}`, {
-    method: "PATCH",
-    headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ inbox_id: GUFETTO_INBOX, status: "archived" }),
-  }).catch(() => {});
+  // 3) APRÈS l'envoi (async) : resolved. Le délai évite la course qui laissait la
+  // conv « open/assigned » (l'envoi tardif rouvrait la conv juste après le PATCH).
+  await new Promise((r) => setTimeout(r, 1500));
+  await patch({ status: "archived" });
   return { ok: true };
 }
 
