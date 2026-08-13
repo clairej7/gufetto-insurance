@@ -124,12 +124,13 @@ async function frontSend(opts: { toList: string[]; subject: string; html: string
       const tid = await resolveTeammateId(opts.gestionnaireEmail).catch(() => null);
       if (tid) await assignConversation(conversationId, tid).catch(() => {});
     }
-    // Force le statut « resolved » APRÈS le tag/assignation (sinon l'assignation
-    // laisse la conv « open »). Une réponse ultérieure du courtier la rouvrira.
+    // Force l'inbox Gufetto + « resolved » APRÈS le tag/assignation (sinon
+    // l'assignation laisse la conv « open »). Move + archive atomiques pour
+    // garantir l'inbox Gufetto. Une réponse ultérieure du courtier la rouvrira.
     await fetch(`${FRONT_API_URL}/conversations/${conversationId}`, {
       method: "PATCH",
       headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "archived" }),
+      body: JSON.stringify({ inbox_id: GUFETTO_INBOX, status: "archived" }),
     }).catch(() => {});
   }
   return { ok: true, conversationId: conversationId || null };
@@ -145,9 +146,16 @@ async function frontReply(opts: { conversationId: string; toList: string[]; subj
   const res = await fetch(`${FRONT_API_URL}/conversations/${opts.conversationId}/messages`, {
     method: "POST",
     headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ author_id: `alt:email:${opts.authorEmail || FRONT_AUTHOR_EMAIL}`, to, subject: opts.subject, body: opts.html, options: { archive: true } }),
+    body: JSON.stringify({ author_id: `alt:email:${opts.authorEmail || FRONT_AUTHOR_EMAIL}`, to, subject: opts.subject, body: opts.html, options: { archive: false } }),
   });
   if (!res.ok && res.status !== 202) return { ok: false, error: await res.text() };
+  // Force l'inbox Gufetto + resolved dans le MÊME PATCH (un move seul rouvrirait).
+  // Garantit que la relance reste dans l'inbox Gufetto, quel que soit l'inbox du fil.
+  await fetch(`${FRONT_API_URL}/conversations/${opts.conversationId}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ inbox_id: GUFETTO_INBOX, status: "archived" }),
+  }).catch(() => {});
   return { ok: true };
 }
 
