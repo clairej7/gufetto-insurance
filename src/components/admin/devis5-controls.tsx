@@ -37,6 +37,7 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [showSuivi, setShowSuivi] = useState(false);
+  const [qSuivi, setQSuivi] = useState("");
   const [showHist6, setShowHist6] = useState(false);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [scanningR, setScanningR] = useState(false);
@@ -438,6 +439,12 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
             <p style={{ fontSize: 11.5, color: "#A2A1AF", margin: "0 0 8px" }}>Le détecteur ne lit que les conversations avec <strong>{AXA_ADDR}</strong> (AXA) et <strong>{MILA_ADDR}</strong> (Mila). Le statut proposé est modifiable/confirmable au menu déroulant.</p>
 
             {showSuivi && (
+              <>
+              <div style={{ marginBottom: 8, position: "relative", maxWidth: 360 }}>
+                <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#A2A1AF" }} />
+                <input value={qSuivi} onChange={(e) => setQSuivi(e.target.value)} placeholder="Rechercher une adresse / copro…"
+                  style={{ width: "100%", boxSizing: "border-box", fontSize: 12.5, padding: "7px 10px 7px 30px", border: "1px solid #E8E8EC", borderRadius: 8, outline: "none" }} />
+              </div>
               <div style={{ maxHeight: 460, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
@@ -448,7 +455,7 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
                     </tr>
                   </thead>
                   <tbody>
-                    {suivi.demandes.map((d) => (
+                    {suivi.demandes.filter((dm) => !qSuivi.trim() || `${dm.adresse ?? ""} ${dm.nom} ${dm.assureur}`.toLowerCase().includes(qSuivi.trim().toLowerCase())).map((d) => (
                       <tr key={d.eventId} style={{ borderTop: "1px solid #F1F1F4", background: d.replyKind === "devis_obtenu" ? "#F4FBF6" : (d.replyKind === "pas_de_reponse" && d.jours >= 10) ? "#FDECEA" : undefined }}>
                         <td style={{ padding: "6px 10px" }}><a href={`/pipeline/${d.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none" }}>{d.adresse || d.nom}</a></td>
                         <td style={{ padding: "6px 10px", color: "#656576", whiteSpace: "nowrap" }}>{d.assureur}</td>
@@ -477,6 +484,7 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
                   </tbody>
                 </table>
               </div>
+              </>
             )}
 
             {/* Historique des envois vers l'Auto 6 (dossiers sortis de cette étape) */}
