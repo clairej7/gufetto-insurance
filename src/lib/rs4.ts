@@ -32,10 +32,11 @@ export const RELANCE_TEMPLATES: Record<number, { subject: string; body: string }
     subject: "Relance — Relevé de sinistralité — {adresse}",
     body: `Bonjour,
 
-Je me permets de revenir vers vous concernant le relevé de sinistralité de la copropriété {adresse} (contrat n° {numeroContrat}, {assureur}), demandé il y a {jours} jours.
+Je me permets de revenir vers vous concernant notre demande de contrat MRI et de relevé de sinistralité.
 
-Pourriez-vous nous le transmettre dès que possible ? Un grand merci d'avance.
+Pouvez-vous nous transmettre les documents dès que possible ?
 
+Merci d'avance.
 Bien cordialement,`,
   },
   2: {
