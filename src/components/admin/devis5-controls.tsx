@@ -41,6 +41,25 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [scanningR, setScanningR] = useState(false);
   const [scanProg, setScanProg] = useState<{ done: number; total: number } | null>(null);
+  const [scanningMila, setScanningMila] = useState(false);
+
+  // Rapatrie les devis Mila arrivés hors de notre fil (nouveaux mails, routés
+  // ailleurs par Front) dans l'inbox Gufetto + les rattache au dossier.
+  async function scanMilaPro() {
+    setScanningMila(true);
+    let offset = 0, repatries = 0, rattaches = 0, docs = 0, avances = 0, sansCopro = 0;
+    try {
+      for (;;) {
+        const res = await fetch("/api/devis5/scan-mila-pro", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offset, limit: 10 }) });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+        const d = await res.json();
+        offset = d.nextOffset; repatries += d.repatries; rattaches += d.rattaches; docs += d.docs; avances += d.avances; sansCopro += d.sansCopro;
+        if (d.done) break;
+      }
+      toast.success(repatries === 0 ? "Aucun devis Mila hors fil à rapatrier." : `Devis Mila : ${repatries} rapatriés · ${rattaches} rattachés · ${docs} PDF · ${avances} → comparaison${sansCopro ? ` · ${sansCopro} sans dossier` : ""}.`);
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec du scan Mila"); } finally { setScanningMila(false); }
+  }
 
   async function scanReplies() {
     if (!suivi) return;
@@ -397,6 +416,10 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
               <button onClick={scanReplies} disabled={scanningR}
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#fff", background: "#4E49FC", border: "none", borderRadius: 8, padding: "8px 14px", cursor: scanningR ? "default" : "pointer" }}>
                 {scanningR ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Détecter les réponses (AXA / Mila)
+              </button>
+              <button onClick={scanMilaPro} disabled={scanningMila} title="Mila envoie ses devis dans de nouveaux mails, routés hors de l'inbox Gufetto par Front. Ce scan les rapatrie et les rattache au dossier via le building_id."
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#4E49FC", background: "#fff", border: "1px solid #C7C5FB", borderRadius: 8, padding: "8px 14px", cursor: scanningMila ? "default" : "pointer" }}>
+                {scanningMila ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Récupérer les devis Mila (hors fil)
               </button>
               <button onClick={sendToAuto6} disabled={sendingA6 || suivi.pretsAuto6 === 0}
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#fff", background: suivi.pretsAuto6 === 0 ? "#A9D9B8" : "#13762C", border: "none", borderRadius: 8, padding: "8px 14px", cursor: sendingA6 || suivi.pretsAuto6 === 0 ? "default" : "pointer" }}>
