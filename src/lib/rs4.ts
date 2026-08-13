@@ -25,6 +25,43 @@ export const RELANCE_STAGES = [
   { num: 3, day: 12 },
 ] as const;
 
+// 3 tons d'escalade. Placeholders : {adresse} {assureur} {numeroContrat} {jours}.
+// Envoyées EN RÉPONSE au fil d'origine (même conversation).
+export const RELANCE_TEMPLATES: Record<number, { subject: string; body: string }> = {
+  1: {
+    subject: "Relance — Relevé de sinistralité — {adresse}",
+    body: `Bonjour,
+
+Je me permets de revenir vers vous concernant le relevé de sinistralité de la copropriété {adresse} (contrat n° {numeroContrat}, {assureur}), demandé il y a {jours} jours.
+
+Pourriez-vous nous le transmettre dès que possible ? Un grand merci d'avance.
+
+Bien cordialement,`,
+  },
+  2: {
+    subject: "2ᵉ relance — Relevé de sinistralité — {adresse}",
+    body: `Bonjour,
+
+Sauf erreur de notre part, notre demande de relevé de sinistralité pour la copropriété {adresse} (contrat n° {numeroContrat}, {assureur}) reste sans réponse à ce jour, malgré une première relance (demande initiale il y a {jours} jours).
+
+Ce document nous est indispensable pour poursuivre le dossier. Nous vous remercions de nous le faire parvenir sous 48 heures.
+
+Dans l'attente de votre retour,
+Bien cordialement,`,
+  },
+  3: {
+    subject: "Relance finale — Relevé de sinistralité — {adresse}",
+    body: `Bonjour,
+
+Malgré nos relances successives, nous restons à ce jour sans réponse à notre demande de relevé de sinistralité concernant la copropriété {adresse} (contrat n° {numeroContrat}, {assureur}), formulée il y a {jours} jours.
+
+Nous vous rappelons que la communication du relevé d'informations est un droit du souscripteur et doit intervenir dans un délai raisonnable. À défaut de réception sous 8 jours, nous nous réservons la possibilité de saisir directement la compagnie et, le cas échéant, le médiateur de l'assurance.
+
+Nous comptons sur votre diligence pour régulariser cette situation,
+Bien cordialement,`,
+  },
+};
+
 // Substitution des placeholders {adresse} {assureur} {numeroContrat} {nom}.
 function fillTemplate(tpl: string, vars: Record<string, string>): string {
   return tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
@@ -96,6 +133,22 @@ async function frontSend(opts: { toList: string[]; subject: string; html: string
     }).catch(() => {});
   }
   return { ok: true, conversationId: conversationId || null };
+}
+
+// Envoi d'une RÉPONSE dans une conversation existante (reste dans le même fil).
+// Barrière finale interne Matera. options.archive=true (défaut) → conv archivée
+// après envoi ; une réponse ultérieure du courtier la rouvrira.
+async function frontReply(opts: { conversationId: string; toList: string[]; subject: string; html: string; authorEmail: string }): Promise<{ ok: boolean; error?: string }> {
+  if (!FRONT_TOKEN) return { ok: false, error: "Front non configuré" };
+  const to = opts.toList.filter((t) => !isMateraInternal(t));
+  if (!to.length) return { ok: false, error: "aucun destinataire" };
+  const res = await fetch(`${FRONT_API_URL}/conversations/${opts.conversationId}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ author_id: `alt:email:${opts.authorEmail || FRONT_AUTHOR_EMAIL}`, to, subject: opts.subject, body: opts.html, options: { archive: true } }),
+  });
+  if (!res.ok && res.status !== 202) return { ok: false, error: await res.text() };
+  return { ok: true };
 }
 
 export type Rs4Row = {
@@ -413,7 +466,10 @@ function lastScanOf(ps: Rs4Pipeline[]): string | null {
 export async function getRs4Volet3Data(nowMs: number): Promise<Volet3Data> {
   const ps = await volet3Pipelines();
   const rows = ps.map((p) => toVolet3Row(p, nowMs));
-  const stages = RELANCE_STAGES.map((s) => ({ num: s.num, day: s.day, eligibles: rows.filter((r) => r.joursDepuisEnvoi >= s.day && r.relances < s.num).length }));
+  // Éligibles à la relance N = délai atteint, EXACTEMENT N-1 relances déjà faites
+  // (séquence 1→2→3), et pas de réponse réelle. Le compte = ce qui partira vraiment.
+  const noRealReply = (k: string | null) => !k || k === "sans_reponse" || k === "non_scanne";
+  const stages = RELANCE_STAGES.map((s) => ({ num: s.num, day: s.day, eligibles: rows.filter((r) => r.joursDepuisEnvoi >= s.day && r.relances === s.num - 1 && noRealReply(r.replyKind)).length }));
   return { total: rows.length, rows, stages, replyCounts: replyCountsOf(ps), lastScanAt: lastScanOf(ps), commentedCount: rows.filter((r) => r.commentText).length, devisMixupCount: rows.filter((r) => r.devisMixup).length };
 }
 
@@ -627,34 +683,67 @@ export async function closeRedirectConversation(actorEmail: string, pipelineId: 
 
 // Envoie la relance n° `relanceNum` aux dossiers éligibles (J+seuil atteint et
 // relance pas encore envoyée). Les dossiers restent au volet 3 jusqu'au RS reçu.
-export async function sendRelance(actorEmail: string, relanceNum: number, subjectTpl: string, bodyTpl: string, nowMs: number): Promise<{ sent: number; failed: number; errors: string[] }> {
+export async function sendRelance(actorEmail: string, relanceNum: number, nowMs: number, limit?: number): Promise<{ sent: number; failed: number; skippedReplied: number; errors: string[] }> {
   const stage = RELANCE_STAGES.find((s) => s.num === relanceNum);
-  if (!stage) return { sent: 0, failed: 0, errors: ["relance inconnue"] };
+  const tpl = RELANCE_TEMPLATES[relanceNum];
+  if (!stage || !tpl) return { sent: 0, failed: 0, skippedReplied: 0, errors: ["relance inconnue"] };
   const ps = await volet3Pipelines();
   const signature = await getSignatureHtml(actorEmail);
   const idx = await getCourtierIndex();
-  let sent = 0, failed = 0;
-  const errors: string[] = [];
-  for (const p of ps) {
+  const now = new Date();
+  // Éligibles : délai atteint, EXACTEMENT relanceNum-1 relances déjà faites
+  // (séquence 1→2→3) et aucune réponse réelle connue.
+  const isRealReply = (k: string | null) => !!k && k !== "sans_reponse" && k !== "non_scanne";
+  const eligible = ps.filter((p) => {
     const jours = Math.floor((nowMs - new Date(p.rs4SentAt!).getTime()) / 86400000);
-    if (jours < stage.day || relanceCountOf(p.events) >= relanceNum) continue;
+    return jours >= stage.day && relanceCountOf(p.events) === relanceNum - 1 && !isRealReply(p.rs4ReplyKind);
+  });
+  const slice = typeof limit === "number" ? eligible.slice(0, limit) : eligible;
+
+  let sent = 0, failed = 0, skippedReplied = 0;
+  const errors: string[] = [];
+  for (const p of slice) {
     const c = p.copro;
+    const jours = Math.floor((nowMs - new Date(p.rs4SentAt!).getTime()) / 86400000);
+    // Conversation d'origine (relance 0) = le fil où l'on RESTE.
+    const initEvent = p.events.find((e) => Number((e.metadata as { relanceNum?: number } | null)?.relanceNum ?? -1) === 0);
+    const cid = ((initEvent?.metadata as { conversationId?: string } | null)?.conversationId)
+      ?? p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop() ?? null;
+    if (!cid) { failed++; errors.push(`${c.nom} : pas de conversation d'origine — non relancé`); continue; }
+
+    // GARDE-FOU FINAL (live) : si le courtier a répondu depuis l'envoi, on NE
+    // RELANCE PAS → on marque la réponse et on renvoie le dossier au détecteur.
+    const sentMs = new Date(p.rs4SentAt!).getTime();
+    const list = await frontGet(`/conversations/${cid}/messages?limit=20`);
+    const results = ((list?._results as unknown[]) ?? []) as { id: string; is_inbound: boolean; created_at: number; blurb?: string; attachments?: { contentType?: string; filename?: string }[]; author?: { email?: string }; recipients?: { role: string; handle: string }[] }[];
+    const inbound = results.filter((m) => m.is_inbound && m.created_at * 1000 > sentMs && !isFromMatera(m));
+    if (inbound.length) {
+      const last = inbound.sort((a, b) => b.created_at - a.created_at)[0];
+      const body = stripHtml(last.blurb || "").slice(0, 300);
+      const kind = classifyReply(body, inbound.some((m) => realDoc(m.attachments ?? [])), false);
+      await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: kind, rs4ReplyAt: new Date(last.created_at * 1000), rs4ReplySnippet: body.slice(0, 160), rs4ReplyMsgId: last.id, rs4ReplyConvId: cid, rs4RelanceAt: null } });
+      await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Relance ${relanceNum} ANNULÉE — réponse détectée (${kind}), dossier renvoyé au détecteur`, metadata: { auto: "rs4_relance_skipped_replied", kind }, createdBy: actorEmail } });
+      skippedReplied++;
+      continue;
+    }
+
+    // Destinataire propre (mêmes garde-fous qu'à l'envoi initial).
     const plan = prepareSendMails(c.courtierActuel, c.contactCourtierEmail, idx, c.assureurActuel);
     if (plan.hold) { failed++; errors.push(`${c.nom} : ${plan.reason} — non relancé`); continue; }
     const toList = plan.mails;
-    const to = toList.join(", ");
-    // Garde-fou : jamais de relance RS vers une adresse de demande de devis (AXA/Mila).
-    if (DEVIS_ADDRESSES.some((a) => to.toLowerCase().includes(a))) { failed++; errors.push(`${c.nom} : destinataire = adresse de devis (AXA/Mila) — non relancé`); continue; }
+    if (DEVIS_ADDRESSES.some((a) => toList.join(", ").toLowerCase().includes(a))) { failed++; errors.push(`${c.nom} : destinataire = adresse de devis (AXA/Mila) — non relancé`); continue; }
+
     const vars = { adresse: c.adresse || c.nom, assureur: c.assureurActuel || "", numeroContrat: c.numeroContrat || "", nom: c.nom, jours: String(jours) };
-    const subject = fillTemplate(subjectTpl, vars);
-    const html = renderHtml(fillTemplate(bodyTpl, vars), signature, `<span style="display:none;font-size:0;line-height:0;color:transparent">gufetto-ref:${p.id}:rs_relance</span>`);
-    const r = await frontSend({ toList, subject, html, pipelineId: p.id, gestionnaireEmail: c.gestionnaireEmail, authorEmail: actorEmail });
+    const subject = fillTemplate(tpl.subject, vars);
+    const html = renderHtml(fillTemplate(tpl.body, vars), signature, `<span style="display:none;font-size:0;line-height:0;color:transparent">gufetto-ref:${p.id}:rs_relance</span>`);
+    // Envoi EN RÉPONSE dans le fil d'origine (pas de nouvelle conversation).
+    const r = await frontReply({ conversationId: cid, toList, subject, html, authorEmail: actorEmail });
     if (!r.ok) { failed++; errors.push(`${c.nom} : ${r.error ?? "échec"}`); continue; }
-    await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Relance ${relanceNum} de la demande de RS envoyée (${to})`, metadata: { rsType: "draft_sent", relanceNum, to, conversationId: r.conversationId, auto: "rs4_relance" }, createdBy: actorEmail } });
+    await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Relance ${relanceNum} de la demande de RS envoyée (${toList.join(", ")})`, metadata: { rsType: "draft_sent", relanceNum, to: toList.join(", "), conversationId: cid, auto: "rs4_relance" }, createdBy: actorEmail } });
     sent++;
   }
-  if (sent > 0 || failed > 0) await prisma.rs4SendLog.create({ data: { kind: "relance", relanceNum, count: sent, failed, actorEmail } });
-  return { sent, failed, errors: errors.slice(0, 20) };
+  if (sent > 0 || failed > 0 || skippedReplied > 0) await prisma.rs4SendLog.create({ data: { kind: "relance", relanceNum, count: sent, failed, actorEmail } });
+  return { sent, failed, skippedReplied, errors: errors.slice(0, 20) };
 }
 
 // (RS reçu = réutilise l'action existante marquerRSRecu → rs_en_cours → devis_demandes.)

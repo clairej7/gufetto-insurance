@@ -54,16 +54,8 @@ Je vous en remercie par avance.
 
 Bien cordialement,`;
 
-const RELANCE_SUBJECT = (n: number) => `[Relance ${n}] Relevé de sinistralité — {adresse} — contrat n° {numeroContrat}`;
-const RELANCE_BODY = `Bonjour,
-
-Sauf erreur de ma part, nous n'avons pas encore reçu le relevé de sinistralité de la copropriété {adresse} (contrat n° {numeroContrat}, {assureur}), demandé il y a {jours} jours.
-
-Pourriez-vous nous le faire parvenir dès que possible ? Je reste à votre disposition.
-
-Je vous en remercie,
-
-Bien cordialement,`;
+// Templates de relance : gérés côté serveur (RELANCE_TEMPLATES dans rs4.ts),
+// envoyés en réponse au fil d'origine. Le client ne passe que relanceNum + limit.
 
 const btn = (color: string, bg: string, border: string): React.CSSProperties => ({ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 6, border: `1px solid ${border}`, background: bg, color, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 });
 
@@ -165,6 +157,7 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
   const [showComments, setShowComments] = useState(true);
   const [showMixups, setShowMixups] = useState(true);
   const guardsOk = check1Done && check2Done && check3Done;
+  const [selectedStage, setSelectedStage] = useState<number | null>(null);
 
   async function checkAbsenceReponse() {
     await scanReplies();
@@ -262,15 +255,16 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setSending(false); }
   }
 
-  async function sendRelance(num: number, eligibles: number) {
+  async function sendRelance(num: number, eligibles: number, limit?: number) {
     if (eligibles === 0) return;
-    if (!window.confirm(`Envoyer la relance ${num} à ${eligibles} dossier(s) ?`)) return;
+    const n = limit ? Math.min(limit, eligibles) : eligibles;
+    if (!window.confirm(`Envoyer la relance ${num} à ${n} dossier(s) ? (réponse dans le fil d'origine, avec re-vérification anti-réponse)`)) return;
     setRelancing(num);
     try {
-      const res = await fetch("/api/rs4/relance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ relanceNum: num, subject: RELANCE_SUBJECT(num), body: RELANCE_BODY }) });
+      const res = await fetch("/api/rs4/relance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ relanceNum: num, limit }) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
       const data = await res.json();
-      toast.success(`Relance ${num} : ${data.sent} envoyée(s)${data.failed ? `, ${data.failed} échec(s)` : ""}.`);
+      toast.success(`Relance ${num} : ${data.sent} envoyée(s)${data.skippedReplied ? `, ${data.skippedReplied} sautée(s) (réponse détectée)` : ""}${data.failed ? `, ${data.failed} échec(s)` : ""}.`);
       router.refresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec de la relance"); } finally { setRelancing(null); }
   }
@@ -757,11 +751,56 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
             )}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
               {volet3.stages.map((s) => (
-                <Button key={s.num} onClick={() => sendRelance(s.num, s.eligibles)} disabled={!guardsOk || relancing !== null || s.eligibles === 0} variant="outline" size="sm">
-                  {relancing === s.num ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />} J+{s.day} : relance {s.num} ({s.eligibles})
+                <Button key={s.num} onClick={() => setSelectedStage(selectedStage === s.num ? null : s.num)} disabled={!guardsOk || s.eligibles === 0} variant={selectedStage === s.num ? "default" : "outline"} size="sm">
+                  <Mail size={15} /> J+{s.day} : relance {s.num} ({s.eligibles})
                 </Button>
               ))}
             </div>
+
+            {/* Panneau d'envoi : dossiers concernés par la relance sélectionnée + 2 boutons. */}
+            {guardsOk && selectedStage != null && (() => {
+              const stage = volet3.stages.find((s) => s.num === selectedStage);
+              if (!stage) return null;
+              const isNoReal = (k: string | null) => !k || k === "sans_reponse" || k === "non_scanne";
+              const eligRows = volet3.rows.filter((r) => r.joursDepuisEnvoi >= stage.day && r.relances === selectedStage - 1 && isNoReal(r.replyKind));
+              const ton = selectedStage === 1 ? "amical" : selectedStage === 2 ? "pressant" : "juridique";
+              return (
+                <div style={{ marginTop: 12, border: "1px solid #D9D9F5", background: "#F7F7FF", borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C" }}>Relance {selectedStage} — {eligRows.length} dossier(s) éligible(s) · J+{stage.day} · ton {ton}</div>
+                  <div style={{ fontSize: 11.5, color: "#656576", margin: "4px 0 10px" }}>Envoi <strong>en réponse au fil d&apos;origine</strong>. Re-vérification anti-réponse juste avant chaque envoi : un dossier qui a répondu est sauté et renvoyé au détecteur.</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+                    <Button onClick={() => sendRelance(selectedStage, eligRows.length)} disabled={relancing !== null || eligRows.length === 0} size="sm">
+                      {relancing === selectedStage ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />} Envoyer les {eligRows.length} relances
+                    </Button>
+                    <Button onClick={() => sendRelance(selectedStage, eligRows.length, 5)} disabled={relancing !== null || eligRows.length === 0} variant="outline" size="sm">
+                      Envoyer 5 relances
+                    </Button>
+                    <button onClick={() => setSelectedStage(null)} style={{ fontSize: 12, fontWeight: 600, color: "#656576", background: "none", border: "none", cursor: "pointer" }}>fermer</button>
+                  </div>
+                  <div style={{ maxHeight: 300, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8, background: "#fff" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
+                          {["Copropriété", "J+", "Mail courtier"].map((h) => (
+                            <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {eligRows.map((r) => (
+                          <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
+                            <td style={{ padding: "6px 10px" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
+                            <td style={{ padding: "6px 10px", fontWeight: 600, color: r.joursDepuisEnvoi >= 8 ? "#CA1E12" : "#B4690E" }}>J+{r.joursDepuisEnvoi}</td>
+                            <td style={{ padding: "6px 10px", color: r.mail ? "#13762C" : "#CA1E12" }}>{r.mail || "manquant"}</td>
+                          </tr>
+                        ))}
+                        {eligRows.length === 0 && <tr><td colSpan={3} style={{ padding: 10, color: "#A2A1AF", textAlign: "center" }}>Aucun dossier éligible.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
             <button onClick={() => setShowV3((v) => !v)} style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: "#656576", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
               {showV3 ? "▾" : "▸"} Détail des {volet3.total} dossiers en cours
             </button>
