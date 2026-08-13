@@ -47,16 +47,16 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
   // ailleurs par Front) dans l'inbox Gufetto + les rattache au dossier.
   async function scanMilaPro() {
     setScanningMila(true);
-    let offset = 0, repatries = 0, rattaches = 0, docs = 0, avances = 0, sansCopro = 0;
+    let offset = 0, trouves = 0, docs = 0, deplaces = 0, avances = 0;
     try {
       for (;;) {
         const res = await fetch("/api/devis5/scan-mila-pro", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offset, limit: 10 }) });
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
         const d = await res.json();
-        offset = d.nextOffset; repatries += d.repatries; rattaches += d.rattaches; docs += d.docs; avances += d.avances; sansCopro += d.sansCopro;
+        offset = d.nextOffset; trouves += d.trouves; docs += d.docs; deplaces += d.deplaces; avances += d.avances;
         if (d.done) break;
       }
-      toast.success(repatries === 0 ? "Aucun devis Mila hors fil à rapatrier." : `Devis Mila : ${repatries} rapatriés · ${rattaches} rattachés · ${docs} PDF · ${avances} → comparaison${sansCopro ? ` · ${sansCopro} sans dossier` : ""}.`);
+      toast.success(trouves === 0 ? "Aucun devis Mila hors fil trouvé pour tes dossiers." : `Devis Mila : ${trouves} dossiers · ${docs} PDF captés · ${deplaces} rapatriés dans Gufetto · ${avances} → comparaison.`);
       router.refresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec du scan Mila"); } finally { setScanningMila(false); }
   }
