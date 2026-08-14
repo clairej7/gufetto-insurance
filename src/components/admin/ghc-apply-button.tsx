@@ -32,7 +32,7 @@ export function GhcApplyButton({ sourceRows }: { sourceRows: number }) {
   }
 
   async function apply() {
-    if (!confirm(`Appliquer l'excel GHC (${sourceRows} contrats) sur les dossiers ?\n\nGHC = source prioritaire : les données seront écrasées (assureur, courtier, n°, prime, échéance) et les dossiers en « Identification » seront aiguillés (ODR / RS).`)) return;
+    if (!confirm(`Appliquer l'excel GHC (${sourceRows} contrats) sur les dossiers ?\n\nMode FILL-ONLY : on remplit uniquement les champs vides (assureur, courtier, n°, prime, échéance) — aucune valeur existante n'est écrasée. Les champs qui diffèrent partent en DIVERGENCE dans le rapport « À contrôler ». Les dossiers en « Identification » sont aiguillés (ODR / RS).`)) return;
     setRunning(true); setDone(false); cancelRef.current = false;
     setAgg({ dossiersClean: 0, versOdr: 0, versRs: 0, divergences: 0 });
     setProgress({ processed: 0, total: 0 });
