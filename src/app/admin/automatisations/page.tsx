@@ -112,7 +112,7 @@ export default async function AutomatisationsPage() {
   const devis6Suivi = await getDevis6Volet3Data(Date.now());
   const docsStats = await getDocsStats();
   const exclusionState = await getExclusionState();
-  const ghcReviewLabel: Record<string, string> = { prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
+  const ghcReviewLabel: Record<string, string> = { assureur_divergent: "Assureur divergent", courtier_divergent: "Courtier divergent", numero_divergent: "N° divergent", echeance_divergente: "Échéance divergente", prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
 
   const automations: {
@@ -198,7 +198,7 @@ export default async function AutomatisationsPage() {
         "Agent de nettoyage de la donnée — un seul des composants de l'automatisation finale. Trois volets sont en ligne ci-dessous : « clean prime », « clean avis d'échéance (données périmées) » et « correction GetHumanCall ».",
         "Volet 1 — « clean prime » : beaucoup de dossiers n'ont pas de prime renseignée, ce qui fausse les montants (historique ODR, dashboards Tracking). Sur chaque fiche copro sans prime : mention rouge « aucune prime renseignée » + bouton « Vérifier la prime » (cherche dans Front un avis d'échéance / relance impayé). Trouvé clairement → prime écrite ; incertain → prime écrite + « à vérifier » ; rien → inchangé. Aucun changement d'étape.",
         "Volet 2 — « clean avis d'échéance » : les dossiers dont l'échéance est dépassée depuis plusieurs mois/années trahissent une donnée périmée (import Omni ancien). Chaque fiche concernée porte une mention rouge « Donnée périmée » + un bouton « Vérifier la donnée » qui cherche dans Front une info plus récente (assureur / courtier / prime / échéance) ; si trouvée → remplit, aiguille le statut (Identification → RS / ODR) et retire la mention ; sinon → stand-by. Au fur et à mesure que la donnée est nettoyée sur Matera, les dossiers sont récupérés automatiquement.",
-        "Volet 3 — « correction GetHumanCall » : import des données nettoyées par les agents Get Human Call (appels aux assureurs). GHC est la source prioritaire : assureur / courtier / n° / prime / échéance sont écrasés (fill + correction), les dossiers en « Identification » sont aiguillés (ODR si assureur partenaire, RS si non-partenaire) ; les autres gardent leur étape et les incohérences sont remontées dans un rapport. Chaque info corrigée porte un check vert « GHC » sur la fiche. À chaque nouvelle version de l'excel : un nouvel import (ligne d'historique).",
+        "Volet 3 — « correction GetHumanCall » : import des données nettoyées par les agents Get Human Call (appels aux assureurs). Mode FILL-ONLY : on ne remplit QUE les champs vides (assureur / courtier / n° / prime / échéance) — jamais d'écrasement (la donnée GHC contient encore des erreurs). Tout champ déjà rempli qui diffère est remonté en DIVERGENCE dans le rapport « À contrôler » pour arbitrage manuel. Les dossiers en « Identification » sont aiguillés (ODR si assureur partenaire, RS si non-partenaire). Chaque info remplie porte un check vert « GHC » sur la fiche. À chaque nouvelle version de l'excel : un nouvel import (ligne d'historique).",
         "Contrôles admin ci-dessous pour chaque volet (identification + vérification en masse, compteurs en direct). Les données récupérées / corrigées sont protégées de la synchro Omni du lendemain (cliquets contrat / échéance + statut). Les dashboards du Tracking se mettent à jour automatiquement.",
       ],
     },
@@ -492,7 +492,7 @@ export default async function AutomatisationsPage() {
                         nouvel import (ligne d&apos;historique ci-dessous).
                       </p>
                       <p style={{ fontSize: 12.5, color: "#656576", margin: "0 0 12px" }}>
-                        Source : <a href="/ghc/GHC-cleaning-contrats-assurance-v1.xlsx" download style={{ color: "#4E49FC", fontWeight: 600 }}>excel GHC v1 ({ghcState.sourceRows} contrats)</a>
+                        Source : <a href="/ghc/GHC-cleaning-contrats-assurance-v2.xlsx" download style={{ color: "#4E49FC", fontWeight: 600 }}>excel GHC v2 ({ghcState.sourceRows} contrats)</a>
                         {" · "}<strong>{ghcState.dossiersAvecGhc}</strong> dossier{ghcState.dossiersAvecGhc > 1 ? "s" : ""} portent une donnée GHC.
                       </p>
                       <GhcApplyButton sourceRows={ghcState.sourceRows} />

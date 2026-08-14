@@ -40,7 +40,7 @@ const parseFields = (s: string | null): string[] => { try { return s ? (JSON.par
 
 export type GhcChunkResult = GhcApplyResult & { runId: string; total: number; processed: number; done: boolean };
 
-const GHC_DEFAULT_FILE = "[Matera x GHC] Cleaning contrats assurance.xlsx";
+const GHC_DEFAULT_FILE = "[Matera x GHC] Cleaning contrats assurance (2).xlsx";
 
 type GhcCopro = {
   id: string; nom: string; buildingId: string; clientMriStatut: string | null;
@@ -69,41 +69,42 @@ async function applyGhcToCopro(c: GhcCopro, g: GhcRow, now: Date, actorEmail: st
   const estClos = isCloturePourClient(c.clientMriStatut, c.assureurActuel);
   const protegeAssureur = estClos || c.pipelines.some((p) => ODR_ASSUREUR_PROTECT.includes(p.statut) || NON_ACTIF_STATUTS.includes(p.statut));
 
-  // Assureur / courtier / n° : GHC-backed (badge) dès qu'une valeur existe ; on
-  // n'ÉCRIT que si elle diffère réellement (casse/espaces ignorés → pas de churn).
+  // FILL-ONLY : on ne remplit QUE les champs vides (jamais d'écrasement — la
+  // colonne assureur v2 notamment contient trop d'erreurs). Un champ déjà rempli
+  // qui diffère → remonté en DIVERGENCE dans le rapport (panneau « À contrôler »),
+  // à arbitrer à la main. Rien n'est écrasé en silence.
   if (g.assureur && !protegeAssureur) {
-    fields.push("assureur");
-    if (norm(g.assureur) !== norm(c.assureurActuel)) { data.assureurActuel = g.assureur; r.assureursMaj++; }
+    if (!c.assureurActuel) { data.assureurActuel = g.assureur; r.assureursMaj++; fields.push("assureur"); }
+    else if (norm(g.assureur) !== norm(c.assureurActuel)) { reviews.push({ buildingId: c.buildingId, coproNom: c.nom, kind: "assureur_divergent", message: `Assureur : Gufetto « ${c.assureurActuel} » → GHC « ${g.assureur} »` }); r.divergences++; }
   }
   if (g.courtier) {
-    fields.push("courtier");
-    if (norm(g.courtier) !== norm(c.courtierActuel)) { data.courtierActuel = g.courtier; r.courtiersMaj++; }
+    if (!c.courtierActuel) { data.courtierActuel = g.courtier; r.courtiersMaj++; fields.push("courtier"); }
+    else if (norm(g.courtier) !== norm(c.courtierActuel)) { reviews.push({ buildingId: c.buildingId, coproNom: c.nom, kind: "courtier_divergent", message: `Courtier : Gufetto « ${c.courtierActuel} » → GHC « ${g.courtier} »` }); r.divergences++; }
   }
   if (g.numeroContrat) {
-    fields.push("numero");
-    if (norm(g.numeroContrat) !== norm(c.numeroContrat)) { data.numeroContrat = g.numeroContrat; r.numerosMaj++; }
+    if (!c.numeroContrat) { data.numeroContrat = g.numeroContrat; r.numerosMaj++; fields.push("numero"); }
+    else if (norm(g.numeroContrat) !== norm(c.numeroContrat)) { reviews.push({ buildingId: c.buildingId, coproNom: c.nom, kind: "numero_divergent", message: `N° contrat : Gufetto « ${c.numeroContrat} » → GHC « ${g.numeroContrat} »` }); r.divergences++; }
   }
   if (g.montant != null && g.montant >= PRIME_FLOOR) {
     const gm = Math.round(g.montant);
     if (gm > PRIME_CEIL) {
-      // Montant hors bornes (> 50 k€) → quasi sûrement une erreur GHC : on N'ÉCRIT PAS, on signale.
+      // Montant hors bornes (> 50 k€) → quasi sûrement une erreur GHC : jamais écrit, signalé.
       reviews.push({ buildingId: c.buildingId, coproNom: c.nom, kind: "prime_suspecte", message: `Prime GHC ${gm} € invraisemblable (> 50 000 €) — non écrite, à saisir manuellement` });
       r.casParticuliers++;
-    } else {
-      fields.push("prime");
-      if (c.primeActuelle != null && Math.abs(c.primeActuelle - gm) / Math.max(c.primeActuelle, gm) > DIVERGENCE_PCT) {
-        reviews.push({ buildingId: c.buildingId, coproNom: c.nom, kind: "prime_divergente", message: `Prime : Gufetto ${c.primeActuelle} € → GHC ${gm} €` });
-        r.divergences++;
-      }
-      if (gm !== c.primeActuelle) { data.primeActuelle = gm; r.primesMaj++; }
+    } else if (c.primeActuelle == null) {
+      data.primeActuelle = gm; r.primesMaj++; fields.push("prime");
       data.primeAVerifier = g.aVerifier; // ligne GHC douteuse → reste « à vérifier »
+    } else if (Math.abs(c.primeActuelle - gm) / Math.max(c.primeActuelle, gm) > DIVERGENCE_PCT) {
+      reviews.push({ buildingId: c.buildingId, coproNom: c.nom, kind: "prime_divergente", message: `Prime : Gufetto ${c.primeActuelle} € → GHC ${gm} €` }); r.divergences++;
     }
   }
   if (g.echeance) {
-    fields.push("echeance");
-    if (!c.dateEcheance || g.echeance.getTime() !== c.dateEcheance.getTime()) { data.dateEcheance = g.echeance; r.echeancesMaj++; }
-    data.echeanceVerrouilleLe = now;
-    if (c.donneePerimee && !isEcheancePerimee(g.echeance)) data.donneePerimee = false;
+    if (!c.dateEcheance) {
+      data.dateEcheance = g.echeance; r.echeancesMaj++; fields.push("echeance"); data.echeanceVerrouilleLe = now;
+      if (c.donneePerimee && !isEcheancePerimee(g.echeance)) data.donneePerimee = false;
+    } else if (g.echeance.getTime() !== c.dateEcheance.getTime()) {
+      reviews.push({ buildingId: c.buildingId, coproNom: c.nom, kind: "echeance_divergente", message: `Échéance : Gufetto ${c.dateEcheance.toLocaleDateString("fr-FR")} → GHC ${g.echeance.toLocaleDateString("fr-FR")}` }); r.divergences++;
+    }
   }
 
   if (fields.length > 0) {
