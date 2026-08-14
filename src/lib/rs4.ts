@@ -428,7 +428,7 @@ const DEVIS_ADDRESSES = ["achille.leboeuf@axa.fr", "souscription@mila.fr"];
 
 // Lien profond vers une conversation Front (ouvre l'app Front sur la conv).
 const FRONT_CONV_URL = (cid: string | null) => (cid ? `https://app.frontapp.com/open/${cid}` : null);
-const RS4_SELECT = { id: true, rs4SentAt: true, rs4ReplyKind: true, rs4ReplyAt: true, rs4ReplySnippet: true, rs4ReplyConvId: true, rs4ReplyScanAt: true, rs4CommentAt: true, rs4CommentText: true, rs4CommentBy: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true, numeroContrat: true, assureurActuel: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } } as const;
+const RS4_SELECT = { id: true, rs4SentAt: true, rs4ReplyKind: true, rs4ReplyAt: true, rs4ReplySnippet: true, rs4ReplyConvId: true, rs4ReplyScanAt: true, rs4CommentAt: true, rs4CommentText: true, rs4CommentBy: true, copro: { select: { nom: true, adresse: true, buildingId: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true, numeroContrat: true, assureurActuel: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } } as const;
 
 // UI Volet 4 = boucle de relances : dossiers TRIÉS depuis le détecteur (rs4RelanceAt
 // posé), pas encore passés en « RS en cours de récupération » (rs4EnCoursAt null).
@@ -722,18 +722,34 @@ export async function sendRelance(actorEmail: string, relanceNum: number, nowMs:
       ?? p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop() ?? null;
     if (!cid) { failed++; errors.push(`${c.nom} : pas de conversation d'origine — non relancé`); continue; }
 
-    // GARDE-FOU FINAL (live) : si le courtier a répondu depuis l'envoi, on NE
-    // RELANCE PAS → on marque la réponse et on renvoie le dossier au détecteur.
+    // GARDE-FOU FINAL (live) : si une réponse externe existe depuis notre demande,
+    // on NE RELANCE PAS. On regarde le fil d'origine ET tous les autres fils
+    // « gufetto » du MÊME IMMEUBLE (building_id) — car un courtier répond parfois
+    // dans un mail séparé (le RS déjà envoyé ailleurs). → marque + retour détecteur.
     const sentMs = new Date(p.rs4SentAt!).getTime();
-    const list = await frontGet(`/conversations/${cid}/messages?limit=20`);
-    const results = ((list?._results as unknown[]) ?? []) as { id: string; is_inbound: boolean; created_at: number; blurb?: string; attachments?: { contentType?: string; filename?: string }[]; author?: { email?: string }; recipients?: { role: string; handle: string }[] }[];
-    const inbound = results.filter((m) => m.is_inbound && m.created_at * 1000 > sentMs && !isFromMatera(m));
-    if (inbound.length) {
-      const last = inbound.sort((a, b) => b.created_at - a.created_at)[0];
+    type FMsg = { id: string; is_inbound: boolean; created_at: number; blurb?: string; attachments?: { contentType?: string; filename?: string }[]; author?: { email?: string }; recipients?: { role: string; handle: string }[] };
+    const convToCheck = new Set<string>([cid]);
+    if (p.copro.buildingId) {
+      const q = encodeURIComponent(`custom_field:"building_id=${p.copro.buildingId}"`);
+      const sd = await frontGet(`/conversations/search/${q}?limit=50`);
+      const gufettoConvs = (((sd?._results as unknown[]) ?? []) as { id: string; tags?: { id: string }[] }[])
+        .filter((cc) => (cc.tags ?? []).some((t) => t.id === "tag_23n286"));
+      for (const cc of gufettoConvs.slice(0, 15)) convToCheck.add(cc.id);
+    }
+    let repliedConv: string | null = null; let repliedMsgs: FMsg[] = [];
+    for (const ccid of convToCheck) {
+      const list = await frontGet(`/conversations/${ccid}/messages?limit=20`);
+      const results = ((list?._results as unknown[]) ?? []) as FMsg[];
+      const inbound = results.filter((m) => m.is_inbound && m.created_at * 1000 > sentMs && !isFromMatera(m));
+      if (inbound.length) { repliedConv = ccid; repliedMsgs = inbound; break; }
+    }
+    if (repliedConv) {
+      const last = repliedMsgs.sort((a, b) => b.created_at - a.created_at)[0];
       const body = stripHtml(last.blurb || "").slice(0, 300);
-      const kind = classifyReply(body, inbound.some((m) => realDoc(m.attachments ?? [])), false);
-      await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: kind, rs4ReplyAt: new Date(last.created_at * 1000), rs4ReplySnippet: body.slice(0, 160), rs4ReplyMsgId: last.id, rs4ReplyConvId: cid, rs4RelanceAt: null } });
-      await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Relance ${relanceNum} ANNULÉE — réponse détectée (${kind}), dossier renvoyé au détecteur`, metadata: { auto: "rs4_relance_skipped_replied", kind }, createdBy: actorEmail } });
+      const kind = classifyReply(body, repliedMsgs.some((m) => realDoc(m.attachments ?? [])), false);
+      const autreFil = repliedConv !== cid;
+      await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: kind, rs4ReplyAt: new Date(last.created_at * 1000), rs4ReplySnippet: body.slice(0, 160), rs4ReplyMsgId: last.id, rs4ReplyConvId: repliedConv, rs4RelanceAt: null } });
+      await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Relance ${relanceNum} ANNULÉE — réponse détectée (${kind}${autreFil ? ", autre fil du même immeuble" : ""}), dossier renvoyé au détecteur`, metadata: { auto: "rs4_relance_skipped_replied", kind, autreFil }, createdBy: actorEmail } });
       skippedReplied++;
       continue;
     }
