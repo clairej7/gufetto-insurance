@@ -786,6 +786,9 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
                     <Button onClick={() => sendRelance(selectedStage, eligRows.length, 5)} disabled={relancing !== null || eligRows.length === 0} variant="outline" size="sm">
                       Envoyer 5 relances
                     </Button>
+                    <Button onClick={() => sendRelance(selectedStage, eligRows.length, 50)} disabled={relancing !== null || eligRows.length === 0} variant="outline" size="sm">
+                      Envoyer 50 relances
+                    </Button>
                     <button onClick={() => setSelectedStage(null)} style={{ fontSize: 12, fontWeight: 600, color: "#656576", background: "none", border: "none", cursor: "pointer" }}>fermer</button>
                   </div>
                   <div style={{ maxHeight: 300, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8, background: "#fff" }}>
