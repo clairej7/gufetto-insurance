@@ -277,10 +277,9 @@ export async function getDevis5Volet4Data(nowMs: number): Promise<Devis5Suivi> {
   };
 }
 
-// Un dossier est « prêt pour l'Auto 6 » quand, sur ses demandes (AXA + Mila) :
-//   - au moins une = devis obtenu, ET
-//   - chaque autre est résolue = devis obtenu, refus assureur, ou pas de réponse ≥ 10 j.
-// (donc : les 2 devis reçus, OU 1 reçu + l'autre refus/sans réponse 10j.)
+// Un dossier est « prêt pour l'Auto 6 » dès qu'AU MOINS UN devis a été reçu
+// (sur ses demandes AXA / Mila). Les autres demandes (encore en attente, refus,
+// sans réponse) n'empêchent plus le passage : on lance la comparaison dès le 1er devis.
 // Renvoie les pipelines prêts PAS ENCORE envoyés à l'Auto 6 (sans marqueur auto6Ready).
 async function getReadyForAuto6(nowMs: number): Promise<{ id: string; statut: string }[]> {
   const excl = await getExcludedCoproIds();
@@ -295,8 +294,7 @@ async function getReadyForAuto6(nowMs: number): Promise<{ id: string; statut: st
     g.demandes.push({ kind: (m.replyKind ?? "non_scanne") as DevisReplyKind, jours: Math.floor((nowMs - e.createdAt.getTime()) / 86400000) });
     byPipe.set(e.pipelineId, g);
   }
-  const resolved = (k: DevisReplyKind, j: number) => k === "devis_obtenu" || k === "refus_assureur" || (k === "pas_de_reponse" && j >= 10);
-  const ready = [...byPipe.entries()].filter(([, g]) => g.demandes.some((d) => d.kind === "devis_obtenu") && g.demandes.every((d) => resolved(d.kind, d.jours)));
+  const ready = [...byPipe.entries()].filter(([, g]) => g.demandes.some((d) => d.kind === "devis_obtenu"));
   const readyIds = ready.map(([id]) => id);
   if (!readyIds.length) return [];
   const marked = new Set((await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto6Ready"], equals: true }, pipelineId: { in: readyIds } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).map((e) => e.pipelineId));
