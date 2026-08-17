@@ -406,12 +406,15 @@ export async function getRs4SendHistory(limit = 20): Promise<{ sentAt: string; k
 export async function moveSentToVolet3(actorEmail: string): Promise<{ moved: number }> {
   const ps = await prisma.insurancePipeline.findMany({
     where: { statut: "rs_en_cours", rs4SentAt: null, coproId: { notIn: await getExcludedCoproIds() }, copro: { archivedAt: null }, events: { some: { metadata: { path: ["rsType"], equals: "draft_sent" } } } },
-    select: { id: true, rs4Volet2At: true, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { createdAt: true } } },
+    select: { id: true, rs4Volet2At: true, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true, createdAt: true } } },
   });
   let moved = 0;
   for (const p of ps) {
-    if (!p.events.length) continue;
-    const first = p.events.reduce((a, e) => (e.createdAt < a ? e.createdAt : a), p.events[0].createdAt);
+    // Ne bascule au suivi QUE sur un VRAI envoi de notre part (relanceNum 0 + destinataire).
+    // On ignore les events « conv liée depuis Front » / vestiges (pas un envoi de nous).
+    const genuine = p.events.filter((e) => { const m = e.metadata as { relanceNum?: number; to?: string } | null; return !!m && m.relanceNum === 0 && typeof m.to === "string" && m.to.trim().length > 0; });
+    if (!genuine.length) continue;
+    const first = genuine.reduce((a, e) => (e.createdAt < a ? e.createdAt : a), genuine[0].createdAt);
     await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4SentAt: first, rs4Volet2At: p.rs4Volet2At ?? first } });
     await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Demande de RS déjà envoyée à la main (${first.toLocaleDateString("fr-FR")}) → placée au suivi des relances (volet 3)`, metadata: { auto: "rs4_already_sent_to_v3", sentAt: first.toISOString() }, createdBy: actorEmail } });
     moved++;
@@ -456,13 +459,15 @@ function relanceCountOf(events: { metadata: unknown }[]): number {
   return events.filter((e) => { const m = e.metadata as { relanceNum?: number } | null; return !!m && typeof m.relanceNum === "number" && m.relanceNum > 0; }).length;
 }
 
-// Dernier envoi INITIAL (draft_sent NON-relance : relanceNum absent ou 0) = la
-// « boucle de mail » courante. Après un « repartir à zéro » + renvoi avec le bon
-// mail, c'est ce NOUVEL envoi (nouvelle conv) qui fait foi pour le timing et la
-// cible de relance — jamais la conv de base. null si aucun envoi initial.
+// Dernier VRAI envoi initial de NOTRE part = draft_sent avec relanceNum 0 ET un
+// destinataire `to` réel (créé par le flux Gufetto : envoi batch, envoi manuel
+// « Mail 1 envoyé »…). On EXCLUT les events « conv liée depuis Front » / vestiges
+// (relanceNum absent, `to` vide) qui pointent vers une conversation étrangère ou
+// ancienne qu'on n'a pas envoyée — sinon on relancerait un mail qui n'est pas de nous.
+// Renvoie le plus récent (la « boucle de mail » courante), ou null si aucun vrai envoi.
 function latestInitialSend(events: { metadata: unknown; createdAt: Date }[]): { date: Date; cid: string | null } | null {
   const inits = events
-    .filter((e) => { const m = e.metadata as { relanceNum?: number } | null; return !(m && typeof m.relanceNum === "number" && m.relanceNum > 0); })
+    .filter((e) => { const m = e.metadata as { relanceNum?: number; to?: string } | null; return !!m && m.relanceNum === 0 && typeof m.to === "string" && m.to.trim().length > 0; })
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   if (!inits.length) return null;
   const top = inits[0];
@@ -811,10 +816,14 @@ export async function sendRelance(actorEmail: string, relanceNum: number, nowMs:
   // (séquence 1→2→3) et aucune réponse réelle connue.
   const isRealReply = (k: string | null) => !!k && k !== "sans_reponse" && k !== "non_scanne";
   const eligible = ps.filter((p) => {
-    // Timing = MAX(rs4SentAt, dernier envoi initial) → relançable à J+seuil du renvoi
-    // (nouvelle boucle de mail) ou de notre dernière réponse, jamais de la conv de base.
+    // GARDE-FOU : on ne relance QUE si un VRAI envoi de notre part existe (draft_sent
+    // relanceNum 0 + destinataire). Un dossier « lié » à une conv étrangère/ancienne
+    // (pas d'envoi de nous) n'est jamais relancé.
     const base = latestInitialSend(p.events);
-    const baseMs = Math.max(base ? base.date.getTime() : 0, new Date(p.rs4SentAt!).getTime());
+    if (!base) return false;
+    // Timing = MAX(dernier envoi initial, rs4SentAt) → relançable à J+seuil du renvoi
+    // (nouvelle boucle de mail) ou de notre dernière réponse, jamais de la conv de base.
+    const baseMs = Math.max(base.date.getTime(), new Date(p.rs4SentAt!).getTime());
     const jours = Math.floor((nowMs - baseMs) / 86400000);
     return jours >= stage.day && relanceCountOf(p.events) === relanceNum - 1 && !isRealReply(p.rs4ReplyKind);
   });
