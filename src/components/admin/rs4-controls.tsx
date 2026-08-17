@@ -792,7 +792,7 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                       <thead>
                         <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-                          {["Copropriété", "J+", "Mail courtier"].map((h) => (
+                          {["Copropriété", "J+", "Mail courtier", "Conv Front"].map((h) => (
                             <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
                           ))}
                         </tr>
@@ -803,9 +803,10 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
                             <td style={{ padding: "6px 10px" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
                             <td style={{ padding: "6px 10px", fontWeight: 600, color: r.joursDepuisEnvoi >= 8 ? "#CA1E12" : "#B4690E" }}>J+{r.joursDepuisEnvoi}</td>
                             <td style={{ padding: "6px 10px", color: r.mail ? "#13762C" : "#CA1E12" }}>{r.mail || "manquant"}</td>
+                            <td style={{ padding: "6px 10px" }}>{r.replyConvUrl ? <a href={r.replyConvUrl} target="_blank" rel="noreferrer" title="Ouvrir la conversation dans Front" style={{ color: "#4E49FC", textDecoration: "none" }}>Front ↗</a> : <span style={{ color: "#C7C7D1" }}>—</span>}</td>
                           </tr>
                         ))}
-                        {eligRows.length === 0 && <tr><td colSpan={3} style={{ padding: 10, color: "#A2A1AF", textAlign: "center" }}>Aucun dossier éligible.</td></tr>}
+                        {eligRows.length === 0 && <tr><td colSpan={4} style={{ padding: 10, color: "#A2A1AF", textAlign: "center" }}>Aucun dossier éligible.</td></tr>}
                       </tbody>
                     </table>
                   </div>
