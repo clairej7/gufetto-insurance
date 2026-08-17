@@ -30,7 +30,7 @@ export function partnerLabel(key: OdrPartnerKey): string {
   return ODR_PARTNERS.find((p) => p.key === key)?.label ?? key;
 }
 
-export type OdrDossier = { pipelineId: string; nom: string; numeroContrat: string | null };
+export type OdrDossier = { pipelineId: string; nom: string; adresse: string | null; numeroContrat: string | null };
 
 export type OdrPartnerBucket = {
   key: OdrPartnerKey;
@@ -64,7 +64,7 @@ export async function getOdrByPartner(): Promise<OdrPartnerBucket[]> {
     select: {
       id: true,
       odrPartenaire: true,
-      copro: { select: { nom: true, numeroContrat: true, assureurActuel: true } },
+      copro: { select: { nom: true, adresse: true, numeroContrat: true, assureurActuel: true } },
       events: { where: { type: "note_ajoutee" }, select: { description: true } },
     },
     orderBy: { copro: { nom: "asc" } },
@@ -80,6 +80,7 @@ export async function getOdrByPartner(): Promise<OdrPartnerBucket[]> {
     const d: OdrDossier = {
       pipelineId: r.id,
       nom: r.copro.nom,
+      adresse: (r.copro.adresse || "").trim() || null,
       numeroContrat: (r.copro.numeroContrat || "").trim() || null,
     };
     const flagged = isFlagged(r.events);
@@ -477,7 +478,7 @@ export function frenchDateFile(d: Date): string {
 // Lettre ODR remplie en texte (corps du mail de repli mailto + base du PDF).
 export function fillOdrLetterText(dossiers: OdrDossier[], dateStr: string): string {
   const lignes = dossiers
-    .map((d) => `Adresse : ${d.nom}\nNuméro de contrat : ${d.numeroContrat ?? ""}`)
+    .map((d) => `Adresse : ${d.adresse || d.nom}\nNuméro de contrat : ${d.numeroContrat ?? ""}`)
     .join("\n\n");
   return `Matera
 8 cité Paradis, 75010 Paris
@@ -591,7 +592,7 @@ export async function renderOdrPdf(dossiers: OdrDossier[], dateStr: string): Pro
   );
   gap(10);
   for (const d of dossiers) {
-    draw(`Adresse : ${d.nom}`);
+    draw(`Adresse : ${d.adresse || d.nom}`);
     draw(`Numéro de contrat : ${d.numeroContrat ?? ""}`);
     gap(8);
   }
@@ -639,6 +640,6 @@ export async function renderOdrPdf(dossiers: OdrDossier[], dateStr: string): Pro
 export function odrCsv(dossiers: OdrDossier[]): string {
   const esc = (v: string) => `"${(v || "").replace(/"/g, '""')}"`;
   const header = `${esc("Adresse")};${esc("Numéro de contrat")}`;
-  const lines = dossiers.map((d) => `${esc(d.nom)};${esc(d.numeroContrat ?? "")}`);
+  const lines = dossiers.map((d) => `${esc(d.adresse || d.nom)};${esc(d.numeroContrat ?? "")}`);
   return "﻿" + [header, ...lines].join("\r\n");
 }
