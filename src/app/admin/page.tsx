@@ -45,6 +45,9 @@ export default async function AdminPage() {
   const primeStages = await getPrimeByStage();
   // Nb de dossiers pour lesquels une demande de RS a été envoyée via Front (event rsType=draft_sent).
   const rsDemandes = (await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
+  // Nb de relances de RS envoyées = events draft_sent avec relanceNum > 0 (chaque relance compte).
+  const rsRelances = (await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } }))
+    .filter((e) => Number((e.metadata as { relanceNum?: number } | null)?.relanceNum ?? 0) > 0).length;
   // RS reçus = dossiers réellement passés « RS reçu → devis » (clics du bouton),
   // pas seulement ceux dont le fichier est rangé. Contrats récupérés = fichiers.
   const rsRecus = (await prisma.pipelineEvent.findMany({ where: { description: { contains: "RS reçu" } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
@@ -122,6 +125,7 @@ export default async function AdminPage() {
           lostPipelines={lostPipelines as Parameters<typeof AdminBoard>[0]["lostPipelines"]}
           primeStages={primeStages}
           rsDemandes={rsDemandes}
+          rsRelances={rsRelances}
           rsRecus={rsRecus}
           contratsRecus={contratsRecus}
           devisMailsEnvoyes={devisMailsEnvoyes}

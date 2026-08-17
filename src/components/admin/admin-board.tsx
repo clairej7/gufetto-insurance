@@ -45,6 +45,8 @@ interface AdminBoardProps {
   primeStages: PrimeStageRow[];
   // Nb de demandes de RS envoyées via Front (dossiers distincts).
   rsDemandes: number;
+  // Nb de relances de RS envoyées (events draft_sent avec relanceNum > 0).
+  rsRelances: number;
   rsRecus: number;
   contratsRecus: number;
   // Scopés à l'étape « Demande de devis » (pas de cumul cross-étape) :
@@ -155,7 +157,7 @@ function PartTitle({ n, title, first }: { n: number; title: string; first?: bool
   );
 }
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRecus, contratsRecus, devisMailsEnvoyes, devisAReclamer, odrByInsurer, devisRecus, rsFlow, devisFlow, excludedCount }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRelances, rsRecus, contratsRecus, devisMailsEnvoyes, devisAReclamer, odrByInsurer, devisRecus, rsFlow, devisFlow, excludedCount }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
@@ -683,6 +685,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                       <div>
                         <div style={{ fontSize: 20, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsDemandes}</div>
                         <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>demandes envoyées</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#4E49FC", lineHeight: 1, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{rsRelances}</div>
+                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>relances envoyées</div>
                       </div>
                       <div>
                         <div style={{ fontSize: 16, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsRecus}</div>
