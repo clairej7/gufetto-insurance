@@ -17,7 +17,9 @@ import {
   ChevronDown,
   ChevronUp,
   Check,
+  RotateCcw,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { logRSDraftSent, marquerRSRecu, createAppelCourtierTask } from "@/lib/actions";
@@ -768,6 +770,22 @@ export function RSRequestAction({
   const [localSentTo, setLocalSentTo] = useState<string | null>(null);
   const [suiviOpen, setSuiviOpen] = useState(false);
   const [mail1Open, setMail1Open] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const router = useRouter();
+
+  // Mauvais mail / redirection : archive la conv Front + réinitialise l'envoi RS.
+  // Le dossier reste dans les automatisations ; au nouvel envoi, il repart au détecteur.
+  async function handleResetConv() {
+    if (!window.confirm("Repartir à zéro sur cette demande de RS ?\n\nLa conversation Front actuelle (mauvais mail / redirection) est archivée et l'envoi est réinitialisé. Tu pourras renvoyer un nouveau mail juste après.")) return;
+    setResetting(true);
+    try {
+      const res = await fetch("/api/rs4/reset-conv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
+      setLocalSentTo(null);
+      toast.success("Conversation réinitialisée — tu peux renvoyer un nouveau mail.");
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setResetting(false); }
+  }
 
   const draftEvents = rsEvents.filter((e) => {
     const m = parseMeta(e.metadata);
@@ -804,11 +822,8 @@ export function RSRequestAction({
         />
       ) : (
         <div className="border rounded-xl overflow-hidden">
-          <button
-            onClick={() => setMail1Open((o) => !o)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-[#EFFBF2] hover:bg-[#d8f5e3] text-left"
-          >
-            <div className="flex items-center gap-2">
+          <div className="w-full flex items-center justify-between px-4 py-3 bg-[#EFFBF2]">
+            <button onClick={() => setMail1Open((o) => !o)} className="flex items-center gap-2 text-left hover:opacity-80">
               <CheckCircle2 className="h-4 w-4 text-[#13762C]" />
               <span className="text-sm font-medium text-[#13762C]">Mail 1 envoyé</span>
               {firstDraftEvent && (
@@ -824,9 +839,22 @@ export function RSRequestAction({
                   })}
                 </span>
               )}
+            </button>
+            <div className="flex items-center gap-2">
+              {/* Mauvais mail / redirection → archive la conv Front + réinitialise l'envoi. */}
+              <button
+                onClick={handleResetConv}
+                disabled={resetting}
+                title="Mauvais mail / redirection : archive la conversation Front et repart à zéro (le dossier reste dans les automatisations)"
+                className="text-xs font-semibold px-2.5 py-1 rounded-md border border-[#F3D9A6] bg-[#FDF0D5] text-[#B4690E] hover:bg-[#fbe7bf] disabled:opacity-60 inline-flex items-center gap-1"
+              >
+                {resetting ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />} Mauvais mail, repartir à zéro
+              </button>
+              <button onClick={() => setMail1Open((o) => !o)} className="hover:opacity-80">
+                {mail1Open ? <ChevronUp className="h-4 w-4 text-[#13762C]" /> : <ChevronDown className="h-4 w-4 text-[#13762C]" />}
+              </button>
             </div>
-            {mail1Open ? <ChevronUp className="h-4 w-4 text-[#13762C]" /> : <ChevronDown className="h-4 w-4 text-[#13762C]" />}
-          </button>
+          </div>
           {mail1Open && (
             <div className="p-4 border-t">
               <FirstEmailForm
