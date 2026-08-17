@@ -655,25 +655,73 @@ export async function resetRsConv(pipelineId: string, actorEmail: string): Promi
 // Récupère les conversations RS qui ont été déplacées HORS de l'inbox Gufetto
 // (règle Matera « projet Duomo » → CSM) et les re-classe dans l'inbox Gufetto.
 // Par lots. Ne touche que celles qui ne sont PAS déjà dans Gufetto.
-export async function recoverEscapedConversations(offset: number, limit: number): Promise<{ total: number; processed: number; nextOffset: number; done: boolean; moved: number; errors: number }> {
-  if (!FRONT_TOKEN) return { total: 0, processed: 0, nextOffset: offset, done: true, moved: 0, errors: 0 };
-  // Liste stable des conversationId de toutes nos demandes de RS (envois + relances).
-  const ev = await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { createdAt: true, metadata: true }, orderBy: { createdAt: "asc" } });
-  const seen = new Set<string>(); const cids: string[] = [];
-  for (const e of ev) { const cid = (e.metadata as { conversationId?: string } | null)?.conversationId; if (cid && !seen.has(cid)) { seen.add(cid); cids.push(cid); } }
-  const slice = cids.slice(offset, offset + limit);
-  let moved = 0, errors = 0;
-  for (const cid of slice) {
-    const r = await fetch(`${FRONT_API_URL}/conversations/${cid}/inboxes`, { headers: { Authorization: `Bearer ${FRONT_TOKEN}` } });
-    if (!r.ok) { errors++; continue; }
-    const results = ((await r.json())._results ?? []) as { id: string; name: string }[];
-    const inGufetto = results.some((x) => x.id === GUFETTO_INBOX || /gufetto/i.test(x.name));
-    if (inGufetto) continue;
-    const mv = await fetch(`${FRONT_API_URL}/conversations/${cid}`, { method: "PATCH", headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify({ inbox_id: GUFETTO_INBOX }) });
-    if (mv.ok) moved++; else errors++;
+// Bouton « Récupérer les conversations des inbox hors Gufetto ». Itère les
+// dossiers RS (RS envoyée, en cours) et fait DEUX choses par dossier :
+//  1) NOS fils : les conversations de nos envois RS qui ont dérivé hors Gufetto
+//     (règle Matera → CSM) sont ramenées dans l'inbox Gufetto ;
+//  2) RÉPONSES HORS-FIL : via le building_id, on cherche dans TOUTES les inboxes
+//     une conversation (≠ nos fils, non taguée gufetto) contenant une réponse
+//     externe AVEC un document (le courtier/assureur a renvoyé le RS dans un
+//     nouveau mail). On la rapatrie dans Gufetto + tag, on capture le doc, on
+//     relie la réponse au dossier et on le sort de la boucle de relance (retour
+//     détecteur). Le tag gufetto = marqueur « traité » (dédup des prochains scans).
+export async function recoverEscapedConversations(offset: number, limit: number): Promise<{ total: number; processed: number; nextOffset: number; done: boolean; moved: number; replies: number; errors: number }> {
+  if (!FRONT_TOKEN) return { total: 0, processed: 0, nextOffset: offset, done: true, moved: 0, replies: 0, errors: 0 };
+  const excl = await getExcludedCoproIds();
+  const where = { statut: "rs_en_cours" as const, rs4SentAt: { not: null }, coproId: { notIn: excl }, copro: { archivedAt: null } };
+  const total = await prisma.insurancePipeline.count({ where });
+  const dossiers = await prisma.insurancePipeline.findMany({
+    where, orderBy: { id: "asc" }, skip: offset, take: limit,
+    select: { id: true, coproId: true, rs4SentAt: true, copro: { select: { nom: true, adresse: true, buildingId: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } },
+  });
+  const inGufettoInbox = async (cid: string): Promise<boolean> => {
+    const r = await frontGet(`/conversations/${cid}/inboxes`);
+    const res = ((r?._results as unknown[]) ?? []) as { id: string; name: string }[];
+    return res.some((x) => x.id === GUFETTO_INBOX || /gufetto/i.test(x.name));
+  };
+  const moveToGufetto = (cid: string) => fetch(`${FRONT_API_URL}/conversations/${cid}`, { method: "PATCH", headers: { Authorization: `Bearer ${FRONT_TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify({ inbox_id: GUFETTO_INBOX }) });
+
+  let moved = 0, replies = 0, errors = 0;
+  const now = new Date();
+  for (const p of dossiers) {
+    const ourCids = new Set(p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean) as string[]);
+    // 1) Ramener nos fils qui ont dérivé.
+    for (const cid of ourCids) {
+      try { if (!(await inGufettoInbox(cid))) { const mv = await moveToGufetto(cid); if (mv.ok) moved++; else errors++; } } catch { errors++; }
+    }
+    // 2) Réponses hors-fil (nouveau mail de l'assureur/courtier), par building_id.
+    const bid = p.copro.buildingId;
+    if (!bid) continue;
+    const sentMs = new Date(p.rs4SentAt!).getTime();
+    const sd = await frontGet(`/conversations/search/${encodeURIComponent(`custom_field:"building_id=${bid}"`)}?limit=50`);
+    const convs = (((sd?._results as unknown[]) ?? []) as { id: string; tags?: { id: string }[] }[])
+      .filter((c) => !ourCids.has(c.id) && !(c.tags ?? []).some((t) => t.id === "tag_23n286")).slice(0, 12);
+    for (const c of convs) {
+      const list = await frontGet(`/conversations/${c.id}/messages?limit=20`);
+      const msgs = ((list?._results as unknown[]) ?? []) as { id: string; is_inbound: boolean; created_at: number; blurb?: string; attachments?: { contentType?: string; filename?: string }[]; author?: { email?: string }; recipients?: { role: string; handle: string }[] }[];
+      const inbound = msgs.filter((m) => m.is_inbound && m.created_at * 1000 > sentMs && !isFromMatera(m));
+      const withDoc = inbound.some((m) => realDoc(m.attachments ?? []));
+      if (!inbound.length || !withDoc) continue; // on ne rapatrie QUE les réponses avec document (RS renvoyé hors-fil)
+      // Rapatriement + tag + capture + liaison au dossier + retour détecteur.
+      await moveToGufetto(c.id).catch(() => {});
+      const last = inbound.sort((a, b) => b.created_at - a.created_at)[0];
+      let body = "", hasDoc = withDoc;
+      const full = (await frontGet(`/messages/${last.id}`)) as { content?: string; attachments?: { contentType?: string; filename?: string }[] } | null;
+      body = stripHtml(full?.content || last.blurb || "").slice(0, 500);
+      if (full?.attachments && realDoc(full.attachments)) hasDoc = true;
+      const kind = classifyReply(body, hasDoc, false);
+      await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: kind, rs4ReplyAt: new Date(last.created_at * 1000), rs4ReplySnippet: body.slice(0, 160), rs4ReplyMsgId: last.id, rs4ReplyConvId: c.id, rs4RelanceAt: null } });
+      if (kind === "rs_recu" && hasDoc) {
+        try { await captureReplyDocs({ pipelineId: p.id, coproId: p.coproId!, adresse: p.copro.adresse || p.copro.nom, msgIds: inbound.map((m) => m.id) }); } catch { /* best-effort */ }
+      }
+      await tagConversation(c.id, ["tag_23n286"]).catch(() => {});
+      await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Réponse RS hors-fil récupérée (${kind}) — conv rapatriée dans Gufetto + reliée au dossier`, metadata: { auto: "rs4_recovered_offthread_reply", kind, conversationId: c.id }, createdBy: "auto:recover_inbox" } });
+      replies++;
+      break; // une réponse hors-fil par dossier suffit
+    }
   }
-  const nextOffset = offset + slice.length;
-  return { total: cids.length, processed: slice.length, nextOffset, done: nextOffset >= cids.length, moved, errors };
+  const nextOffset = offset + dossiers.length;
+  return { total, processed: dossiers.length, nextOffset, done: nextOffset >= total, moved, replies, errors };
 }
 
 // Aiguillage depuis le détecteur — chaque action = un clic utilisateur.

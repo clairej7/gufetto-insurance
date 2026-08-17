@@ -111,17 +111,17 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
   async function recoverInbox() {
     setRecovering(true);
     setRecoverProg({ done: 0, total: 0, moved: 0 });
-    let offset = 0, moved = 0;
+    let offset = 0, moved = 0, replies = 0;
     try {
       for (;;) {
-        const res = await fetch("/api/rs4/recover-inbox", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offset, limit: 40 }) });
+        const res = await fetch("/api/rs4/recover-inbox", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offset, limit: 20 }) });
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
         const d = await res.json();
-        offset = d.nextOffset; moved += d.moved;
+        offset = d.nextOffset; moved += d.moved; replies += (d.replies ?? 0);
         setRecoverProg({ done: Math.min(offset, d.total), total: d.total, moved });
         if (d.done) break;
       }
-      toast.success(moved > 0 ? `${moved} conversation(s) récupérée(s) dans l'inbox Gufetto.` : "Aucune conversation hors Gufetto à récupérer.");
+      toast.success((moved + replies) > 0 ? `${moved} fil(s) ramené(s) dans Gufetto · ${replies} réponse(s) hors-fil récupérée(s) et reliée(s).` : "Aucune conversation hors Gufetto à récupérer.");
       router.refresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setRecovering(false); }
   }
