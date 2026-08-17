@@ -429,7 +429,7 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
               <button onClick={() => setShowSuivi((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0 }}>{showSuivi ? "▾ masquer" : `▸ détail des ${suivi.demandesTotal} demandes`}</button>
               {suivi.lastScanAt && <span style={{ fontSize: 11.5, color: "#A2A1AF" }}>dernier scan {new Date(suivi.lastScanAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>}
             </div>
-            <p style={{ fontSize: 11.5, color: "#A2A1AF", margin: "0 0 8px" }}>Prêt pour l&apos;Auto 6 = les 2 devis reçus, <strong>ou</strong> 1 reçu + l&apos;autre en refus assureur ou sans réponse depuis ≥ 10 j.</p>
+            <p style={{ fontSize: 11.5, color: "#A2A1AF", margin: "0 0 8px" }}>Prêt pour l&apos;Auto 6 = <strong>au moins 1 devis reçu</strong> (les autres demandes, encore en attente / refus / sans réponse, n&apos;empêchent plus le passage).</p>
             {scanningR && scanProg && (
               <div style={{ margin: "2px 0 10px", maxWidth: 420 }}>
                 <div style={{ fontSize: 12, color: "#656576", marginBottom: 4 }}>Scan Front… {scanProg.done}{scanProg.total ? ` / ${scanProg.total}` : ""}</div>
