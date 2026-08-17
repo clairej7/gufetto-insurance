@@ -428,7 +428,7 @@ const DEVIS_ADDRESSES = ["achille.leboeuf@axa.fr", "souscription@mila.fr"];
 
 // Lien profond vers une conversation Front (ouvre l'app Front sur la conv).
 const FRONT_CONV_URL = (cid: string | null) => (cid ? `https://app.frontapp.com/open/${cid}` : null);
-const RS4_SELECT = { id: true, rs4SentAt: true, rs4ReplyKind: true, rs4ReplyAt: true, rs4ReplySnippet: true, rs4ReplyConvId: true, rs4ReplyScanAt: true, rs4CommentAt: true, rs4CommentText: true, rs4CommentBy: true, copro: { select: { nom: true, adresse: true, buildingId: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true, numeroContrat: true, assureurActuel: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } } as const;
+const RS4_SELECT = { id: true, rs4SentAt: true, rs4ReplyKind: true, rs4ReplyAt: true, rs4ReplySnippet: true, rs4ReplyConvId: true, rs4ReplyScanAt: true, rs4CommentAt: true, rs4CommentText: true, rs4CommentBy: true, copro: { select: { nom: true, adresse: true, buildingId: true, courtierActuel: true, contactCourtierEmail: true, gestionnaireEmail: true, numeroContrat: true, assureurActuel: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true, createdAt: true } } } as const;
 
 // UI Volet 4 = boucle de relances : dossiers TRIÉS depuis le détecteur (rs4RelanceAt
 // posé), pas encore passés en « RS en cours de récupération » (rs4EnCoursAt null).
@@ -456,14 +456,32 @@ function relanceCountOf(events: { metadata: unknown }[]): number {
   return events.filter((e) => { const m = e.metadata as { relanceNum?: number } | null; return !!m && typeof m.relanceNum === "number" && m.relanceNum > 0; }).length;
 }
 
+// Dernier envoi INITIAL (draft_sent NON-relance : relanceNum absent ou 0) = la
+// « boucle de mail » courante. Après un « repartir à zéro » + renvoi avec le bon
+// mail, c'est ce NOUVEL envoi (nouvelle conv) qui fait foi pour le timing et la
+// cible de relance — jamais la conv de base. null si aucun envoi initial.
+function latestInitialSend(events: { metadata: unknown; createdAt: Date }[]): { date: Date; cid: string | null } | null {
+  const inits = events
+    .filter((e) => { const m = e.metadata as { relanceNum?: number } | null; return !(m && typeof m.relanceNum === "number" && m.relanceNum > 0); })
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  if (!inits.length) return null;
+  const top = inits[0];
+  return { date: top.createdAt, cid: (top.metadata as { conversationId?: string } | null)?.conversationId ?? null };
+}
+
 type Rs4Pipeline = Awaited<ReturnType<typeof volet3Pipelines>>[number];
 function toVolet3Row(p: Rs4Pipeline, nowMs: number): Volet3Row {
-  const jours = Math.floor((nowMs - new Date(p.rs4SentAt!).getTime()) / 86400000);
+  // Timing = depuis la dernière action sortante = MAX(rs4SentAt, dernier envoi
+  // initial). Couvre : renvoi avec le bon mail (nouvelle boucle → nouvelle date) ET
+  // « on a répondu en dernier » (rs4SentAt avancé pour patienter). Jamais la conv de base.
+  const base = latestInitialSend(p.events);
+  const baseMs = Math.max(base ? base.date.getTime() : 0, p.rs4SentAt ? new Date(p.rs4SentAt).getTime() : 0);
+  const jours = Math.floor((nowMs - baseMs) / 86400000);
   const recips = [p.copro.contactCourtierEmail ?? "", ...p.events.map((e) => (e.metadata as { to?: string } | null)?.to ?? "")].join(" ").toLowerCase();
   const devisMixup = DEVIS_ADDRESSES.some((a) => recips.includes(a));
-  // Lien Front : conv de réponse si détectée, sinon fallback sur la conv d'ENVOI
-  // (draft_sent) → chaque dossier a toujours un lien, même « sans réponse ».
-  const sentCid = p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop() ?? null;
+  // Lien Front : conv de réponse si détectée, sinon la conv du dernier envoi initial
+  // → chaque dossier a toujours un lien, même « sans réponse ».
+  const sentCid = base?.cid ?? p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop() ?? null;
   return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events), replyKind: p.rs4ReplyKind, replyAt: p.rs4ReplyAt ? p.rs4ReplyAt.toISOString() : null, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId ?? sentCid), commentText: p.rs4CommentText, commentBy: p.rs4CommentBy, commentAt: p.rs4CommentAt ? p.rs4CommentAt.toISOString() : null, devisMixup };
 }
 function replyCountsOf(ps: Rs4Pipeline[]): Record<string, number> {
@@ -793,7 +811,11 @@ export async function sendRelance(actorEmail: string, relanceNum: number, nowMs:
   // (séquence 1→2→3) et aucune réponse réelle connue.
   const isRealReply = (k: string | null) => !!k && k !== "sans_reponse" && k !== "non_scanne";
   const eligible = ps.filter((p) => {
-    const jours = Math.floor((nowMs - new Date(p.rs4SentAt!).getTime()) / 86400000);
+    // Timing = MAX(rs4SentAt, dernier envoi initial) → relançable à J+seuil du renvoi
+    // (nouvelle boucle de mail) ou de notre dernière réponse, jamais de la conv de base.
+    const base = latestInitialSend(p.events);
+    const baseMs = Math.max(base ? base.date.getTime() : 0, new Date(p.rs4SentAt!).getTime());
+    const jours = Math.floor((nowMs - baseMs) / 86400000);
     return jours >= stage.day && relanceCountOf(p.events) === relanceNum - 1 && !isRealReply(p.rs4ReplyKind);
   });
   const slice = typeof limit === "number" ? eligible.slice(0, limit) : eligible;
@@ -802,10 +824,12 @@ export async function sendRelance(actorEmail: string, relanceNum: number, nowMs:
   const errors: string[] = [];
   for (const p of slice) {
     const c = p.copro;
-    const jours = Math.floor((nowMs - new Date(p.rs4SentAt!).getTime()) / 86400000);
-    // Conversation d'origine (relance 0) = le fil où l'on RESTE.
-    const initEvent = p.events.find((e) => Number((e.metadata as { relanceNum?: number } | null)?.relanceNum ?? -1) === 0);
-    const cid = ((initEvent?.metadata as { conversationId?: string } | null)?.conversationId)
+    // Base = dernier envoi initial (nouvelle boucle de mail) → on RELANCE dans CE fil
+    // (le bon mail), pas la conv de base. Compteur de jours = MAX(rs4SentAt, ce renvoi).
+    const base = latestInitialSend(p.events);
+    const baseMs = Math.max(base ? base.date.getTime() : 0, new Date(p.rs4SentAt!).getTime());
+    const jours = Math.floor((nowMs - baseMs) / 86400000);
+    const cid = base?.cid
       ?? p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop() ?? null;
     if (!cid) { failed++; errors.push(`${c.nom} : pas de conversation d'origine — non relancé`); continue; }
 
@@ -813,7 +837,8 @@ export async function sendRelance(actorEmail: string, relanceNum: number, nowMs:
     // on NE RELANCE PAS. On regarde le fil d'origine ET tous les autres fils
     // « gufetto » du MÊME IMMEUBLE (building_id) — car un courtier répond parfois
     // dans un mail séparé (le RS déjà envoyé ailleurs). → marque + retour détecteur.
-    const sentMs = new Date(p.rs4SentAt!).getTime();
+    // On compte les réponses postérieures au DERNIER envoi initial (renvoi inclus).
+    const sentMs = baseMs;
     type FMsg = { id: string; is_inbound: boolean; created_at: number; blurb?: string; attachments?: { contentType?: string; filename?: string }[]; author?: { email?: string }; recipients?: { role: string; handle: string }[] };
     const convToCheck = new Set<string>([cid]);
     if (p.copro.buildingId) {
