@@ -28,6 +28,20 @@ import {
 } from "@/lib/actions";
 import { resolvePrimeReference, parseEuroAmount } from "@/lib/devis-prime";
 
+// Reconstruit un File à partir d'un PDF déjà stocké (Supabase), pour pré-remplir
+// les zones d'upload de la comparaison avec les docs déjà captés de la copro.
+async function fetchStoredPdf(path: string, name: string): Promise<File | null> {
+  try {
+    const res = await fetch(`/api/storage/download?path=${encodeURIComponent(path)}`);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const fileName = name.toLowerCase().endsWith(".pdf") ? name : `${name}.pdf`;
+    return new File([blob], fileName, { type: "application/pdf" });
+  } catch {
+    return null;
+  }
+}
+
 async function uploadPdf(file: File, pipelineId: string): Promise<string | null> {
   try {
     const path = `devis/${pipelineId}/${Date.now()}-${file.name}`;
@@ -97,6 +111,10 @@ interface DevisRecusActionProps {
   pipelineId: string;
   devisRecus: DevisRecu[];
   contratActuelData: string | null;
+  // Docs déjà captés pour la copro (contrat MRI + devis) → proposés automatiquement
+  // dans les zones d'upload de la comparaison, pour éviter un ré-upload manuel.
+  proposedContrat?: { path: string; name: string } | null;
+  proposedDevis?: { path: string; name: string }[];
   copro: {
     nom: string;
     adresse: string | null;
@@ -803,6 +821,8 @@ export function DevisRecusAction({
   pipelineId,
   devisRecus,
   contratActuelData,
+  proposedContrat = null,
+  proposedDevis = [],
   copro,
 }: DevisRecusActionProps) {
   type Phase = "upload" | "comparing" | "results";
@@ -814,6 +834,45 @@ export function DevisRecusAction({
   const [contratFile, setContratFile] = useState<File | null>(null);
   const [devis1File, setDevis1File] = useState<File | null>(null);
   const [devis2File, setDevis2File] = useState<File | null>(null);
+
+  // Auto-proposition des docs déjà captés : on récupère les PDF stockés (contrat MRI
+  // + devis) et on pré-remplit les zones, une seule fois, tant que l'utilisateur n'a
+  // rien choisi lui-même. Il peut toujours retirer / remplacer un doc.
+  const [loadingProposed, setLoadingProposed] = useState(false);
+  const [autoProposedDone, setAutoProposedDone] = useState(false);
+  const didProposeRef = useRef(false);
+  const hasProposals = Boolean(proposedContrat) || proposedDevis.length > 0;
+
+  // Récupère les PDF déjà stockés et pré-remplit les zones vides (sans écraser un
+  // choix manuel de l'utilisateur — d'où le `cur ?? f`).
+  async function applyProposedDocs() {
+    if (!hasProposals) return;
+    setAutoProposedDone(false);
+    setLoadingProposed(true);
+    if (proposedContrat) {
+      const f = await fetchStoredPdf(proposedContrat.path, proposedContrat.name);
+      if (f) setContratFile((cur) => cur ?? f);
+    }
+    if (proposedDevis[0]) {
+      const f = await fetchStoredPdf(proposedDevis[0].path, proposedDevis[0].name);
+      if (f) setDevis1File((cur) => cur ?? f);
+    }
+    if (proposedDevis[1]) {
+      const f = await fetchStoredPdf(proposedDevis[1].path, proposedDevis[1].name);
+      if (f) setDevis2File((cur) => cur ?? f);
+    }
+    setLoadingProposed(false);
+    setAutoProposedDone(true);
+  }
+
+  useEffect(() => {
+    if (didProposeRef.current) return;
+    if (hasExistingData) return; // une analyse existe déjà → on démarre sur les résultats
+    if (!hasProposals) return;
+    didProposeRef.current = true;
+    void applyProposedDocs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Freshly extracted data (after comparison, before DB sync)
   const [freshContrat, setFreshContrat] = useState<ExtractedData | null>(null);
@@ -951,6 +1010,25 @@ export function DevisRecusAction({
           </p>
         </div>
 
+        {hasProposals && (loadingProposed || autoProposedDone) && (
+          <div
+            className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm"
+            style={{ background: "#F0EFFF", border: "1px solid #D9D9F5", color: "#4E49FC" }}
+          >
+            {loadingProposed ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Chargement des documents déjà présents pour cette copro…
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-4 w-4" />
+                Documents déjà présents proposés automatiquement — vérifiez puis lancez la comparaison.
+              </>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-4">
           <UploadZone
             label="Contrat actuel"
@@ -1047,6 +1125,7 @@ export function DevisRecusAction({
             setDevis1File(null);
             setDevis2File(null);
             setPhase("upload");
+            void applyProposedDocs(); // re-proposer les docs déjà captés
           }}
           className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors hover:bg-[#F7F7F8]"
           style={{ borderColor: "#E8E8EC", color: "#656576" }}
