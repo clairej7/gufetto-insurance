@@ -461,7 +461,10 @@ function toVolet3Row(p: Rs4Pipeline, nowMs: number): Volet3Row {
   const jours = Math.floor((nowMs - new Date(p.rs4SentAt!).getTime()) / 86400000);
   const recips = [p.copro.contactCourtierEmail ?? "", ...p.events.map((e) => (e.metadata as { to?: string } | null)?.to ?? "")].join(" ").toLowerCase();
   const devisMixup = DEVIS_ADDRESSES.some((a) => recips.includes(a));
-  return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events), replyKind: p.rs4ReplyKind, replyAt: p.rs4ReplyAt ? p.rs4ReplyAt.toISOString() : null, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId), commentText: p.rs4CommentText, commentBy: p.rs4CommentBy, commentAt: p.rs4CommentAt ? p.rs4CommentAt.toISOString() : null, devisMixup };
+  // Lien Front : conv de réponse si détectée, sinon fallback sur la conv d'ENVOI
+  // (draft_sent) → chaque dossier a toujours un lien, même « sans réponse ».
+  const sentCid = p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop() ?? null;
+  return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events), replyKind: p.rs4ReplyKind, replyAt: p.rs4ReplyAt ? p.rs4ReplyAt.toISOString() : null, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId ?? sentCid), commentText: p.rs4CommentText, commentBy: p.rs4CommentBy, commentAt: p.rs4CommentAt ? p.rs4CommentAt.toISOString() : null, devisMixup };
 }
 function replyCountsOf(ps: Rs4Pipeline[]): Record<string, number> {
   const c: Record<string, number> = {};
