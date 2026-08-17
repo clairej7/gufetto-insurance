@@ -593,6 +593,19 @@ export async function scanReplies(offset: number, limit: number): Promise<{ tota
       if (full?.attachments && realDoc(full.attachments)) hasDoc = true;
     }
     const kind = classifyReply(body, hasDoc, bounce && !inbound.length);
+    // Cas « on a répondu en DERNIER » : le dernier message de l'échange est un
+    // mail SORTANT Matera, postérieur à leur dernier retour (ex. réponse d'attente
+    // « on revient vers vous » à laquelle on a répondu). La balle est dans leur
+    // camp → le dossier redevient RELANÇABLE : verdict « sans réponse » et le
+    // compteur repart de NOTRE dernier mail (rs4SentAt = date de notre réponse).
+    // Sauf si c'est déjà un « RS reçu » (là on garde, le doc prime).
+    const lastMsg = [...results].sort((a, b) => b.created_at - a.created_at)[0];
+    const weRepliedLast = kind !== "rs_recu" && !!last && !!lastMsg && !lastMsg.is_inbound && !lastMsg.error_type && lastMsg.created_at > last.created_at;
+    if (weRepliedLast) {
+      await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: "sans_reponse", rs4ReplyAt: null, rs4ReplySnippet: "En attente de leur réponse (dernier message : nous)", rs4ReplyMsgId: null, rs4ReplyConvId: cid, rs4SentAt: new Date(lastMsg.created_at * 1000), ...(p.rs4RelanceAt ? { rs4RelanceAt: null } : {}) } });
+      counts["sans_reponse"] = (counts["sans_reponse"] ?? 0) + 1;
+      continue;
+    }
     // Réponse détectée sur un dossier en boucle de relances (V4) → retour auto au
     // détecteur (V3) pour re-tri : on efface rs4RelanceAt.
     const backToDetector = !!p.rs4RelanceAt;
