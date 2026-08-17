@@ -629,6 +629,22 @@ async function archiveConversationsFor(pipelineId: string): Promise<number> {
   return n;
 }
 
+// « Supprimer le dossier » (Volet 5) : sort la copro de TOUTES les automatisations
+// pour toujours (AutomationExclusion) + archive ses conversations Front. Le dossier
+// reste en base (pas de suppression dure) mais n'apparaîtra plus dans aucun volet.
+export async function deleteDossierFromAuto(pipelineId: string, actorEmail: string): Promise<{ ok: boolean; archived: number }> {
+  const p = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, select: { coproId: true, copro: { select: { nom: true } } } });
+  if (!p) return { ok: false, archived: 0 };
+  await prisma.automationExclusion.upsert({
+    where: { kind_value: { kind: "copro", value: p.coproId } },
+    create: { kind: "copro", value: p.coproId, label: p.copro?.nom ?? p.coproId, createdBy: actorEmail },
+    update: { label: p.copro?.nom ?? p.coproId },
+  });
+  const archived = await archiveConversationsFor(pipelineId);
+  await prisma.pipelineEvent.create({ data: { pipelineId, type: "action_manuelle", description: "Dossier supprimé des automatisations (exclu définitivement + conversation archivée)", metadata: { auto: "rs4_delete_dossier" }, createdBy: actorEmail } });
+  return { ok: true, archived };
+}
+
 // Récupère les conversations RS qui ont été déplacées HORS de l'inbox Gufetto
 // (règle Matera « projet Duomo » → CSM) et les re-classe dans l'inbox Gufetto.
 // Par lots. Ne touche que celles qui ne sont PAS déjà dans Gufetto.
