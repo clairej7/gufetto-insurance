@@ -847,6 +847,13 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                 gestionnaireEmail: pipeline.copro.gestionnaireEmail,
                 gestionnaireNom: pipeline.copro.gestionnaireNom,
               }}
+              proposedContrat={(() => {
+                const d = documents.find((x) => x.kind === "contrat_mri");
+                return d ? { path: d.storagePath, name: d.fileName } : null;
+              })()}
+              proposedDevis={documents
+                .filter((x) => x.kind === "devis_axa" || x.kind === "devis_mila")
+                .map((d) => ({ path: d.storagePath, name: d.fileName }))}
             />
           </Card>
           <Card className="p-4 space-y-3">
