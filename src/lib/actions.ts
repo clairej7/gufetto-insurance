@@ -304,6 +304,14 @@ export async function logRSDraftSent(
     },
   });
 
+  // Envoi initial (relance 0) : pose rs4SentAt s'il est vide → le dossier entre
+  // dans le détecteur de réponses (Auto 4 V3). Uniquement si null (n'écrase pas
+  // une date d'envoi existante). Permet au flux « repartir à zéro » de repartir
+  // au détecteur dès le nouveau mail envoyé.
+  if (relanceNum === 0) {
+    await prisma.insurancePipeline.updateMany({ where: { id: pipelineId, rs4SentAt: null }, data: { rs4SentAt: new Date() } });
+  }
+
   const pipeline = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, include: { copro: true } });
   if (pipeline) {
     const assignee = pipeline.copro.gestionnaireEmail || session.user.email!;

@@ -328,13 +328,13 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); }
   }
 
-  async function deleteDossier(pipelineId: string, nom: string) {
-    if (!window.confirm(`Supprimer le dossier « ${nom} » ?\n\nLa copro sort définitivement de TOUTES les automatisations et sa conversation Front est archivée. (Réversible via l'onglet Exclusions.)`)) return;
+  async function resetConv(pipelineId: string, nom: string) {
+    if (!window.confirm(`Repartir à zéro sur « ${nom} » ?\n\nLa conversation Front actuelle (mauvais mail / redirection) est archivée et l'envoi est réinitialisé. Le dossier reste dans les automatisations : au prochain mail envoyé, il repart au détecteur.`)) return;
     setRouting(pipelineId);
     try {
-      const res = await fetch("/api/rs4/delete-dossier", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId }) });
+      const res = await fetch("/api/rs4/reset-conv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId }) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
-      toast.success("Dossier supprimé des automatisations (exclu + conversation archivée).");
+      toast.success("Conversation réinitialisée — prête pour un nouvel envoi.");
       router.refresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setRouting(null); }
   }
@@ -908,7 +908,7 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
                                 <div style={{ display: "inline-flex", gap: 5, flexWrap: "wrap", justifyContent: "flex-end" }}>
                                   <button onClick={() => route("/api/rs4/to-detector", r.pipelineId, "Dossier renvoyé au détecteur de réponses (V3).")} disabled={routing !== null} title="Renvoyer au détecteur pour re-tri" style={btn("#4E49FC", "#EEF0FF", "#D9D9F5")}><Radar size={11} /> Renvoyer au détecteur</button>
                                   <button onClick={() => rsRecu(r.pipelineId)} disabled={routing !== null} style={btn("#13762C", "#EAF7EE", "#B7E4C4")}><Check size={11} /> RS reçu</button>
-                                  <button onClick={() => deleteDossier(r.pipelineId, r.adresse || r.nom)} disabled={routing !== null} title="Sort la copro de TOUTES les automatisations (définitif) + archive la conversation Front" style={btn("#CA1E12", "#FFF5F5", "#F3C6C2")}><Trash2 size={11} /> Supprimer le dossier</button>
+                                  <button onClick={() => resetConv(r.pipelineId, r.adresse || r.nom)} disabled={routing !== null} title="Mauvais mail / redirection : archive la conv Front et réinitialise l'envoi. Le dossier reste dans les automatisations." style={btn("#B4690E", "#FDF0D5", "#F3D9A6")}><Trash2 size={11} /> Mauvais mail, repartir à zéro</button>
                                 </div>
                               )}
                             </td>
