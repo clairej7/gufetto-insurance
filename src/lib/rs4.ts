@@ -895,13 +895,15 @@ export async function getRs4Volet4Data(nowMs: number): Promise<Volet4Data> {
   const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({
     where: { statut: "rs_en_cours", rs4EnCoursAt: { not: null }, coproId: { notIn: excl }, copro: { archivedAt: null } },
-    select: { id: true, rs4SentAt: true, rs4EnCoursAt: true, rs4ReplyKind: true, rs4ReplySnippet: true, rs4ReplyConvId: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true } } },
+    select: { id: true, rs4SentAt: true, rs4EnCoursAt: true, rs4ReplyKind: true, rs4ReplySnippet: true, rs4ReplyConvId: true, copro: { select: { nom: true, adresse: true, courtierActuel: true, contactCourtierEmail: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true, createdAt: true } } },
     orderBy: { rs4EnCoursAt: "desc" },
   });
   const rows: Volet4Row[] = ps.map((p) => ({
     pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail,
     joursDepuisEnvoi: p.rs4SentAt ? Math.floor((nowMs - new Date(p.rs4SentAt).getTime()) / 86400000) : 0,
-    replyKind: p.rs4ReplyKind, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId),
+    // Lien Front : conv de réponse si détectée, sinon fallback sur la conv du dernier
+    // envoi initial → chaque dossier a toujours un lien cliquable.
+    replyKind: p.rs4ReplyKind, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId ?? latestInitialSend(p.events)?.cid ?? null),
   }));
   return { total: rows.length, rows };
 }
