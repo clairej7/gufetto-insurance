@@ -72,17 +72,26 @@ export type Devis6TableRow = {
   pipelineId: string; nom: string; adresse: string | null;
   gestionnaire: string | null; gestionnaireEmail: string | null;
   comparaisonFaite: boolean;
-  primeConnue: number | null; // primeActuelle en base (affichage immédiat, avant récup Front)
+  // Prime du contrat (extraite du contrat MRI, sinon primeActuelle). Sert de base
+  // AVEC la dernière prime payée (récupérée côté client) via resolvePrimeReference
+  // — MÊME règle que la fiche dossier (garde le + haut dans la bande de cohérence).
+  contratPrime: number | null;
   devis1: Devis6Devis | null; devis2: Devis6Devis | null;
 };
 export type Devis6Table = { total: number; faites: number; rows: Devis6TableRow[]; gestionnaires: string[] };
+
+// primeTTC extraite du contrat comparé (contratActuelData JSON), si présente.
+function parseContratPrime(raw: string | null): number | null {
+  if (!raw) return null;
+  try { const d = JSON.parse(raw) as { primeTTC?: unknown }; return typeof d.primeTTC === "number" ? d.primeTTC : null; } catch { return null; }
+}
 
 export async function getDevis6TableData(): Promise<Devis6Table> {
   const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({
     where: { statut: "devis_recus", coproId: { notIn: excl }, copro: { archivedAt: null } },
     select: {
-      id: true,
+      id: true, contratActuelData: true,
       copro: { select: { nom: true, adresse: true, primeActuelle: true, gestionnaireNom: true, gestionnaireEmail: true } },
       devisRecus: { orderBy: { createdAt: "asc" }, select: { assureur: true, primeTTC: true, data: true } },
     },
@@ -98,7 +107,7 @@ export async function getDevis6TableData(): Promise<Devis6Table> {
       gestionnaireEmail: p.copro.gestionnaireEmail,
       // Comparaison faite = une extraction Claude structurée existe (≥ 1 devis avec data).
       comparaisonFaite: dv.some((d) => !!(d.data && d.data.trim())),
-      primeConnue: p.copro.primeActuelle,
+      contratPrime: parseContratPrime(p.contratActuelData) ?? p.copro.primeActuelle,
       devis1: toDevis(dv[0]), devis2: toDevis(dv[1]),
     };
   });

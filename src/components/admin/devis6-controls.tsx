@@ -9,12 +9,13 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Loader2, RefreshCw, Sparkles, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { resolvePrimeReference } from "@/lib/devis-prime";
 
 type Devis = { assureur: string; prime: number | null };
 type Row = {
   pipelineId: string; nom: string; adresse: string | null;
   gestionnaire: string | null; gestionnaireEmail: string | null;
-  comparaisonFaite: boolean; primeConnue: number | null;
+  comparaisonFaite: boolean; contratPrime: number | null;
   devis1: Devis | null; devis2: Devis | null;
 };
 type Table = { total: number; faites: number; rows: Row[]; gestionnaires: string[] };
@@ -85,13 +86,24 @@ export function Devis6Controls({ table }: { table: Table }) {
     .filter((r) => !gest || r.gestionnaire === gest)
     .filter((r) => compFilter === "tous" || (compFilter === "oui" ? r.comparaisonFaite : !r.comparaisonFaite));
 
+  // Prix actuel = MÊME règle que la fiche : resolvePrimeReference(contrat, dernière
+  // prime payée) → garde le + haut dans la bande de cohérence, bloque les écarts
+  // anormaux. Tag : C = prime du contrat, DP = dernière prime payée.
   const prixCell = (r: Row) => {
     const st = prix[r.pipelineId];
-    if (st?.loading) return <Loader2 size={13} className="animate-spin" style={{ color: "#A2A1AF" }} />;
-    if (st?.done && st.montant != null) return <strong style={{ color: "#26262C" }}>{fmtE(st.montant)}</strong>;
-    // Pas de dernière prime trouvée → repli sur la prime connue en base.
-    if (r.primeConnue != null) return <span title="Prime connue en base (dernière prime payée non retrouvée dans Front)" style={{ color: "#8A8A99" }}>{fmtE(r.primeConnue)}<span style={{ fontSize: 10, color: "#B4690E" }}> ?</span></span>;
-    return <span style={{ color: "#A2A1AF" }}>—</span>;
+    const last = st?.done ? st.montant : null;
+    const res = resolvePrimeReference(r.contratPrime, last);
+    if (res.flag === "bloque")
+      return <span title={`Écart anormal (contrat ${fmtE(res.contrat)} vs dernière prime payée ${fmtE(res.primePayee)}) — à vérifier sur la fiche`} style={{ color: "#CA1E12", fontWeight: 700 }}>{fmtE(res.contrat)} ⚠</span>;
+    if (res.value == null)
+      return st?.loading ? <Loader2 size={13} className="animate-spin" style={{ color: "#A2A1AF" }} /> : <span style={{ color: "#A2A1AF" }}>—</span>;
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, justifyContent: "flex-end" }}>
+        {st?.loading && <Loader2 size={11} className="animate-spin" style={{ color: "#C9C8D3" }} />}
+        <strong style={{ color: "#26262C" }}>{fmtE(res.value)}</strong>
+        <sup title={res.source === "prime" ? "dernière prime payée" : "prime du contrat"} style={{ fontSize: 9, color: "#A2A1AF", fontWeight: 700 }}>{res.source === "prime" ? "DP" : "C"}</sup>
+      </span>
+    );
   };
 
   return (
@@ -162,7 +174,7 @@ export function Devis6Controls({ table }: { table: Table }) {
         </table>
       </div>
       <p style={{ fontSize: 11, color: "#A2A1AF", margin: "8px 2px 0" }}>
-        « Prix actuel » = dernière prime payée récupérée dans le mail de demande de devis (Front). « Générer » rejoue la comparaison Claude des fiches sur les devis stockés ; le détail reste consultable sur la fiche du dossier.
+        « Prix actuel » = même règle que la fiche : on garde le plus haut entre la prime du contrat (C) et la dernière prime payée (DP, mail de demande de devis), dans une bande de cohérence (écart anormal → ⚠ à vérifier sur la fiche). « Générer » rejoue la comparaison Claude des fiches sur les devis stockés ; le détail reste consultable sur la fiche.
       </p>
     </div>
   );
