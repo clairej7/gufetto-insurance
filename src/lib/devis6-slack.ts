@@ -84,8 +84,11 @@ export async function buildGestionnaireMessage(pipelineId: string): Promise<{ ok
 
 // Poste le message dans le canal via le webhook Slack (variable `text`).
 export async function postToDevisChannel(text: string): Promise<{ ok: boolean; error?: string }> {
-  const url = process.env.SLACK_DEVIS_WEBHOOK_URL;
-  if (!url) return { ok: false, error: "SLACK_DEVIS_WEBHOOK_URL non configuré côté serveur" };
+  const raw = process.env.SLACK_DEVIS_WEBHOOK_URL;
+  if (!raw) return { ok: false, error: "SLACK_DEVIS_WEBHOOK_URL non configuré côté serveur" };
+  // Tolérant : si on a collé toute la commande curl d'exemple de Slack au lieu de
+  // la seule URL, on récupère l'URL du webhook dedans.
+  const url = (raw.match(/https?:\/\/hooks\.slack\.com\/[^\s'"]+/) ?? [raw.trim()])[0];
   try {
     const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
     if (!res.ok) return { ok: false, error: `Slack a répondu ${res.status}` };
