@@ -306,8 +306,8 @@ Retourne UNIQUEMENT un objet JSON valide, sans markdown ni backticks, avec exact
       },
     ],
   });
-  const content = response.content[0];
-  if (content.type !== "text") throw new Error("Réponse Claude invalide");
+  const content = response.content.find((b) => b.type === "text");
+  if (!content || content.type !== "text") throw new Error("Réponse Claude invalide");
   const raw = content.text.trim().replace(/^```json?\s*/i, "").replace(/\s*```$/i, "");
   return JSON.parse(raw);
 }

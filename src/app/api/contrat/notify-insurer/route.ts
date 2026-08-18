@@ -46,8 +46,9 @@ INSTRUCTIONS :
       messages: [{ role: "user", content: prompt }],
     });
 
-    const content = response.content[0];
-    if (content.type !== "text") {
+    // sonnet-5 : raisonnement adaptatif par défaut → 1er bloc parfois "thinking".
+    const content = response.content.find((b) => b.type === "text");
+    if (!content || content.type !== "text") {
       return NextResponse.json({ error: "Réponse Claude invalide" }, { status: 500 });
     }
 

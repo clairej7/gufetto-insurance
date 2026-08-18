@@ -85,8 +85,8 @@ Réponds UNIQUEMENT un objet JSON sans markdown, avec seulement les clés trouv�
         ],
       }],
     });
-    const c = resp.content[0];
-    if (c.type !== "text") return {};
+    const c = resp.content.find((b) => b.type === "text");
+    if (!c || c.type !== "text") return {};
     const raw = c.text.trim().replace(/^```json?\s*/i, "").replace(/\s*```$/i, "");
     return JSON.parse(raw) as Extracted;
   } catch { return {}; }

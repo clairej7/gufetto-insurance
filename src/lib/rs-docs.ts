@@ -58,8 +58,8 @@ export async function classifyInsuranceDoc(pdf: Buffer, filename: string): Promi
         ],
       }],
     });
-    const c = resp.content[0];
-    if (c.type !== "text") return byName();
+    const c = resp.content.find((b) => b.type === "text");
+    if (!c || c.type !== "text") return byName();
     const raw = c.text.trim().replace(/^```json?\s*/i, "").replace(/\s*```$/i, "");
     const k = (JSON.parse(raw) as { kind?: string }).kind;
     return k === "rs" || k === "contrat_mri" || k === "autre" ? k : byName();
