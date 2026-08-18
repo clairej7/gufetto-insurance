@@ -68,10 +68,13 @@ export async function getDevis6PretsCount(): Promise<number> {
 // hors exclus/archivés. Le « Prix actuel » (dernière prime payée) est récupéré
 // côté client via /api/devis/prime-payee (source = mail de demande de devis).
 export type Devis6Devis = { assureur: string; prime: number | null };
+// Statut de la réponse du gestionnaire (prévenu de la proposition). Alimenté plus
+// tard par un détecteur de réponses ; défaut « attente » tant qu'aucune réponse.
+export type Devis6Statut = "attente" | "valide" | "refus" | "autre";
 export type Devis6TableRow = {
   pipelineId: string; nom: string; adresse: string | null;
   gestionnaire: string | null; gestionnaireEmail: string | null;
-  comparaisonFaite: boolean;
+  comparaisonFaite: boolean; statut: Devis6Statut;
   // Prime du contrat (extraite du contrat MRI, sinon primeActuelle). Sert de base
   // AVEC la dernière prime payée (récupérée côté client) via resolvePrimeReference
   // — MÊME règle que la fiche dossier (garde le + haut dans la bande de cohérence).
@@ -107,6 +110,7 @@ export async function getDevis6TableData(): Promise<Devis6Table> {
       gestionnaireEmail: p.copro.gestionnaireEmail,
       // Comparaison faite = une extraction Claude structurée existe (≥ 1 devis avec data).
       comparaisonFaite: dv.some((d) => !!(d.data && d.data.trim())),
+      statut: "attente" as const, // TODO: alimenté par le futur détecteur de réponses gestionnaire
       contratPrime: parseContratPrime(p.contratActuelData) ?? p.copro.primeActuelle,
       devis1: toDevis(dv[0]), devis2: toDevis(dv[1]),
     };

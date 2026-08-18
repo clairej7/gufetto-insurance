@@ -12,13 +12,22 @@ import { toast } from "sonner";
 import { resolvePrimeReference } from "@/lib/devis-prime";
 
 type Devis = { assureur: string; prime: number | null };
+type Statut = "attente" | "valide" | "refus" | "autre";
 type Row = {
   pipelineId: string; nom: string; adresse: string | null;
   gestionnaire: string | null; gestionnaireEmail: string | null;
-  comparaisonFaite: boolean; contratPrime: number | null;
+  comparaisonFaite: boolean; statut: Statut; contratPrime: number | null;
   devis1: Devis | null; devis2: Devis | null;
 };
 type Table = { total: number; faites: number; rows: Row[]; gestionnaires: string[] };
+
+// Statut de réponse du gestionnaire (alimenté plus tard par un détecteur).
+const STATUT: Record<Statut, { label: string; color: string; bg: string; border: string }> = {
+  attente: { label: "Attente", color: "#656576", bg: "#F1F1F4", border: "#E0E0E6" },
+  valide: { label: "Validé !", color: "#13762C", bg: "#EAF7EE", border: "#B7E4C4" },
+  refus: { label: "Refus", color: "#CA1E12", bg: "#FDECEA", border: "#F4A9A0" },
+  autre: { label: "Autre", color: "#B4690E", bg: "#FDF0D5", border: "#F3D9A6" },
+};
 
 const fmtE = (n: number | null | undefined) => (n == null ? "—" : `${Math.round(n).toLocaleString("fr-FR")} €`);
 const th: React.CSSProperties = { padding: "8px 10px", fontWeight: 600, fontSize: 11, color: "#A2A1AF", position: "sticky", top: 0, background: "#FAFAFC", whiteSpace: "nowrap", textAlign: "left", borderBottom: "1px solid #E8E8EC" };
@@ -139,7 +148,7 @@ export function Devis6Controls({ table }: { table: Table }) {
               <th style={{ ...th, textAlign: "center" }}>Générer</th>
               <th style={th}>Gestionnaire</th>
               <th style={{ ...th, textAlign: "center" }}>→ Gestionnaire</th>
-              <th style={{ ...th, textAlign: "center" }}>→ Conseil syndical</th>
+              <th style={{ ...th, textAlign: "center" }}>Statut</th>
             </tr>
           </thead>
           <tbody>
@@ -166,7 +175,7 @@ export function Devis6Controls({ table }: { table: Table }) {
                 </td>
                 <td style={{ ...td, color: "#656576", whiteSpace: "nowrap" }}>{r.gestionnaire || "—"}</td>
                 <td style={{ ...td, textAlign: "center" }}><button disabled title="À mettre en place — enverra la proposition au gestionnaire pour validation" style={laterBtn}>Envoyer <span style={{ opacity: 0.7 }}>(à venir)</span></button></td>
-                <td style={{ ...td, textAlign: "center" }}><button disabled title="À mettre en place — prévisualisera et enverra le mail préparé aux membres du CS" style={laterBtn}>Prévisu + envoi CS <span style={{ opacity: 0.7 }}>(à venir)</span></button></td>
+                <td style={{ ...td, textAlign: "center" }}>{(() => { const s = STATUT[r.statut]; return <span title="Réponse du gestionnaire (détecteur à venir)" style={{ fontSize: 11, fontWeight: 700, color: s.color, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 999, padding: "2px 10px", whiteSpace: "nowrap" }}>{s.label}</span>; })()}</td>
               </tr>
             ))}
             {rows.length === 0 && <tr><td colSpan={9} style={{ ...td, textAlign: "center", color: "#A2A1AF" }}>Aucun dossier ne correspond.</td></tr>}
