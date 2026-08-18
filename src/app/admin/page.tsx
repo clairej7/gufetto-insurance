@@ -57,7 +57,12 @@ export default async function AdminPage() {
   const devisRecus = await getDevisRecusStats();
   // Auto 6 : comparaisons effectuées + transmissions aux gestionnaires (event à venir).
   const devis6Table = await getDevis6TableData();
-  const devis6Transmis = (await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "devis6_notify_gestionnaire" } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
+  // Transmis = dossiers pour lesquels on a envoyé au gestionnaire (Slack) OU dont
+  // le gestionnaire a répondu (validé/refusé, y compris validations manuelles).
+  const devis6Transmis = (await prisma.pipelineEvent.findMany({ where: { OR: [
+    { metadata: { path: ["auto"], equals: "devis6_notify_gestionnaire" } },
+    { metadata: { path: ["auto"], equals: "devis6_gestio_response" } },
+  ] }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
   const { getRsFlowDaily } = await import("@/lib/rs4");
   const rsFlow = await getRsFlowDaily();
   const { getDevisFlowDaily } = await import("@/lib/devis5");

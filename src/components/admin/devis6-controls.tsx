@@ -51,6 +51,26 @@ export function Devis6Controls({ table }: { table: Table }) {
   const [envoi, setEnvoi] = useState<string | null>(null);
   const [sending7, setSending7] = useState(false);
   const prets = table.rows.filter((r) => r.statut === "valide").length;
+  const aComparer = table.rows.filter((r) => !r.comparaisonFaite).length;
+  const [genBatch, setGenBatch] = useState<{ running: boolean; done: number; total: number; ok: number; fail: number } | null>(null);
+
+  async function genererToutes() {
+    const targets = table.rows.filter((r) => !r.comparaisonFaite).map((r) => r.pipelineId);
+    if (!targets.length) return;
+    setGenBatch({ running: true, done: 0, total: targets.length, ok: 0, fail: 0 });
+    let ok = 0, fail = 0;
+    for (let i = 0; i < targets.length; i++) {
+      try {
+        const res = await fetch("/api/devis6/compare", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId: targets[i] }) });
+        const j = (await res.json().catch(() => ({}))) as { success?: boolean };
+        if (res.ok && j.success) ok++; else fail++;
+      } catch { fail++; }
+      setGenBatch({ running: true, done: i + 1, total: targets.length, ok, fail });
+    }
+    setGenBatch({ running: false, done: targets.length, total: targets.length, ok, fail });
+    toast.success(`${ok} comparaison(s) générée(s)${fail ? ` · ${fail} sans devis stocké / échec` : ""}.`);
+    router.refresh();
+  }
 
   async function envoyerAuto7() {
     if (prets === 0) return;
@@ -166,6 +186,23 @@ export function Devis6Controls({ table }: { table: Table }) {
           {sending7 ? <Loader2 size={15} className="animate-spin" /> : <ArrowRight size={15} />} Envoyer les {prets} dossier{prets > 1 ? "s" : ""} prêt{prets > 1 ? "s" : ""} à l&apos;automatisation 7
         </button>
         <span style={{ fontSize: 11.5, color: "#A2A1AF", marginLeft: 10 }}>Dossiers validés par le gestionnaire → passage en « Validation du CS » (auto 7).</span>
+      </div>
+
+      {/* Génération en masse des comparaisons manquantes (1 à 1, avec progression). */}
+      <div style={{ marginBottom: 12 }}>
+        <button onClick={genererToutes} disabled={aComparer === 0 || genBatch?.running}
+          style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: "#fff", background: aComparer === 0 ? "#B8B5FD" : genBatch?.running ? "#7B77F5" : "#4E49FC", border: "none", borderRadius: 10, padding: "9px 16px", cursor: aComparer === 0 || genBatch?.running ? "default" : "pointer" }}>
+          {genBatch?.running ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} {genBatch?.running ? `Génération… ${genBatch.done}/${genBatch.total}` : `Générer les ${aComparer} comparaison${aComparer > 1 ? "s" : ""}`}
+        </button>
+        <span style={{ fontSize: 11.5, color: "#A2A1AF", marginLeft: 10 }}>Comparaisons Claude des dossiers restants (celles sans devis stocké seront ignorées).</span>
+        {(genBatch?.running || (genBatch && !genBatch.running)) && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ height: 6, width: "100%", maxWidth: 420, overflow: "hidden", borderRadius: 999, background: "#EEE" }}>
+              <div style={{ height: "100%", borderRadius: 999, transition: "width .2s", width: `${genBatch!.total ? Math.round((genBatch!.done / genBatch!.total) * 100) : 0}%`, background: "#4E49FC" }} />
+            </div>
+            <p style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>{genBatch!.done}/{genBatch!.total} · <b style={{ color: "#13762C" }}>{genBatch!.ok} générées</b>{genBatch!.fail ? ` · ${genBatch!.fail} ignorées (pas de devis stocké)` : ""}{genBatch!.running ? " · en cours…" : ""}</p>
+          </div>
+        )}
       </div>
 
       {/* Barre de recherche / filtres */}
