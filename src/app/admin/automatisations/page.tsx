@@ -20,6 +20,8 @@ import { Rs4Controls } from "@/components/admin/rs4-controls";
 import { getDevis5Volet1Data, getDevis5DocsToLoad, getDocLoadHistory, getDevis5NoDocs, getDevis5Volet4Data, getDevis5Volet2Data, getDevis5Auto6History } from "@/lib/devis5";
 import { getDevis6TableData } from "@/lib/devis6";
 import { Devis6Controls } from "@/components/admin/devis6-controls";
+import { getDevis7TableData } from "@/lib/devis7";
+import { Devis7Controls } from "@/components/admin/devis7-controls";
 import { getDocsStats } from "@/lib/rs-docs";
 import { Devis5Controls } from "@/components/admin/devis5-controls";
 import { getExclusionState } from "@/lib/exclusions";
@@ -108,6 +110,7 @@ export default async function AutomatisationsPage() {
   const devis5Suivi = await getDevis5Volet4Data(Date.now());
   const devis5Auto6History = await getDevis5Auto6History();
   const devis6Table = await getDevis6TableData();
+  const devis7Table = await getDevis7TableData();
   const docsStats = await getDocsStats();
   const exclusionState = await getExclusionState();
   const ghcReviewLabel: Record<string, string> = { assureur_divergent: "Assureur divergent", courtier_divergent: "Courtier divergent", numero_divergent: "N° divergent", echeance_divergente: "Échéance divergente", prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
@@ -183,9 +186,10 @@ export default async function AutomatisationsPage() {
     {
       n: 7,
       nom: "Envois et suivi des propositions au CS",
-      etat: "attente",
+      etat: "encours",
       description: [
-        "Suivi des propositions envoyées au Conseil Syndical (validation CS). Les dossiers y arrivent depuis l'automatisation 6 quand la proposition est envoyée au CS.",
+        "Les dossiers arrivent ici dès que le gestionnaire valide la proposition (auto 6) → passage à l'étape « Validation CS ». On y prépare/envoie le mail au Conseil Syndical et on suit sa réponse.",
+        "Statut CS « refus » → dossier passé automatiquement en « Perdu ». Statut CS « accepté » + résiliation envoyée « oui » → dossier passé en « Clos ». La ligne reste affichée pour le suivi.",
       ],
     },
     {
@@ -375,6 +379,16 @@ export default async function AutomatisationsPage() {
                       <VerifyPrimesBatchButton stock={eligibleAuto6} />
                     </div>
                     <Devis6Controls table={devis6Table} />
+                  </details>
+                )}
+
+                {/* Contrôle admin — automatisation 7 : suivi des propositions au CS. */}
+                {a.n === 7 && (
+                  <details style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                    <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content" }}>
+                      Contrôles admin
+                    </summary>
+                    <Devis7Controls table={devis7Table} />
                   </details>
                 )}
 

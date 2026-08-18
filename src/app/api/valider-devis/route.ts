@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   const p = await prisma.insurancePipeline.findUnique({
     where: { id: pipelineId },
-    select: { id: true, copro: { select: { nom: true, adresse: true, gestionnaireNom: true } } },
+    select: { id: true, statut: true, copro: { select: { nom: true, adresse: true, gestionnaireNom: true } } },
   });
   if (!p) return NextResponse.json({ error: "Dossier introuvable" }, { status: 404 });
 
@@ -28,6 +28,13 @@ export async function POST(req: NextRequest) {
       createdBy: "gestionnaire:validation",
     },
   });
+
+  // Gestionnaire VALIDÉ → le dossier quitte l'auto 6 et entre dans l'auto 7 :
+  // passage à l'étape validation_cs + marqueur devis7_entered (une seule fois).
+  if (reponse === "valide" && p.statut === "devis_recus") {
+    await prisma.pipelineEvent.create({ data: { pipelineId, type: "statut_change", ancienStatut: p.statut, nouveauStatut: "validation_cs", description: "Gestionnaire a validé — passage à la validation CS (auto 7)", metadata: { auto: "devis7_entered" }, createdBy: "gestionnaire:validation" } });
+    await prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { statut: "validation_cs" } });
+  }
 
   // Retour dans le canal Slack (best-effort) pour boucler côté Quentin.
   const who = p.copro.gestionnaireNom || "Le gestionnaire";
