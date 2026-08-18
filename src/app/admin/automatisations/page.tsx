@@ -18,7 +18,7 @@ import { CourtierAuditControls } from "@/components/admin/courtier-audit-control
 import { getRs4Volet1Count, getRs4Volet2Data, getRs4DetectorData, getRs4Volet3Data, getRs4Volet4Data, getRs4SendHistory } from "@/lib/rs4";
 import { Rs4Controls } from "@/components/admin/rs4-controls";
 import { getDevis5Volet1Data, getDevis5DocsToLoad, getDocLoadHistory, getDevis5NoDocs, getDevis5Volet4Data, getDevis5Volet2Data, getDevis5Auto6History } from "@/lib/devis5";
-import { getDevis6Volet1Data, getDevis6Volet2Data, getDevis6Volet3Data } from "@/lib/devis6";
+import { getDevis6TableData } from "@/lib/devis6";
 import { Devis6Controls } from "@/components/admin/devis6-controls";
 import { getDocsStats } from "@/lib/rs-docs";
 import { Devis5Controls } from "@/components/admin/devis5-controls";
@@ -107,9 +107,7 @@ export default async function AutomatisationsPage() {
   const devis5Volet2 = await getDevis5Volet2Data();
   const devis5Suivi = await getDevis5Volet4Data(Date.now());
   const devis5Auto6History = await getDevis5Auto6History();
-  const devis6Volet1 = await getDevis6Volet1Data();
-  const devis6Volet2 = await getDevis6Volet2Data();
-  const devis6Suivi = await getDevis6Volet3Data(Date.now());
+  const devis6Table = await getDevis6TableData();
   const docsStats = await getDocsStats();
   const exclusionState = await getExclusionState();
   const ghcReviewLabel: Record<string, string> = { assureur_divergent: "Assureur divergent", courtier_divergent: "Courtier divergent", numero_divergent: "N° divergent", echeance_divergente: "Échéance divergente", prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
@@ -184,10 +182,10 @@ export default async function AutomatisationsPage() {
     },
     {
       n: 7,
-      nom: "Message Slack au gestionnaire (devis reçus) & finalisation",
+      nom: "Suivi des propositions CS",
       etat: "attente",
       description: [
-        "À venir — contenu à préciser.",
+        "Suivi des propositions envoyées au Conseil Syndical (validation CS). Les dossiers y arrivent depuis l'automatisation 6 quand la proposition est envoyée au CS.",
       ],
     },
     {
@@ -376,7 +374,7 @@ export default async function AutomatisationsPage() {
                       </p>
                       <VerifyPrimesBatchButton stock={eligibleAuto6} />
                     </div>
-                    <Devis6Controls volet1={devis6Volet1} volet2={devis6Volet2} suivi={devis6Suivi} />
+                    <Devis6Controls table={devis6Table} />
                   </details>
                 )}
 
