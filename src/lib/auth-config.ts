@@ -38,6 +38,10 @@ export const authConfig: NextAuthConfig = {
       const isPublic =
         path.startsWith("/api/auth") ||
         path.startsWith("/api/webhook") ||
+        // Validation gestionnaire (auto 6) : page + API publiques, sécurisées par
+        // un token signé (le gestionnaire n'a pas de compte Gufetto).
+        path.startsWith("/valider-devis") ||
+        path.startsWith("/api/valider-devis") ||
         path.startsWith("/_next") ||
         path === "/favicon.ico";
       if (isPublic) return true;

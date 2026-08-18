@@ -16,7 +16,7 @@ type Statut = "attente" | "valide" | "refus" | "autre";
 type Row = {
   pipelineId: string; nom: string; adresse: string | null;
   gestionnaire: string | null; gestionnaireEmail: string | null;
-  comparaisonFaite: boolean; statut: Statut; contratPrime: number | null;
+  comparaisonFaite: boolean; statut: Statut; statutComment: string | null; contratPrime: number | null;
   devis1: Devis | null; devis2: Devis | null;
 };
 type Table = { total: number; faites: number; rows: Row[]; gestionnaires: string[] };
@@ -219,7 +219,7 @@ export function Devis6Controls({ table }: { table: Table }) {
                     {envoi === r.pipelineId ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Envoyer
                   </button>
                 </td>
-                <td style={{ ...td, textAlign: "center" }}>{(() => { const s = STATUT[r.statut]; return <span title="Réponse du gestionnaire (détecteur à venir)" style={{ fontSize: 11, fontWeight: 700, color: s.color, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 999, padding: "2px 10px", whiteSpace: "nowrap" }}>{s.label}</span>; })()}</td>
+                <td style={{ ...td, textAlign: "center" }}>{(() => { const s = STATUT[r.statut]; return <span title={r.statutComment ? `💬 ${r.statutComment}` : "Réponse du gestionnaire"} style={{ fontSize: 11, fontWeight: 700, color: s.color, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 999, padding: "2px 10px", whiteSpace: "nowrap", cursor: r.statutComment ? "help" : "default" }}>{s.label}{r.statutComment ? " 💬" : ""}</span>; })()}</td>
               </tr>
               );
             })}

@@ -5,6 +5,7 @@
 import { prisma } from "@/lib/prisma";
 import { resolvePrimeReference } from "@/lib/devis-prime";
 import { getDernierePrimePayeeFromFront } from "@/lib/front-insurance";
+import { signValidationToken } from "@/lib/devis6-token";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://gufetto-insurance.up.railway.app";
 const fmtE = (n: number | null | undefined) => (n == null ? "—" : `${Math.round(n).toLocaleString("fr-FR")} €`);
@@ -61,6 +62,7 @@ export async function buildGestionnaireMessage(pipelineId: string): Promise<{ ok
   // Alerter sur la PJ UNIQUEMENT si le contrat actuel en a une et que le devis retenu ne l'a pas (perte réelle).
   if (pjContrat === true && pjBest === false) synthese.push("⚠️ Protection juridique présente au contrat actuel mais absente du devis retenu — à valider.");
 
+  const token = signValidationToken(p.id);
   const lines = [
     "*Assurances — nouveaux devis disponibles ! (envoi automatique)*",
     "",
@@ -77,9 +79,8 @@ export async function buildGestionnaireMessage(pipelineId: string): Promise<{ ok
     "",
     "────────────",
     "*Valides-tu la transmission au Conseil Syndical ?*",
-    "　✅ *Confirmer la transmission au CS*　　🚫 *Ne pas envoyer*",
-    "💬 *Commentaire possible*",
-    "_(validation cliquable activée à l'étape suivante)_",
+    `　<${BASE_URL}/valider-devis/${token}?r=oui|✅ Confirmer la transmission au CS>　　<${BASE_URL}/valider-devis/${token}?r=non|🚫 Ne pas envoyer>`,
+    "💬 _Tu pourras ajouter un commentaire sur la page._",
   ].filter((l): l is string => l !== null);
 
   return { ok: true, text: lines.join("\n") };
