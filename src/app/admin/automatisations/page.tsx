@@ -172,7 +172,7 @@ export default async function AutomatisationsPage() {
     },
     {
       n: 6,
-      nom: "Comparer les devis et préparer le mail au CS",
+      nom: "Comparer les devis et prévenir le gestionnaire",
       etat: "encours",
       description: [
         "À l'étape « Comparaison des devis », la base de comparaison retient désormais la DERNIÈRE PRIME RÉELLEMENT PAYÉE (récupérée dans le mail de demande de devis envoyé à l'assureur, via le marqueur gufetto-ref) plutôt que la prime du contrat, souvent périmée. Sans ça, les devis paraissaient plus chers que la réalité.",
@@ -182,7 +182,7 @@ export default async function AutomatisationsPage() {
     },
     {
       n: 7,
-      nom: "Suivi des propositions CS",
+      nom: "Envois et suivi des propositions au CS",
       etat: "attente",
       description: [
         "Suivi des propositions envoyées au Conseil Syndical (validation CS). Les dossiers y arrivent depuis l'automatisation 6 quand la proposition est envoyée au CS.",
