@@ -545,6 +545,11 @@ export async function getRs4DetectorData(nowMs: number): Promise<DetectorData> {
 // Verdict possibles du détecteur. « sans_reponse » = scanné mais aucun entrant.
 export const REPLY_KINDS = ["rs_recu", "redirect", "attente", "info", "pj", "bounce", "autre", "sans_reponse"] as const;
 const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ").trim();
+// Domaines perso/génériques : un courtier n'écrit jamais depuis ceux-là. Sert à
+// écarter un contactCourtierEmail douteux quand on filtre les réponses hors-fil.
+const GENERIC_MAIL_DOMAINS = new Set(["gmail.com", "hotmail.fr", "hotmail.com", "outlook.fr", "outlook.com", "yahoo.fr", "yahoo.com", "wanadoo.fr", "orange.fr", "free.fr", "sfr.fr", "laposte.net", "live.fr", "icloud.com", "me.com"]);
+const domainOfMail = (h: string): string => (h.split("@").pop() ?? "").toLowerCase().trim();
+
 function realDoc(atts: { contentType?: string; content_type?: string; filename?: string }[]): boolean {
   return (atts ?? []).some((a) => {
     const ct = (a.contentType || a.content_type || "").toLowerCase();
@@ -711,7 +716,7 @@ export async function recoverEscapedConversations(offset: number, limit: number)
   const total = await prisma.insurancePipeline.count({ where });
   const dossiers = await prisma.insurancePipeline.findMany({
     where, orderBy: { id: "asc" }, skip: offset, take: limit,
-    select: { id: true, coproId: true, rs4SentAt: true, copro: { select: { nom: true, adresse: true, buildingId: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } },
+    select: { id: true, coproId: true, rs4SentAt: true, copro: { select: { nom: true, adresse: true, buildingId: true, contactCourtierEmail: true } }, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } },
   });
   const inGufettoInbox = async (cid: string): Promise<boolean> => {
     const r = await frontGet(`/conversations/${cid}/inboxes`);
@@ -731,6 +736,18 @@ export async function recoverEscapedConversations(offset: number, limit: number)
     // 2) Réponses hors-fil (nouveau mail de l'assureur/courtier), par building_id.
     const bid = p.copro.buildingId;
     if (!bid) continue;
+    // GARDE-FOU : on ne rapatrie une conv hors-fil QUE si l'entrant vient du
+    // DOMAINE du courtier/assureur du dossier. Sans domaine courtier fiable
+    // (vide ou perso/générique), on ne touche à rien — sinon on aspirerait les
+    // mails de copropriétaires du même immeuble (factures, sinistres, ventes…).
+    const courtierDomains = new Set(
+      (p.copro.contactCourtierEmail ?? "").split(/[;,]/).map((s) => domainOfMail(s.trim())).filter((d) => d && !GENERIC_MAIL_DOMAINS.has(d))
+    );
+    if (!courtierDomains.size) continue;
+    const fromCourtier = (m: { author?: { email?: string }; recipients?: { role: string; handle: string }[] }) => {
+      const h = (m.recipients ?? []).find((r) => r.role === "from")?.handle || m.author?.email || "";
+      return courtierDomains.has(domainOfMail(h));
+    };
     const sentMs = new Date(p.rs4SentAt!).getTime();
     const sd = await frontGet(`/conversations/search/${encodeURIComponent(`custom_field:"building_id=${bid}"`)}?limit=50`);
     const convs = (((sd?._results as unknown[]) ?? []) as { id: string; tags?: { id: string }[] }[])
@@ -738,13 +755,13 @@ export async function recoverEscapedConversations(offset: number, limit: number)
     for (const c of convs) {
       const list = await frontGet(`/conversations/${c.id}/messages?limit=20`);
       const msgs = ((list?._results as unknown[]) ?? []) as { id: string; is_inbound: boolean; created_at: number; blurb?: string; attachments?: { contentType?: string; filename?: string }[]; author?: { email?: string }; recipients?: { role: string; handle: string }[] }[];
-      const inbound = msgs.filter((m) => m.is_inbound && m.created_at * 1000 > sentMs && !isFromMatera(m));
-      const withDoc = inbound.some((m) => realDoc(m.attachments ?? []));
-      if (!inbound.length || !withDoc) continue; // on ne rapatrie QUE les réponses avec document (RS renvoyé hors-fil)
+      // Entrant, après notre envoi, PAS de Matera, DU COURTIER, AVEC document.
+      const inbound = msgs.filter((m) => m.is_inbound && m.created_at * 1000 > sentMs && !isFromMatera(m) && fromCourtier(m) && realDoc(m.attachments ?? []));
+      if (!inbound.length) continue; // aucune vraie réponse courtier hors-fil avec doc
       // Rapatriement + tag + capture + liaison au dossier + retour détecteur.
       await moveToGufetto(c.id).catch(() => {});
       const last = inbound.sort((a, b) => b.created_at - a.created_at)[0];
-      let body = "", hasDoc = withDoc;
+      let body = "", hasDoc = true;
       const full = (await frontGet(`/messages/${last.id}`)) as { content?: string; attachments?: { contentType?: string; filename?: string }[] } | null;
       body = stripHtml(full?.content || last.blurb || "").slice(0, 500);
       if (full?.attachments && realDoc(full.attachments)) hasDoc = true;
