@@ -268,7 +268,7 @@ async function extractFromPdf(pdf: Buffer): Promise<{ numeroContrat: string | nu
 Retourne UNIQUEMENT un JSON valide sans markdown : {"numeroContrat": string|null, "assureur": string|null}.
 numeroContrat = le numéro de police/contrat exact. assureur = la compagnie d'assurance.`;
   const resp = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     max_tokens: 300,
     messages: [
       {
@@ -582,7 +582,7 @@ Retourne UNIQUEMENT un JSON sans markdown : {"estAssuranceMRI": boolean, "montan
 - prochaineEcheance = date de PROCHAINE échéance / date d'effet de la période à venir (YYYY-MM-DD), UNIQUEMENT si explicite et sûre ; sinon null.`;
   try {
     const resp = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-sonnet-5",
       max_tokens: 220,
       messages: [{ role: "user", content: [
         { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdf.toString("base64") } },

@@ -64,7 +64,7 @@ async function extractFromPdf(pdf: Buffer): Promise<Extracted> {
   if (!process.env.ANTHROPIC_API_KEY) return {};
   try {
     const resp = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-sonnet-5",
       max_tokens: 500,
       messages: [{
         role: "user",

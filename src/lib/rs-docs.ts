@@ -48,7 +48,7 @@ export async function classifyInsuranceDoc(pdf: Buffer, filename: string): Promi
   if (!process.env.ANTHROPIC_API_KEY) return byName();
   try {
     const resp = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-sonnet-5",
       max_tokens: 120,
       messages: [{
         role: "user",

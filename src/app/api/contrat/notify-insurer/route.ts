@@ -41,7 +41,7 @@ INSTRUCTIONS :
 - IMPORTANT : termine l'email EXACTEMENT après la signature, sans rien ajouter`;
 
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-sonnet-5",
       max_tokens: 800,
       messages: [{ role: "user", content: prompt }],
     });
