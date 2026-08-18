@@ -880,7 +880,7 @@ export async function saveSignedPdfUrl(pipelineId: string, signedPdfUrl: string)
       const base64 = Buffer.from(buf).toString("base64");
 
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-5",
         max_tokens: 512,
         messages: [{
           role: "user",
