@@ -280,8 +280,8 @@ numeroContrat = le numéro de police/contrat exact. assureur = la compagnie d'as
       },
     ],
   });
-  const c = resp.content[0];
-  if (c.type !== "text") return { numeroContrat: null, assureur: null };
+  const c = resp.content.find((b) => b.type === "text");
+  if (!c || c.type !== "text") return { numeroContrat: null, assureur: null };
   try {
     const raw = c.text.trim().replace(/^```json?\s*/i, "").replace(/\s*```$/i, "");
     const j = JSON.parse(raw) as { numeroContrat?: string | null; assureur?: string | null };
@@ -589,8 +589,8 @@ Retourne UNIQUEMENT un JSON sans markdown : {"estAssuranceMRI": boolean, "montan
         { type: "text", text: PROMPT },
       ] }],
     });
-    const c = resp.content[0];
-    if (c.type !== "text") return fail;
+    const c = resp.content.find((b) => b.type === "text");
+    if (!c || c.type !== "text") return fail;
     const raw = c.text.trim().replace(/^```json?\s*/i, "").replace(/\s*```$/i, "");
     const j = JSON.parse(raw) as { estAssuranceMRI?: boolean; montantAnnuelTTC?: number | null; type?: string; annuelComplet?: boolean; certain?: boolean; prochaineEcheance?: string | null };
     return {

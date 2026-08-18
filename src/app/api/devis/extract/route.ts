@@ -83,8 +83,10 @@ export async function POST(req: NextRequest) {
       ],
     });
 
-    const content = response.content[0];
-    if (content.type !== "text") {
+    // sonnet-5 active le raisonnement adaptatif par défaut : le 1er bloc peut
+    // être un bloc "thinking". On cherche le bloc texte plutôt que content[0].
+    const content = response.content.find((b) => b.type === "text");
+    if (!content || content.type !== "text") {
       return NextResponse.json({ error: "Réponse Claude invalide" }, { status: 500 });
     }
 

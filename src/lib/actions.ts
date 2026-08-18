@@ -902,7 +902,9 @@ Indices selon l'assureur :
         }],
       });
 
-      const raw = (response.content[0] as { type: string; text: string }).text
+      // sonnet-5 : raisonnement adaptatif par défaut → chercher le bloc texte.
+      const textBlock = response.content.find((b) => b.type === "text") as { type: string; text: string } | undefined;
+      const raw = (textBlock?.text ?? "")
         .trim().replace(/^```json?\s*/i, "").replace(/\s*```$/i, "");
       const extracted = JSON.parse(raw) as { numeroContrat?: string | null; dateEffet?: string | null; primeTTC?: number | null };
 
