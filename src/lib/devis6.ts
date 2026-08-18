@@ -70,7 +70,9 @@ export async function getDevis6PretsCount(): Promise<number> {
 export type Devis6Devis = { assureur: string; prime: number | null };
 // Statut de la réponse du gestionnaire (prévenu de la proposition). Alimenté plus
 // tard par un détecteur de réponses ; défaut « attente » tant qu'aucune réponse.
-export type Devis6Statut = "attente" | "valide" | "refus" | "autre";
+// "-" tant que le message Slack n'est pas envoyé ; "attente" une fois envoyé et
+// sans réponse ; puis "valide"/"refus" selon la réponse du gestionnaire.
+export type Devis6Statut = "non_envoye" | "attente" | "valide" | "refus";
 export type Devis6TableRow = {
   pipelineId: string; nom: string; adresse: string | null;
   gestionnaire: string | null; gestionnaireEmail: string | null;
@@ -113,7 +115,7 @@ export async function getDevis6TableData(): Promise<Devis6Table> {
       d ? { assureur: d.assureur, prime: d.primeTTC ?? null } : null;
     const resp = (p.events.find((e) => autoOf(e.metadata) === "devis6_gestio_response")?.metadata ?? null) as { reponse?: string; comment?: string } | null;
     const notif = p.events.find((e) => autoOf(e.metadata) === "devis6_notify_gestionnaire");
-    const statut: Devis6Statut = resp?.reponse === "valide" ? "valide" : resp?.reponse === "refus" ? "refus" : "attente";
+    const statut: Devis6Statut = resp?.reponse === "valide" ? "valide" : resp?.reponse === "refus" ? "refus" : notif ? "attente" : "non_envoye";
     return {
       pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse,
       gestionnaire: gestLabel(p.copro.gestionnaireNom, p.copro.gestionnaireEmail),

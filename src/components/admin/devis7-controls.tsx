@@ -23,7 +23,7 @@ const laterBtn: React.CSSProperties = { fontSize: 11.5, fontWeight: 600, color: 
 const sel: React.CSSProperties = { fontSize: 12, padding: "5px 8px", border: "1px solid #E8E8EC", borderRadius: 8, background: "#fff" };
 
 const ETAPE: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  validation_cs: { label: "Validation CS", color: "#4E49FC", bg: "#EEF0FF", border: "#D9D9F5" },
+  envoye_cs: { label: "Validation CS", color: "#4E49FC", bg: "#EEF0FF", border: "#D9D9F5" },
   refuse: { label: "Perdu", color: "#CA1E12", bg: "#FDECEA", border: "#F4A9A0" },
   termine: { label: "Clos", color: "#13762C", bg: "#EAF7EE", border: "#B7E4C4" },
 };

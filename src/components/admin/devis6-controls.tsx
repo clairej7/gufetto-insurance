@@ -7,12 +7,12 @@
 // bouton « Générer la comparaison » qui rejoue la comparaison Claude des fiches.
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Loader2, RefreshCw, Sparkles, ExternalLink, Send } from "lucide-react";
+import { Search, Loader2, RefreshCw, Sparkles, ExternalLink, Send, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { resolvePrimeReference } from "@/lib/devis-prime";
 
 type Devis = { assureur: string; prime: number | null };
-type Statut = "attente" | "valide" | "refus" | "autre";
+type Statut = "non_envoye" | "attente" | "valide" | "refus";
 type Row = {
   pipelineId: string; nom: string; adresse: string | null;
   gestionnaire: string | null; gestionnaireEmail: string | null;
@@ -23,10 +23,10 @@ type Table = { total: number; faites: number; rows: Row[]; gestionnaires: string
 
 // Statut de réponse du gestionnaire (alimenté plus tard par un détecteur).
 const STATUT: Record<Statut, { label: string; color: string; bg: string; border: string }> = {
-  attente: { label: "Attente", color: "#656576", bg: "#F1F1F4", border: "#E0E0E6" },
+  non_envoye: { label: "–", color: "#A2A1AF", bg: "#F7F7F8", border: "#E8E8EC" },
+  attente: { label: "Attente", color: "#B4690E", bg: "#FDF0D5", border: "#F3D9A6" },
   valide: { label: "Validé !", color: "#13762C", bg: "#EAF7EE", border: "#B7E4C4" },
   refus: { label: "Refus", color: "#CA1E12", bg: "#FDECEA", border: "#F4A9A0" },
-  autre: { label: "Autre", color: "#B4690E", bg: "#FDF0D5", border: "#F3D9A6" },
 };
 
 const fmtE = (n: number | null | undefined) => (n == null ? "—" : `${Math.round(n).toLocaleString("fr-FR")} €`);
@@ -49,6 +49,24 @@ export function Devis6Controls({ table }: { table: Table }) {
   const [compFilter, setCompFilter] = useState<"tous" | "oui" | "non">("tous");
   const [generating, setGenerating] = useState<string | null>(null);
   const [envoi, setEnvoi] = useState<string | null>(null);
+  const [sending7, setSending7] = useState(false);
+  const prets = table.rows.filter((r) => r.statut === "valide").length;
+
+  async function envoyerAuto7() {
+    if (prets === 0) return;
+    setSending7(true);
+    try {
+      const res = await fetch("/api/devis6/send-to-auto7", { method: "POST" });
+      const j = (await res.json().catch(() => ({}))) as { success?: boolean; moved?: number; error?: string };
+      if (!res.ok || !j.success) throw new Error(j.error ?? "Échec");
+      toast.success(`${j.moved ?? 0} dossier(s) envoyé(s) à l'automatisation 7.`);
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Échec");
+    } finally {
+      setSending7(false);
+    }
+  }
   // Prix actuel (dernière prime payée) récupéré côté client, par dossier.
   const [prix, setPrix] = useState<Record<string, { loading: boolean; montant: number | null; done: boolean }>>({});
   const fetchedRef = useRef(false);
@@ -141,6 +159,15 @@ export function Devis6Controls({ table }: { table: Table }) {
 
   return (
     <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+      {/* Envoi par lot vers l'automatisation 7 (dossiers validés par le gestionnaire). */}
+      <div style={{ marginBottom: 12 }}>
+        <button onClick={envoyerAuto7} disabled={prets === 0 || sending7}
+          style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: "#fff", background: prets === 0 ? "#A9D9B8" : sending7 ? "#5AA772" : "#13762C", border: "none", borderRadius: 10, padding: "9px 16px", cursor: prets === 0 || sending7 ? "default" : "pointer" }}>
+          {sending7 ? <Loader2 size={15} className="animate-spin" /> : <ArrowRight size={15} />} Envoyer les {prets} dossier{prets > 1 ? "s" : ""} prêt{prets > 1 ? "s" : ""} à l&apos;automatisation 7
+        </button>
+        <span style={{ fontSize: 11.5, color: "#A2A1AF", marginLeft: 10 }}>Dossiers validés par le gestionnaire → passage en « Validation du CS » (auto 7).</span>
+      </div>
+
       {/* Barre de recherche / filtres */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
         <div style={{ position: "relative", flex: "1 1 260px", maxWidth: 340 }}>
@@ -226,7 +253,9 @@ export function Devis6Controls({ table }: { table: Table }) {
                     </button>
                   )}
                 </td>
-                <td style={{ ...td, textAlign: "center" }}>{(() => { const s = STATUT[r.statut]; return <span title={r.statutComment ? `💬 ${r.statutComment}` : "Réponse du gestionnaire"} style={{ fontSize: 11, fontWeight: 700, color: s.color, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 999, padding: "2px 10px", whiteSpace: "nowrap", cursor: r.statutComment ? "help" : "default" }}>{s.label}{r.statutComment ? " 💬" : ""}</span>; })()}</td>
+                <td style={{ ...td, textAlign: "center" }}>{r.statut === "non_envoye"
+                  ? <span style={{ color: "#A2A1AF" }}>–</span>
+                  : (() => { const s = STATUT[r.statut]; return <span title={r.statutComment ? `💬 ${r.statutComment}` : "Réponse du gestionnaire"} style={{ fontSize: 11, fontWeight: 700, color: s.color, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 999, padding: "2px 10px", whiteSpace: "nowrap", cursor: r.statutComment ? "help" : "default" }}>{s.label}{r.statutComment ? " 💬" : ""}</span>; })()}</td>
               </tr>
               );
             })}
