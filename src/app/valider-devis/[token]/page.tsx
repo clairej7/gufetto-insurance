@@ -67,6 +67,10 @@ export default async function ValiderDevisPage({
         {p.devisRecus[1] && row(`Devis 2 — ${p.devisRecus[1].assureur}`, `${fmtE(p.devisRecus[1].primeTTC)} / an`, true)}
       </div>
 
+      <a href={`/pipeline/${p.id}`} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 600, color: "#4E49FC", textDecoration: "none", marginBottom: 16 }}>
+        🔗 Voir le détail de la comparaison
+      </a>
+
       {prev?.reponse ? (
         <div style={{ padding: "12px 14px", borderRadius: 10, background: prev.reponse === "valide" ? "#EAF7EE" : "#FDECEA", border: `1px solid ${prev.reponse === "valide" ? "#B7E4C4" : "#F4A9A0"}`, fontSize: 14, color: "#26262C" }}>
           Réponse déjà enregistrée : <strong>{prev.reponse === "valide" ? "transmission au CS confirmée ✅" : "ne pas envoyer 🚫"}</strong>
