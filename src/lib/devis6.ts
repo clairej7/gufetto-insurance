@@ -63,6 +63,49 @@ export async function getDevis6PretsCount(): Promise<number> {
   return (await getDevis6Volet1Data()).prets;
 }
 
+// ─── Tableau unique de suivi (nouvelle structure Auto 6) ─────────────────────
+// Une ligne par dossier à l'étape « Comparaison des devis » (statut devis_recus),
+// hors exclus/archivés. Le « Prix actuel » (dernière prime payée) est récupéré
+// côté client via /api/devis/prime-payee (source = mail de demande de devis).
+export type Devis6Devis = { assureur: string; prime: number | null };
+export type Devis6TableRow = {
+  pipelineId: string; nom: string; adresse: string | null;
+  gestionnaire: string | null; gestionnaireEmail: string | null;
+  comparaisonFaite: boolean;
+  primeConnue: number | null; // primeActuelle en base (affichage immédiat, avant récup Front)
+  devis1: Devis6Devis | null; devis2: Devis6Devis | null;
+};
+export type Devis6Table = { total: number; faites: number; rows: Devis6TableRow[]; gestionnaires: string[] };
+
+export async function getDevis6TableData(): Promise<Devis6Table> {
+  const excl = await getExcludedCoproIds();
+  const ps = await prisma.insurancePipeline.findMany({
+    where: { statut: "devis_recus", coproId: { notIn: excl }, copro: { archivedAt: null } },
+    select: {
+      id: true,
+      copro: { select: { nom: true, adresse: true, primeActuelle: true, gestionnaireNom: true, gestionnaireEmail: true } },
+      devisRecus: { orderBy: { createdAt: "asc" }, select: { assureur: true, primeTTC: true, data: true } },
+    },
+    orderBy: { copro: { dateEcheance: "asc" } },
+  });
+  const rows: Devis6TableRow[] = ps.map((p) => {
+    const dv = p.devisRecus;
+    const toDevis = (d: { assureur: string; primeTTC: number } | undefined): Devis6Devis | null =>
+      d ? { assureur: d.assureur, prime: d.primeTTC ?? null } : null;
+    return {
+      pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse,
+      gestionnaire: gestLabel(p.copro.gestionnaireNom, p.copro.gestionnaireEmail),
+      gestionnaireEmail: p.copro.gestionnaireEmail,
+      // Comparaison faite = une extraction Claude structurée existe (≥ 1 devis avec data).
+      comparaisonFaite: dv.some((d) => !!(d.data && d.data.trim())),
+      primeConnue: p.copro.primeActuelle,
+      devis1: toDevis(dv[0]), devis2: toDevis(dv[1]),
+    };
+  });
+  const gestionnaires = [...new Set(rows.map((r) => r.gestionnaire).filter((g): g is string => !!g))].sort((a, b) => a.localeCompare(b, "fr"));
+  return { total: rows.length, faites: rows.filter((r) => r.comparaisonFaite).length, rows, gestionnaires };
+}
+
 // Passe au volet 2 tous les dossiers prêts (marqueur event devis6Volet=2).
 export async function passDevis6ToVolet2(actorEmail: string): Promise<{ passed: number }> {
   const { rows } = await getDevis6Volet1Data();
