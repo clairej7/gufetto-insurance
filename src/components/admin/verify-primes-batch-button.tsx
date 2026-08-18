@@ -90,7 +90,7 @@ export function VerifyPrimesBatchButton({ stock }: { stock: number }) {
       <div className="flex items-center gap-2">
         <Button onClick={run} disabled={running || stock === 0} className="gap-1.5 w-fit">
           <Search className="h-4 w-4" />
-          {running ? `Vérification… ${progress}/${total}` : `Vérifier les ${stock} comparaison${stock > 1 ? "s" : ""}`}
+          {running ? `Vérification… ${progress}/${total}` : `Vérifier les ${stock} prime${stock > 1 ? "s" : ""}`}
         </Button>
         {running && (
           <Button variant="outline" onClick={() => { cancelRef.current = true; }} className="w-fit">
