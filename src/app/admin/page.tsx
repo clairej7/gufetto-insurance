@@ -7,6 +7,7 @@ import { Navbar } from "@/components/navbar";
 import { AdminBoard } from "@/components/admin/admin-board";
 import { getPrimeByStage } from "@/lib/prime";
 import { getDocsStats, getDevisRecusStats } from "@/lib/rs-docs";
+import { getDevis6TableData } from "@/lib/devis6";
 import { getOdrByInsurerBoard } from "@/lib/odr";
 import { isCloturePourClient } from "@/lib/pipeline";
 
@@ -54,6 +55,9 @@ export default async function AdminPage() {
   const { contrat: contratsRecus } = await getDocsStats();
   const odrByInsurer = await getOdrByInsurerBoard();
   const devisRecus = await getDevisRecusStats();
+  // Auto 6 : comparaisons effectuées + transmissions aux gestionnaires (event à venir).
+  const devis6Table = await getDevis6TableData();
+  const devis6Transmis = (await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "devis6_notify_gestionnaire" } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
   const { getRsFlowDaily } = await import("@/lib/rs4");
   const rsFlow = await getRsFlowDaily();
   const { getDevisFlowDaily } = await import("@/lib/devis5");
@@ -132,6 +136,7 @@ export default async function AdminPage() {
           devisAReclamer={devisAReclamer}
           odrByInsurer={odrByInsurer}
           devisRecus={devisRecus}
+          devis6={{ faites: devis6Table.faites, transmis: devis6Transmis }}
           rsFlow={rsFlow}
           devisFlow={devisFlow}
           excludedCount={excludedCount}
