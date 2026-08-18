@@ -7,7 +7,7 @@
 // bouton « Générer la comparaison » qui rejoue la comparaison Claude des fiches.
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Loader2, RefreshCw, Sparkles, ExternalLink } from "lucide-react";
+import { Search, Loader2, RefreshCw, Sparkles, ExternalLink, Send } from "lucide-react";
 import { toast } from "sonner";
 import { resolvePrimeReference } from "@/lib/devis-prime";
 
@@ -48,6 +48,7 @@ export function Devis6Controls({ table }: { table: Table }) {
   const [gest, setGest] = useState("");        // filtre gestionnaire ("" = tous)
   const [compFilter, setCompFilter] = useState<"tous" | "oui" | "non">("tous");
   const [generating, setGenerating] = useState<string | null>(null);
+  const [envoi, setEnvoi] = useState<string | null>(null);
   // Prix actuel (dernière prime payée) récupéré côté client, par dossier.
   const [prix, setPrix] = useState<Record<string, { loading: boolean; montant: number | null; done: boolean }>>({});
   const fetchedRef = useRef(false);
@@ -87,6 +88,21 @@ export function Devis6Controls({ table }: { table: Table }) {
       toast.error(e instanceof Error ? e.message : "Échec de la génération");
     } finally {
       setGenerating(null);
+    }
+  }
+
+  async function envoyer(pipelineId: string) {
+    setEnvoi(pipelineId);
+    try {
+      const res = await fetch("/api/devis6/notify-gestionnaire", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId }) });
+      const j = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string };
+      if (!res.ok || !j.success) throw new Error(j.error ?? "Échec");
+      toast.success("Message posté dans le canal Slack.");
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Échec de l'envoi Slack");
+    } finally {
+      setEnvoi(null);
     }
   }
 
@@ -194,7 +210,15 @@ export function Devis6Controls({ table }: { table: Table }) {
                   </button>
                 </td>
                 <td style={{ ...td, color: "#656576", whiteSpace: "nowrap" }}>{r.gestionnaire || "—"}</td>
-                <td style={{ ...td, textAlign: "center" }}><button disabled title="À mettre en place — enverra la proposition au gestionnaire pour validation" style={laterBtn}>Envoyer <span style={{ opacity: 0.7 }}>(à venir)</span></button></td>
+                <td style={{ ...td, textAlign: "center" }}>
+                  <button onClick={() => envoyer(r.pipelineId)} disabled={!r.comparaisonFaite || envoi === r.pipelineId}
+                    title={r.comparaisonFaite ? "Poster le message des nouveaux devis dans le canal Slack" : "Génère d'abord la comparaison"}
+                    style={r.comparaisonFaite
+                      ? { display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700, color: "#fff", background: envoi === r.pipelineId ? "#7DA6C9" : "#0A6BB8", border: "none", borderRadius: 8, padding: "6px 10px", cursor: envoi === r.pipelineId ? "default" : "pointer", whiteSpace: "nowrap" }
+                      : laterBtn}>
+                    {envoi === r.pipelineId ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Envoyer
+                  </button>
+                </td>
                 <td style={{ ...td, textAlign: "center" }}>{(() => { const s = STATUT[r.statut]; return <span title="Réponse du gestionnaire (détecteur à venir)" style={{ fontSize: 11, fontWeight: 700, color: s.color, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 999, padding: "2px 10px", whiteSpace: "nowrap" }}>{s.label}</span>; })()}</td>
               </tr>
               );
