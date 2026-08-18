@@ -47,33 +47,36 @@ export async function buildGestionnaireMessage(pipelineId: string): Promise<{ ok
   const bestData = parse(best.data);
   const economie = prixActuel != null ? prixActuel - best.primeTTC : null;
   const pjBest = bestData.garanties?.protectionJuridique;
+  const pjContrat = contrat.garanties?.protectionJuridique;
 
+  // Slack mrkdwn : gras = *texte* (une seule étoile), italique = _texte_.
   const devisLine = (d: { assureur: string; primeTTC: number } | undefined, n: number) =>
-    d ? `• **Devis ${n}** : ${fmtE(d.primeTTC)} — _${d.assureur}_` : null;
+    d ? `• *Devis ${n}* : ${fmtE(d.primeTTC)} — _${d.assureur}_` : null;
 
   const synthese: string[] = [];
   if (economie != null) synthese.push(economie > 0
-    ? `Meilleur devis (**${best.assureur}**, ${fmtE(best.primeTTC)}) → économie ≈ **${fmtE(Math.abs(economie))}/an** vs le prix actuel.`
-    : `Meilleur devis (**${best.assureur}**, ${fmtE(best.primeTTC)}) → **+${fmtE(Math.abs(economie))}/an** vs le prix actuel.`);
+    ? `Meilleur devis (*${best.assureur}*, ${fmtE(best.primeTTC)}) → économie ≈ *${fmtE(Math.abs(economie))}/an* vs le prix actuel.`
+    : `Meilleur devis (*${best.assureur}*, ${fmtE(best.primeTTC)}) → *+${fmtE(Math.abs(economie))}/an* vs le prix actuel.`);
   synthese.push("Garanties globalement comparables au contrat en place.");
-  if (pjBest === false) synthese.push("⚠️ Protection juridique non incluse dans le devis retenu — à valider.");
+  // Alerter sur la PJ UNIQUEMENT si le contrat actuel en a une et que le devis retenu ne l'a pas (perte réelle).
+  if (pjContrat === true && pjBest === false) synthese.push("⚠️ Protection juridique présente au contrat actuel mais absente du devis retenu — à valider.");
 
   const lines = [
-    "**Assurances — nouveaux devis disponibles ! (envoi automatique)**",
+    "*Assurances — nouveaux devis disponibles ! (envoi automatique)*",
     "",
     p.copro.gestionnaireNom ? `Gestionnaire : *${p.copro.gestionnaireNom}*` : null,
-    `• **Copropriété** : ${p.copro.adresse || p.copro.nom}`,
-    `• **Assureur actuel** : ${assureurActuel}`,
-    `• **Prix actuel** : ${fmtE(prixActuel)} / an`,
+    `• *Copropriété* : ${p.copro.adresse || p.copro.nom}`,
+    `• *Assureur actuel* : ${assureurActuel}`,
+    `• *Prix actuel* : ${fmtE(prixActuel)} / an`,
     devisLine(devis[0], 1),
     devisLine(devis[1], 2),
     "",
-    `**En résumé** : ${synthese.join(" ")}`,
+    `*En résumé* : ${synthese.join(" ")}`,
     "",
-    `🔗 **Détail de la comparaison** : ${BASE_URL}/pipeline/${p.id}`,
+    `🔗 *Détail de la comparaison* : ${BASE_URL}/pipeline/${p.id}`,
     "",
     "────────────",
-    "**Valides-tu la transmission au Conseil Syndical ?**",
+    "*Valides-tu la transmission au Conseil Syndical ?*",
     "　✅ *Confirmer la transmission au CS*　　🚫 *Ne pas envoyer*",
     "💬 *Commentaire possible*",
     "_(validation cliquable activée à l'étape suivante)_",
