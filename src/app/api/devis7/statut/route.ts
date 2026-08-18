@@ -48,10 +48,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Transition d'étape automatique.
-  const target = csStatut === "refus" ? "refuse" : csStatut === "accepte" && resiliation === "oui" ? "termine" : "validation_cs";
+  const target = csStatut === "refus" ? "refuse" : csStatut === "accepte" && resiliation === "oui" ? "termine" : "envoye_cs";
   if (p.statut !== target) {
     await prisma.pipelineEvent.create({ data: { pipelineId, type: "statut_change", ancienStatut: p.statut, nouveauStatut: target, description: target === "refuse" ? "CS refus → dossier perdu" : target === "termine" ? "CS accepté + résiliation envoyée → dossier clos" : "Retour en validation CS", metadata: { auto: "devis7_transition" }, createdBy: by } });
-    await prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { statut: target as "refuse" | "termine" | "validation_cs" } });
+    await prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { statut: target as "refuse" | "termine" | "envoye_cs" } });
   }
 
   return NextResponse.json({ success: true, csStatut: csStatut ?? null, resiliation: (csStatut === "refus" ? "-" : resiliation) ?? null, statutPipeline: target });

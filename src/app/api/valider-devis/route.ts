@@ -29,12 +29,10 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Gestionnaire VALIDÉ → le dossier quitte l'auto 6 et entre dans l'auto 7 :
-  // passage à l'étape validation_cs + marqueur devis7_entered (une seule fois).
-  if (reponse === "valide" && p.statut === "devis_recus") {
-    await prisma.pipelineEvent.create({ data: { pipelineId, type: "statut_change", ancienStatut: p.statut, nouveauStatut: "validation_cs", description: "Gestionnaire a validé — passage à la validation CS (auto 7)", metadata: { auto: "devis7_entered" }, createdBy: "gestionnaire:validation" } });
-    await prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { statut: "validation_cs" } });
-  }
+  // NB : la validation gestionnaire NE déplace PLUS automatiquement le dossier vers
+  // l'auto 7. Le passage se fait par lot via le bouton « Envoyer les X dossiers
+  // prêts à l'automatisation 7 » (/api/devis6/send-to-auto7). Ici on ne fait
+  // qu'enregistrer la réponse (→ statut « Validé ! » dans l'auto 6).
 
   // Retour dans le canal Slack (best-effort) pour boucler côté Quentin.
   const who = p.copro.gestionnaireNom || "Le gestionnaire";
