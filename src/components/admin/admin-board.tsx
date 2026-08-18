@@ -58,6 +58,8 @@ interface AdminBoardProps {
   odrByInsurer: { key: string; label: string; count: number; montant: number; arr: number; stages: { label: string; count: number; montant: number; arr: number; color: string }[] }[];
   // Devis reçus = dossiers avec au moins 1 devis reçu (+ détail par assureur).
   devisRecus: { total: number; axa: number; mila: number };
+  // Auto 6 : comparaisons effectuées + transmissions aux gestionnaires.
+  devis6: { faites: number; transmis: number };
   // Flux RS par jour (demandes envoyées vs RS reçus) pour le graphe du bas.
   rsFlow: { date: string; label: string; sent: number; relances: number; recus: number }[];
   // Flux devis par jour (demandes vs devis reçus) + totaux pour le taux de réception.
@@ -157,7 +159,7 @@ function PartTitle({ n, title, first }: { n: number; title: string; first?: bool
   );
 }
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRelances, rsRecus, contratsRecus, devisMailsEnvoyes, devisAReclamer, odrByInsurer, devisRecus, rsFlow, devisFlow, excludedCount }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRelances, rsRecus, contratsRecus, devisMailsEnvoyes, devisAReclamer, odrByInsurer, devisRecus, devis6, rsFlow, devisFlow, excludedCount }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
@@ -711,6 +713,10 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                       <div>
                         <div style={{ fontSize: 15, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisFlow.recusTotal}</div>
                         <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>devis reçus</div>
+                        <div style={{ marginTop: 4, fontSize: 10, color: "#A2A1AF", display: "flex", gap: 8 }}>
+                          <span><strong style={{ color: "#0A6BB8" }}>{devisRecus.axa}</strong> AXA</span>
+                          <span><strong style={{ color: "#8A4FC7" }}>{devisRecus.mila}</strong> Mila</span>
+                        </div>
                       </div>
                       <div>
                         <div style={{ fontSize: 15, fontWeight: 700, color: "#656576", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisMailsEnvoyes}</div>
@@ -725,12 +731,14 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                 )}
 
                 {st.key === "devis_recus" && (
-                  <div style={{ marginTop: 9, paddingTop: 9, borderTop: "1px dashed #E8E8EC" }}>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisRecus.total}</div>
-                    <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>devis reçus</div>
-                    <div style={{ marginTop: 6, fontSize: 10.5, color: "#656576", display: "flex", gap: 12 }}>
-                      <span><strong style={{ color: "#0A6BB8" }}>{devisRecus.axa}</strong> AXA</span>
-                      <span><strong style={{ color: "#8A4FC7" }}>{devisRecus.mila}</strong> Mila</span>
+                  <div style={{ marginTop: 9, paddingTop: 9, borderTop: "1px dashed #E8E8EC", display: "flex", gap: 24, alignItems: "baseline", flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devis6.faites}</div>
+                      <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>comparaisons effectuées</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devis6.transmis}</div>
+                      <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>transmissions aux gestionnaires</div>
                     </div>
                   </div>
                 )}
