@@ -98,19 +98,27 @@ export function Devis6Controls({ table }: { table: Table }) {
   // Prix actuel = MÊME règle que la fiche : resolvePrimeReference(contrat, dernière
   // prime payée) → garde le + haut dans la bande de cohérence, bloque les écarts
   // anormaux. Tag : C = prime du contrat, DP = dernière prime payée.
-  const prixCell = (r: Row) => {
-    const st = prix[r.pipelineId];
-    const last = st?.done ? st.montant : null;
-    const res = resolvePrimeReference(r.contratPrime, last);
+  type Res = ReturnType<typeof resolvePrimeReference>;
+  const prixInner = (res: Res, loading: boolean) => {
     if (res.flag === "bloque")
       return <span title={`Écart anormal (contrat ${fmtE(res.contrat)} vs dernière prime payée ${fmtE(res.primePayee)}) — à vérifier sur la fiche`} style={{ color: "#CA1E12", fontWeight: 700 }}>{fmtE(res.contrat)} ⚠</span>;
     if (res.value == null)
-      return st?.loading ? <Loader2 size={13} className="animate-spin" style={{ color: "#A2A1AF" }} /> : <span style={{ color: "#A2A1AF" }}>—</span>;
+      return loading ? <Loader2 size={13} className="animate-spin" style={{ color: "#A2A1AF" }} /> : <span style={{ color: "#A2A1AF" }}>—</span>;
     return (
       <span style={{ display: "inline-flex", alignItems: "center", gap: 4, justifyContent: "flex-end" }}>
-        {st?.loading && <Loader2 size={11} className="animate-spin" style={{ color: "#C9C8D3" }} />}
+        {loading && <Loader2 size={11} className="animate-spin" style={{ color: "#C9C8D3" }} />}
         <strong style={{ color: "#26262C" }}>{fmtE(res.value)}</strong>
         <sup title={res.source === "prime" ? "dernière prime payée" : "prime du contrat"} style={{ fontSize: 9, color: "#A2A1AF", fontWeight: 700 }}>{res.source === "prime" ? "DP" : "C"}</sup>
+      </span>
+    );
+  };
+  // Cellule devis : prix en haut, nom de l'assureur juste en dessous.
+  const devisCell = (d: Devis | null) => {
+    if (!d) return <span style={{ color: "#A2A1AF" }}>—</span>;
+    return (
+      <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", lineHeight: 1.2 }}>
+        <strong style={{ color: "#26262C" }}>{fmtE(d.prime)}</strong>
+        <span style={{ fontSize: 10, color: "#A2A1AF", fontWeight: 600 }}>{d.assureur}</span>
       </span>
     );
   };
@@ -152,8 +160,20 @@ export function Devis6Controls({ table }: { table: Table }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.pipelineId} style={{ background: r.comparaisonFaite ? "#F7FBF8" : undefined }}>
+            {rows.map((r) => {
+              const st = prix[r.pipelineId];
+              const res = resolvePrimeReference(r.contratPrime, st?.done ? st.montant : null);
+              const prixVal = res.flag === "bloque" ? res.contrat : res.value;
+              // Case la moins chère (Prix actuel / devis 1 / devis 2) → fond vert.
+              const nums: [string, number][] = [];
+              if (typeof prixVal === "number") nums.push(["actuel", prixVal]);
+              if (typeof r.devis1?.prime === "number") nums.push(["d1", r.devis1.prime]);
+              if (typeof r.devis2?.prime === "number") nums.push(["d2", r.devis2.prime]);
+              const minKey = nums.length ? nums.reduce((a, b) => (b[1] < a[1] ? b : a))[0] : null;
+              const GREEN = "#E7F7EC";
+              const priceTd = (k: string): React.CSSProperties => ({ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", background: minKey === k ? GREEN : undefined });
+              return (
+              <tr key={r.pipelineId}>
                 <td style={td}>
                   <a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
                     {r.adresse || r.nom} <ExternalLink size={11} style={{ opacity: 0.6 }} />
@@ -164,9 +184,9 @@ export function Devis6Controls({ table }: { table: Table }) {
                     ? <span style={{ fontSize: 11, fontWeight: 800, color: "#13762C", background: "#EAF7EE", border: "1px solid #B7E4C4", borderRadius: 999, padding: "2px 9px" }}>OUI</span>
                     : <span style={{ fontSize: 11, fontWeight: 800, color: "#B4690E", background: "#FDF0D5", border: "1px solid #F3D9A6", borderRadius: 999, padding: "2px 9px" }}>NON</span>}
                 </td>
-                <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{prixCell(r)}</td>
-                <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.devis1 ? <span title={r.devis1.assureur}><span style={{ color: "#A2A1AF", fontSize: 10.5 }}>{r.devis1.assureur.split(" ")[0]}</span> {fmtE(r.devis1.prime)}</span> : <span style={{ color: "#A2A1AF" }}>—</span>}</td>
-                <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.devis2 ? <span title={r.devis2.assureur}><span style={{ color: "#A2A1AF", fontSize: 10.5 }}>{r.devis2.assureur.split(" ")[0]}</span> {fmtE(r.devis2.prime)}</span> : <span style={{ color: "#A2A1AF" }}>—</span>}</td>
+                <td style={priceTd("actuel")}>{prixInner(res, !!st?.loading)}</td>
+                <td style={priceTd("d1")}>{devisCell(r.devis1)}</td>
+                <td style={priceTd("d2")}>{devisCell(r.devis2)}</td>
                 <td style={{ ...td, textAlign: "center" }}>
                   <button onClick={() => generer(r.pipelineId)} disabled={generating === r.pipelineId}
                     style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700, color: "#fff", background: generating === r.pipelineId ? "#8784FD" : "#4E49FC", border: "none", borderRadius: 8, padding: "6px 10px", cursor: generating === r.pipelineId ? "default" : "pointer", whiteSpace: "nowrap" }}>
@@ -177,7 +197,8 @@ export function Devis6Controls({ table }: { table: Table }) {
                 <td style={{ ...td, textAlign: "center" }}><button disabled title="À mettre en place — enverra la proposition au gestionnaire pour validation" style={laterBtn}>Envoyer <span style={{ opacity: 0.7 }}>(à venir)</span></button></td>
                 <td style={{ ...td, textAlign: "center" }}>{(() => { const s = STATUT[r.statut]; return <span title="Réponse du gestionnaire (détecteur à venir)" style={{ fontSize: 11, fontWeight: 700, color: s.color, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 999, padding: "2px 10px", whiteSpace: "nowrap" }}>{s.label}</span>; })()}</td>
               </tr>
-            ))}
+              );
+            })}
             {rows.length === 0 && <tr><td colSpan={9} style={{ ...td, textAlign: "center", color: "#A2A1AF" }}>Aucun dossier ne correspond.</td></tr>}
           </tbody>
         </table>
