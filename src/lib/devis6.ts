@@ -75,6 +75,7 @@ export type Devis6TableRow = {
   pipelineId: string; nom: string; adresse: string | null;
   gestionnaire: string | null; gestionnaireEmail: string | null;
   comparaisonFaite: boolean; statut: Devis6Statut; statutComment: string | null;
+  envoyeLe: string | null; // date du dernier envoi au gestionnaire (Slack), sinon null
   // Prime du contrat (extraite du contrat MRI, sinon primeActuelle). Sert de base
   // AVEC la dernière prime payée (récupérée côté client) via resolvePrimeReference
   // — MÊME règle que la fiche dossier (garde le + haut dans la bande de cohérence).
@@ -97,16 +98,21 @@ export async function getDevis6TableData(): Promise<Devis6Table> {
       id: true, contratActuelData: true,
       copro: { select: { nom: true, adresse: true, primeActuelle: true, gestionnaireNom: true, gestionnaireEmail: true } },
       devisRecus: { orderBy: { createdAt: "asc" }, select: { assureur: true, primeTTC: true, data: true } },
-      // Dernière réponse du gestionnaire (page de validation) → colonne Statut.
-      events: { where: { metadata: { path: ["auto"], equals: "devis6_gestio_response" } }, orderBy: { createdAt: "desc" }, take: 1, select: { metadata: true } },
+      // Réponse gestionnaire (→ Statut) + dernier envoi Slack (→ état « Envoyé »).
+      events: { where: { OR: [
+        { metadata: { path: ["auto"], equals: "devis6_gestio_response" } },
+        { metadata: { path: ["auto"], equals: "devis6_notify_gestionnaire" } },
+      ] }, orderBy: { createdAt: "desc" }, select: { metadata: true, createdAt: true } },
     },
     orderBy: { copro: { dateEcheance: "asc" } },
   });
+  const autoOf = (m: unknown): string | undefined => (m as { auto?: string } | null)?.auto;
   const rows: Devis6TableRow[] = ps.map((p) => {
     const dv = p.devisRecus;
     const toDevis = (d: { assureur: string; primeTTC: number } | undefined): Devis6Devis | null =>
       d ? { assureur: d.assureur, prime: d.primeTTC ?? null } : null;
-    const resp = (p.events[0]?.metadata ?? null) as { reponse?: string; comment?: string } | null;
+    const resp = (p.events.find((e) => autoOf(e.metadata) === "devis6_gestio_response")?.metadata ?? null) as { reponse?: string; comment?: string } | null;
+    const notif = p.events.find((e) => autoOf(e.metadata) === "devis6_notify_gestionnaire");
     const statut: Devis6Statut = resp?.reponse === "valide" ? "valide" : resp?.reponse === "refus" ? "refus" : "attente";
     return {
       pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse,
@@ -115,6 +121,7 @@ export async function getDevis6TableData(): Promise<Devis6Table> {
       // Comparaison faite = une extraction Claude structurée existe (≥ 1 devis avec data).
       comparaisonFaite: dv.some((d) => !!(d.data && d.data.trim())),
       statut, statutComment: resp?.comment ?? null,
+      envoyeLe: notif?.createdAt?.toISOString() ?? null,
       contratPrime: parseContratPrime(p.contratActuelData) ?? p.copro.primeActuelle,
       devis1: toDevis(dv[0]), devis2: toDevis(dv[1]),
     };

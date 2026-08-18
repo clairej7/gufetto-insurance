@@ -16,7 +16,7 @@ type Statut = "attente" | "valide" | "refus" | "autre";
 type Row = {
   pipelineId: string; nom: string; adresse: string | null;
   gestionnaire: string | null; gestionnaireEmail: string | null;
-  comparaisonFaite: boolean; statut: Statut; statutComment: string | null; contratPrime: number | null;
+  comparaisonFaite: boolean; statut: Statut; statutComment: string | null; envoyeLe: string | null; contratPrime: number | null;
   devis1: Devis | null; devis2: Devis | null;
 };
 type Table = { total: number; faites: number; rows: Row[]; gestionnaires: string[] };
@@ -211,13 +211,20 @@ export function Devis6Controls({ table }: { table: Table }) {
                 </td>
                 <td style={{ ...td, color: "#656576", whiteSpace: "nowrap" }}>{r.gestionnaire || "—"}</td>
                 <td style={{ ...td, textAlign: "center" }}>
-                  <button onClick={() => envoyer(r.pipelineId)} disabled={!r.comparaisonFaite || envoi === r.pipelineId}
-                    title={r.comparaisonFaite ? "Poster le message des nouveaux devis dans le canal Slack" : "Génère d'abord la comparaison"}
-                    style={r.comparaisonFaite
-                      ? { display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700, color: "#fff", background: envoi === r.pipelineId ? "#7DA6C9" : "#0A6BB8", border: "none", borderRadius: 8, padding: "6px 10px", cursor: envoi === r.pipelineId ? "default" : "pointer", whiteSpace: "nowrap" }
-                      : laterBtn}>
-                    {envoi === r.pipelineId ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Envoyer
-                  </button>
+                  {r.envoyeLe ? (
+                    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: "#13762C", background: "#EAF7EE", border: "1px solid #B7E4C4", borderRadius: 999, padding: "3px 11px", whiteSpace: "nowrap" }}>✓ Envoyé</span>
+                      <span style={{ fontSize: 9.5, color: "#A2A1AF" }}>{new Date(r.envoyeLe).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" })}</span>
+                    </div>
+                  ) : (
+                    <button onClick={() => envoyer(r.pipelineId)} disabled={!r.comparaisonFaite || envoi === r.pipelineId}
+                      title={r.comparaisonFaite ? "Poster le message des nouveaux devis dans le canal Slack" : "Génère d'abord la comparaison"}
+                      style={r.comparaisonFaite
+                        ? { display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700, color: "#fff", background: envoi === r.pipelineId ? "#7DA6C9" : "#0A6BB8", border: "none", borderRadius: 8, padding: "6px 10px", cursor: envoi === r.pipelineId ? "default" : "pointer", whiteSpace: "nowrap" }
+                        : laterBtn}>
+                      {envoi === r.pipelineId ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Envoyer
+                    </button>
+                  )}
                 </td>
                 <td style={{ ...td, textAlign: "center" }}>{(() => { const s = STATUT[r.statut]; return <span title={r.statutComment ? `💬 ${r.statutComment}` : "Réponse du gestionnaire"} style={{ fontSize: 11, fontWeight: 700, color: s.color, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 999, padding: "2px 10px", whiteSpace: "nowrap", cursor: r.statutComment ? "help" : "default" }}>{s.label}{r.statutComment ? " 💬" : ""}</span>; })()}</td>
               </tr>
