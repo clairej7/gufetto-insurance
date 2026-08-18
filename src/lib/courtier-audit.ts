@@ -278,6 +278,24 @@ function nameMatchesDomain(nameTokens: string[], domain: string): boolean {
 //  - courtier hors base : si le NOM matche un domaine → ne garder que ce domaine
 //    (ex. Top Bridging → topbridging.com) ; sinon si plusieurs cabinets distincts
 //    (≥2 domaines non génériques, aucun ne matchant le nom) → hold (ambigu).
+// CC systématiques par domaine de courtier : contacts additionnels que le cabinet
+// nous a explicitement demandé de mettre en copie sur toute demande/relance.
+// (ex. Filhet Allard : Camille Protiere, gestionnaire en charge de nos dossiers.)
+const COURTIER_ALWAYS_CC: Record<string, string[]> = {
+  "filhetallard.com": ["cprotiere@filhetallard.com"],
+};
+// Ajoute les CC systématiques dès qu'un destinataire est au domaine concerné.
+// Exempté du plafond de 2 (on GARDE le contact d'origine ET on ajoute le CC).
+function applyAlwaysCc(mails: string[]): string[] {
+  const out = [...mails];
+  for (const m of mails) {
+    const extras = COURTIER_ALWAYS_CC[domainOf(m.toLowerCase())];
+    if (!extras) continue;
+    for (const cc of extras) if (!out.some((x) => x.toLowerCase() === cc.toLowerCase())) out.push(cc);
+  }
+  return out;
+}
+
 export type SendMailPlan = { mails: string[]; hold: boolean; reason: string };
 export function prepareSendMails(courtierName: string | null, mailField: string | null, idx: CourtierIndex, assureur?: string | null): SendMailPlan {
   // GARDE-FOU assureur : Wakam / « Matera Assurance(s) » = on était l'assureur →
@@ -304,7 +322,8 @@ export function prepareSendMails(courtierName: string | null, mailField: string 
   const nonPerso = mails.filter((m) => !GENERIC_DOM.has(dom(m)));
   if (nonPerso.length && nonPerso.length < mails.length) mails = nonPerso;
   // Plafond : on n'envoie jamais à plus de 2 contacts d'un même cabinet (3+ = trop).
-  const cap = (m: string[]) => m.slice(0, 2);
+  // Puis on ajoute les CC systématiques du cabinet (hors plafond, cf. Filhet Allard).
+  const cap = (m: string[]) => applyAlwaysCc(m.slice(0, 2));
   const res = resolveCourtier(courtierName, idx);
   const ref = res.kind === "courtier" ? res.ref : null;
 
