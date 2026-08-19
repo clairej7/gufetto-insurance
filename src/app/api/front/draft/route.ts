@@ -57,7 +57,11 @@ export async function POST(req: NextRequest) {
   // Création du brouillon en multipart pour supporter les PJ
   const draftForm = new FormData();
   draftForm.append("author_id", `alt:email:${authorEmail}`);
-  draftForm.append("to[]", to);
+  // Un destinataire par entrée « to[] » : on découpe sur virgule / point-virgule
+  // (le champ « Destinataires » peut contenir plusieurs membres du CS). Une seule
+  // adresse → comportement inchangé.
+  const recipients = to.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
+  for (const addr of recipients.length ? recipients : [to]) draftForm.append("to[]", addr);
   draftForm.append("subject", subject);
   draftForm.append("body", htmlBody);
   draftForm.append("type", "email");
