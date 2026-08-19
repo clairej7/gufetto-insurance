@@ -54,12 +54,6 @@ type CoproInput = {
   gestionnaireNom?: string | null;
 };
 
-function formatGestionnaireNom(email: string | null | undefined): string {
-  if (!email) return "L'équipe Matera";
-  const local = email.split("@")[0]; // "claire.jaquemet"
-  return local.split(".").map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" "); // "Claire Jaquemet"
-}
-
 function formatPrime(val: number | null | undefined): string {
   if (val == null) return "N/A";
   return val.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
@@ -106,7 +100,6 @@ function buildPrompt(
   // contrat pour ne pas casser la génération de l'email.
   const primeRef = resolvePrimeReference(contratActuel.primeTTC ?? copro.primeActuelle, copro.primePayee);
   const basePrime = primeRef.value ?? contratActuel.primeTTC ?? copro.primeActuelle;
-  const gestionnaireNom = copro.gestionnaireNom?.trim() || formatGestionnaireNom(copro.gestionnaireEmail);
 
   const lines: string[] = [
     "Tu es conseiller expert en assurance multirisque immeuble (MRI) pour Matera, un syndic professionnel français qui propose son propre service de courtage.",
@@ -201,19 +194,28 @@ function buildPrompt(
 
   lines.push(
     "",
-    "=== INSTRUCTIONS ===",
-    `- Commence l'email par "Bonjour${copro.contactCsNom ? ` ${copro.contactCsNom}` : ""}," sur la première ligne`,
-    "- Structure : courte intro sur la démarche → résultats comparatifs en prose → recommandation argumentée → prochaines étapes",
-    "- Base ton argumentation sur les données réelles ci-dessus (prix, franchises, garanties)",
-    "- Termine le corps, juste avant la formule de politesse, par exactement cette phrase : \"Dans l'attente de votre retour afin de vous assurer dans les meilleures conditions le plus rapidement possible,\"",
-    "- Sois professionnel, direct et commercial (250-350 mots maximum)",
-    `- Termine par :\n  "Cordialement,\n  ${gestionnaireNom}\n  Matera"`,
-    "- Ne mets pas d'objet, uniquement le corps du mail",
-    "- Utilise des sauts de ligne pour aérer le texte",
-    "- Pour mettre en gras un mot ou chiffre important, utilise **texte** — ces balises seront converties automatiquement en HTML",
-    "- N'utilise JAMAIS les tirets longs (—) : remplace-les par une virgule, deux-points, ou un point",
-    "- Mets toujours le symbole € APRÈS les chiffres : écris '3 979 €' et jamais '€3 979'",
-    "- IMPORTANT : termine l'email EXACTEMENT après la signature, sans rien ajouter après (pas de note, pas de remarque, pas d'astérisque, pas de commentaire)"
+    "=== FORMAT DE SORTIE (à respecter À LA LETTRE) ===",
+    "Rédige UNIQUEMENT le corps du mail, en suivant EXACTEMENT ce gabarit. Ne modifie AUCUNE phrase fixe : tu remplis seulement le contenu entre chevrons <…> du paragraphe « Notre recommandation ».",
+    "",
+    "Bonjour,",
+    "",
+    "Dans le cadre du renouvellement de l'assurance de votre copropriété, nous avons sollicité le marché et analysé les offres par rapport à votre contrat actuel.",
+    "",
+    `Notre recommandation : **${recommandeAssureur ?? devis[0]?.assureur ?? "l'offre retenue"}**. <2 à 3 phrases concrètes et chiffrées, basées sur les données ci-dessus : économie ou surcoût vs prime de référence (${formatPrime(basePrime)}), garanties/franchises/plafonds clés qui distinguent cette offre. Mentionne brièvement l'autre devis reçu s'il y en a un.>`,
+    "",
+    "Vous trouverez le devis correspondant en pièce jointe.",
+    "",
+    "Pour retenir cette offre, il vous suffit de nous retourner le devis ci-joint signé — la signature d'un membre du conseil syndical, pour le compte du CS, suffit. Nous nous chargeons ensuite de toutes les démarches de mise en place auprès de l'assureur.",
+    "",
+    "Dans l'attente de votre retour afin de vous assurer dans les meilleures conditions le plus rapidement possible,",
+    "",
+    "Cordialement,",
+    "",
+    "=== RÈGLES ===",
+    "- Ne remplis QUE le paragraphe « Notre recommandation » (le contenu entre <…>). Garde toutes les autres phrases identiques, mot pour mot, y compris les sauts de ligne entre paragraphes.",
+    "- Paragraphe recommandation : 2 à 3 phrases maximum, concret et chiffré, uniquement à partir des données réelles ci-dessus.",
+    "- Pour mettre un mot ou un chiffre en gras : **texte**. Mets le symbole € APRÈS les chiffres (« 3 979 € », jamais « €3 979 »).",
+    "- Termine EXACTEMENT par « Cordialement, » : n'ajoute NI nom, NI « Matera », NI aucune note/commentaire après (la signature est ajoutée automatiquement)."
   );
 
   return lines.join("\n");
