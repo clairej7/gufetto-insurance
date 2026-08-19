@@ -10,6 +10,7 @@ import { FileText, FileSpreadsheet, Send, ChevronDown, AlertTriangle, ShieldChec
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
+type OdrDossierLite = { pipelineId: string; nom: string; adresse: string | null; numeroContrat: string | null };
 export type OdrPartnerSummary = {
   key: "AXA" | "GENERALI" | "SADA" | "MILA";
   label: string;
@@ -17,6 +18,8 @@ export type OdrPartnerSummary = {
   missing: number;
   flagged: number;
   flaggedReady: number;
+  missingList: OdrDossierLite[];
+  flaggedList: OdrDossierLite[];
 };
 type SentRow = { adresse: string; numeroContrat: string };
 type HistoryRow = { date: string; partner: string; label: string; count: number; montant: number; arr: number; to: string | null; source: "app" | "doc" };
@@ -35,6 +38,8 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
   );
   const [includeFlagged, setIncludeFlagged] = useState(true);
   const [sending, setSending] = useState(false);
+  // Menu déroulant « sans n° » / « flaggés » (liste des dossiers concernés).
+  const [openList, setOpenList] = useState<"missing" | "flagged" | null>(null);
 
   const [dedup, setDedup] = useState<DedupState>("idle");
   const [dups, setDups] = useState<Dup[]>([]);
@@ -210,9 +215,19 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
         <span style={{ fontSize: 13, color: "#4E4E58", flex: 1, minWidth: 200 }}>
           <strong style={{ color: "#13762C" }}>{p.ready}</strong> prêt{p.ready > 1 ? "s" : ""}
           {" · "}
-          <span style={{ color: p.missing ? "#955804" : "#A2A1AF" }}>{p.missing} sans n°</span>
+          {p.missing > 0 ? (
+            <button type="button" onClick={() => setOpenList((v) => (v === "missing" ? null : "missing"))}
+              style={{ background: "none", border: "none", padding: 0, font: "inherit", cursor: "pointer", color: "#955804", textDecoration: "underline" }}>
+              {p.missing} sans n° {openList === "missing" ? "▾" : "▸"}
+            </button>
+          ) : <span style={{ color: "#A2A1AF" }}>0 sans n°</span>}
           {" · "}
-          <span style={{ color: p.flagged ? "#CA1E12" : "#A2A1AF" }}>{p.flagged} flaggé{p.flagged > 1 ? "s" : ""}</span>
+          {p.flagged > 0 ? (
+            <button type="button" onClick={() => setOpenList((v) => (v === "flagged" ? null : "flagged"))}
+              style={{ background: "none", border: "none", padding: 0, font: "inherit", cursor: "pointer", color: "#CA1E12", textDecoration: "underline" }}>
+              {p.flagged} flaggé{p.flagged > 1 ? "s" : ""} {openList === "flagged" ? "▾" : "▸"}
+            </button>
+          ) : <span style={{ color: "#A2A1AF" }}>0 flaggé</span>}
           {" · "}
           <span style={{ color: "#A2A1AF" }}>{sentCount} déjà envoyés</span>
         </span>
@@ -222,13 +237,6 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
               <FileSpreadsheet className="h-3.5 w-3.5" /> CSV
             </Button>
           </a>
-          {p.missing > 0 && (
-            <a href={`/api/odr/export?partner=${p.key}&kind=missing`} style={{ textDecoration: "none" }}>
-              <Button variant="outline" size="sm" className="gap-1.5" style={{ color: "#955804", borderColor: "#F5D9A8" }}>
-                <AlertTriangle className="h-3.5 w-3.5" /> Sans n°
-              </Button>
-            </a>
-          )}
           {/* 1) Vérifier les dossiers (re-lecture Front + cohérence) — bleu */}
           <Button size="sm" className="gap-1.5" disabled={noReady || coh === "checking" || sending} onClick={verifyDossiers}
             style={{ ...BLUE, boxShadow: coh === "ok" ? "inset 0 0 0 2px #16A34A" : undefined }}>
@@ -250,6 +258,34 @@ function PartnerRow({ p, sentCount }: { p: OdrPartnerSummary; sentCount: number 
           </Button>
         </div>
       </div>
+
+      {/* Menu déroulant : dossiers « sans n° » ou « flaggés » (lien fiche par dossier) */}
+      {openList && (() => {
+        const list = openList === "missing" ? p.missingList : p.flaggedList;
+        const accent = openList === "missing" ? "#955804" : "#CA1E12";
+        return (
+          <div style={{ marginTop: 10, border: "1px solid #E8E8EC", borderRadius: 8, background: "#FAFAFC", padding: "8px 12px" }}>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: accent, marginBottom: 6 }}>
+              {openList === "missing"
+                ? `${list.length} dossier${list.length > 1 ? "s" : ""} en ODR sans n° de contrat — à compléter avant envoi`
+                : `${list.length} dossier${list.length > 1 ? "s" : ""} flaggé${list.length > 1 ? "s" : ""} (possible faux ODR / probable Wakam) — revue manuelle`}
+            </div>
+            {list.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: "#A2A1AF" }}>Aucun dossier.</div>
+            ) : (
+              <div style={{ maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
+                {list.map((d) => (
+                  <div key={d.pipelineId} style={{ fontSize: 12.5, color: "#4E4E58", padding: "2px 0" }}>
+                    <a href={`/pipeline/${d.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "underline" }}>{d.nom}</a>
+                    {d.adresse && <span style={{ marginLeft: 6, color: "#8A8A99" }}>{d.adresse}</span>}
+                    {d.numeroContrat && <span style={{ marginLeft: 6, fontSize: 11, color: "#A2A1AF", fontFamily: "ui-monospace, Menlo, monospace" }}>n° {d.numeroContrat}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Barre de progression pendant les vérifications */}
       {coh === "checking" && (
