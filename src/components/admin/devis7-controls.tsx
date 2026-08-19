@@ -185,7 +185,7 @@ type PreviewData = {
   contratActuel: Record<string, unknown>;
   devis: { assureur: string; primeTTC: number; data: Record<string, unknown> }[];
   recommandeAssureur: string | null;
-  csEmails: string; recoPdfPath: string | null; recoPdfName: string | null; subject: string;
+  csEmails: string; pack: { storagePath: string; name: string }[]; subject: string;
 };
 
 function PreviewModal({ row, onClose, onSent }: { row: Row; onClose: () => void; onSent: () => void }) {
@@ -197,16 +197,15 @@ function PreviewModal({ row, onClose, onSent }: { row: Row; onClose: () => void;
   const [subject, setSubject] = useState("");
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
-  const [openingPdf, setOpeningPdf] = useState(false);
+  const [openingPdf, setOpeningPdf] = useState<string | null>(null);
 
-  async function apercu() {
-    if (!data?.recoPdfPath) return;
-    setOpeningPdf(true);
+  async function apercu(storagePath: string) {
+    setOpeningPdf(storagePath);
     try {
-      const url = await getPdfSignedUrl(data.recoPdfPath);
+      const url = await getPdfSignedUrl(storagePath);
       if (url) window.open(url, "_blank"); else toast.error("PDF indisponible");
     } catch { toast.error("PDF indisponible"); }
-    setOpeningPdf(false);
+    setOpeningPdf(null);
   }
 
   const generate = useCallback(async (d: PreviewData) => {
@@ -245,8 +244,9 @@ function PreviewModal({ row, onClose, onSent }: { row: Row; onClose: () => void;
 
   async function send() {
     if (!to.trim() || !body.trim()) { toast.error("Destinataire et corps requis"); return; }
-    if (!data?.recoPdfPath) { toast.error("Aucun devis PDF — envoi bloqué"); return; }
-    if (!confirm(`Envoyer la proposition au conseil syndical ?\n\nÀ : ${to}`)) return;
+    const pack = data?.pack ?? [];
+    if (!pack.length) { toast.error("Aucune pièce jointe — envoi bloqué"); return; }
+    if (!confirm(`Envoyer la proposition au conseil syndical ?\n\nÀ : ${to}\nPièces jointes : ${pack.length}`)) return;
     setSending(true);
     try {
       const fd = new FormData();
@@ -254,12 +254,15 @@ function PreviewModal({ row, onClose, onSent }: { row: Row; onClose: () => void;
       fd.append("subject", subject);
       fd.append("body", body);
       fd.append("refTag", `${row.pipelineId}:reco_cs`);
-      if (data?.recoPdfPath) {
+      // Joint tout le pack : le 1er en « devis », les suivants en « extra[] ».
+      let attached = 0;
+      for (let i = 0; i < pack.length; i++) {
         try {
-          const fr = await fetch(`/api/storage/download?path=${encodeURIComponent(data.recoPdfPath)}`);
-          if (fr.ok) fd.append("devis", await fr.blob(), data.recoPdfName || "devis.pdf");
+          const fr = await fetch(`/api/storage/download?path=${encodeURIComponent(pack[i].storagePath)}`);
+          if (fr.ok) { fd.append(i === 0 ? "devis" : "extra", await fr.blob(), `${pack[i].name}.pdf`); attached++; }
         } catch { /* PJ best-effort */ }
       }
+      if (!attached) { toast.error("Échec du chargement des pièces jointes — envoi annulé"); setSending(false); return; }
       const res = await fetch("/api/front/draft", { method: "POST", body: fd });
       const j = (await res.json()) as { success?: boolean; fallback?: boolean; mailtoUrl?: string; error?: string };
       if (!j.success) throw new Error(j.error ?? "Échec de l'envoi");
@@ -315,25 +318,27 @@ function PreviewModal({ row, onClose, onSent }: { row: Row; onClose: () => void;
               </div>
             </div>
 
-            {/* Pièce jointe : le devis recommandé. Envoi bloqué s'il n'y a pas de PDF. */}
-            {data?.recoPdfPath ? (
-              <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", border: "1px solid #D9D9F5", background: "#F5F5FF", borderRadius: 10 }}>
-                <Paperclip size={14} style={{ color: "#4E49FC", flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "#26262C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{data.recoPdfName || "devis.pdf"}</div>
-                  <div style={{ fontSize: 10.5, color: "#A2A1AF" }}>Devis {data.recommandeAssureur ?? "recommandé"} — joint au mail</div>
-                </div>
-                <button onClick={apercu} disabled={openingPdf} style={{ fontSize: 11.5, fontWeight: 600, color: "#4E49FC", background: "#fff", border: "1px solid #D9D9F5", borderRadius: 8, padding: "5px 10px", cursor: "pointer", whiteSpace: "nowrap" }}>{openingPdf ? "Ouverture…" : "Aperçu"}</button>
+            {/* Pièces jointes : le pack selon l'assureur reco. Envoi bloqué si vide. */}
+            {(data?.pack?.length ?? 0) > 0 ? (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#656576" }}>Pièces jointes ({data!.pack.length}) — {data?.recommandeAssureur ?? "assureur recommandé"}</div>
+                {data!.pack.map((pj) => (
+                  <div key={pj.storagePath} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", border: "1px solid #D9D9F5", background: "#F5F5FF", borderRadius: 10 }}>
+                    <Paperclip size={14} style={{ color: "#4E49FC", flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: "#26262C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={pj.name}>{pj.name}</div>
+                    <button onClick={() => apercu(pj.storagePath)} disabled={!!openingPdf} style={{ fontSize: 11.5, fontWeight: 600, color: "#4E49FC", background: "#fff", border: "1px solid #D9D9F5", borderRadius: 8, padding: "5px 10px", cursor: "pointer", whiteSpace: "nowrap" }}>{openingPdf === pj.storagePath ? "Ouverture…" : "Aperçu"}</button>
+                  </div>
+                ))}
               </div>
             ) : (
               <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", border: "1px solid #F4C9CF", background: "#FDEEF0", borderRadius: 10, fontSize: 12, color: "#B4243A" }}>
-                <AlertTriangle size={14} style={{ flexShrink: 0 }} /> Aucun devis PDF stocké pour ce dossier — l&apos;envoi au CS est bloqué (le devis doit être joint).
+                <AlertTriangle size={14} style={{ flexShrink: 0 }} /> Aucune pièce jointe stockée pour ce dossier — l&apos;envoi au CS est bloqué (le devis doit être joint).
               </div>
             )}
 
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <button onClick={onClose} style={{ fontSize: 12.5, fontWeight: 600, color: "#656576", background: "#F4F4F7", border: "1px solid #E8E8EC", borderRadius: 8, padding: "9px 14px", cursor: "pointer" }}>Annuler</button>
-              <button onClick={send} disabled={sending || generating || !to.trim() || !body.trim() || !data?.recoPdfPath} style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "#fff", background: "#4E49FC", border: "none", borderRadius: 8, padding: "9px 14px", cursor: sending ? "wait" : "pointer", opacity: sending || generating || !to.trim() || !body.trim() || !data?.recoPdfPath ? 0.6 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <button onClick={send} disabled={sending || generating || !to.trim() || !body.trim() || !(data?.pack?.length)} style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "#fff", background: "#4E49FC", border: "none", borderRadius: 8, padding: "9px 14px", cursor: sending ? "wait" : "pointer", opacity: sending || generating || !to.trim() || !body.trim() || !(data?.pack?.length) ? 0.6 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                 {sending ? <><Loader2 size={14} className="animate-spin" /> Envoi…</> : <><Mail size={14} /> Envoyer au CS</>}
               </button>
             </div>
