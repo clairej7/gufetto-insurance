@@ -69,6 +69,9 @@ export default async function AutomatisationsPage() {
     missing: b.missingNum.length,
     flagged: b.flagged.length,
     flaggedReady: b.flagged.filter((d) => d.numeroContrat).length,
+    // Listes détaillées pour les menus déroulants cliquables (lien fiche par dossier).
+    missingList: b.missingNum.map((d) => ({ pipelineId: d.pipelineId, nom: d.nom, adresse: d.adresse, numeroContrat: d.numeroContrat })),
+    flaggedList: b.flagged.map((d) => ({ pipelineId: d.pipelineId, nom: d.nom, adresse: d.adresse, numeroContrat: d.numeroContrat })),
   }));
   // Ensemble « déjà envoyées » par assureur (docs fournis + base) pour les tables.
   const odrSent: Record<string, { adresse: string; numeroContrat: string }[]> = {};
