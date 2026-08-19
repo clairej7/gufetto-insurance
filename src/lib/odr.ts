@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { matchPartner, extractInsuranceInfoFromFront } from "@/lib/front-insurance";
 import { ODR_SENT_DOCS, OdrSentRecord } from "@/lib/odr-sent-data";
 import { getExcludedCoproIds } from "@/lib/exclusions";
-import { categoriseDossier } from "@/lib/pipeline";
+import { categoriseDossier, isCloturePourClient } from "@/lib/pipeline";
 import { ODR_MANUAL_SENDS_DOCS } from "@/lib/odr-manual-sends-data";
 
 export const ODR_PARTNERS = [
@@ -64,7 +64,7 @@ export async function getOdrByPartner(): Promise<OdrPartnerBucket[]> {
     select: {
       id: true,
       odrPartenaire: true,
-      copro: { select: { nom: true, adresse: true, numeroContrat: true, assureurActuel: true } },
+      copro: { select: { nom: true, adresse: true, numeroContrat: true, assureurActuel: true, clientMriStatut: true } },
       events: { where: { type: "note_ajoutee" }, select: { description: true } },
     },
     orderBy: { copro: { nom: "asc" } },
@@ -76,6 +76,9 @@ export async function getOdrByPartner(): Promise<OdrPartnerBucket[]> {
   for (const r of rows) {
     const key = normPartner(r.odrPartenaire, r.copro.assureurActuel);
     if (!key) continue; // non-partenaire : ne devrait plus être en odr_en_cours
+    // Déjà cliente MRI (hors Wakam) → clos, on est déjà courtier : JAMAIS un ODR à
+    // envoyer. On l'exclut du lot (lettre/CSV/PDF/compteurs/envoi passent tous ici).
+    if (isCloturePourClient(r.copro.clientMriStatut, r.copro.assureurActuel)) continue;
     const b = buckets.get(key)!;
     const d: OdrDossier = {
       pipelineId: r.id,
