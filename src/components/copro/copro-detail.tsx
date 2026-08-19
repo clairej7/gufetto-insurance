@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AutofillFrontButton } from "@/components/copro/autofill-front-button";
 import { CourtierFicheControl } from "@/components/copro/courtier-fiche-control";
+import { CsMembersCard } from "@/components/copro/cs-members-card";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -74,6 +75,8 @@ type Pipeline = {
     dateDebutContrat: Date | null;
     contactCsEmail: string | null;
     contactCsNom: string | null;
+    csMembersData: string | null;
+    csMembersSyncedAt: Date | null;
     gestionnaireEmail: string | null;
     gestionnaireNom: string | null;
     contactCourtierEmail: string | null;
@@ -1666,6 +1669,11 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
               )}
 
             </>
+          )}
+
+          {/* Carte « Mails des membres du CS » — étape de validation du CS (devis_recus / envoye_cs) */}
+          {(pipeline.statut === "devis_recus" || pipeline.statut === "envoye_cs") && (
+            <CsMembersCard csMembersData={pipeline.copro.csMembersData} csMembersSyncedAt={pipeline.copro.csMembersSyncedAt} />
           )}
         </div>
 
