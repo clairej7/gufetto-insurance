@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getDernierePrimePayeeFromFront } from "@/lib/front-insurance";
 
 // GET /api/devis7/preview?pipelineId=… (admin)
 // Assemble les données nécessaires à la prévisualisation du mail au CS (auto 7) :
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
     where: { id: pipelineId },
     select: {
       id: true, contratActuelData: true,
-      copro: { select: { nom: true, adresse: true, contactCsNom: true, contactCsEmail: true, primeActuelle: true, gestionnaireNom: true, gestionnaireEmail: true, csMembersData: true } },
+      copro: { select: { nom: true, adresse: true, buildingId: true, contactCsNom: true, contactCsEmail: true, primeActuelle: true, gestionnaireNom: true, gestionnaireEmail: true, csMembersData: true } },
       devisRecus: { orderBy: { primeTTC: "asc" }, select: { assureur: true, primeTTC: true, data: true, pdfUrl: true, pdfName: true, recommande: true } },
     },
   });
@@ -34,11 +35,19 @@ export async function GET(req: NextRequest) {
   const members = (parseJson<CsMember[]>(p.copro.csMembersData) ?? []).filter((m) => m?.email);
   const csEmails = members.map((m) => m.email).join("; ");
 
+  // Base de comparaison = dernière prime payée (mail de demande de devis Front),
+  // comme sur la fiche (resolvePrimeReference tranche entre elle et le contrat).
+  let primePayee: number | null = null;
+  try {
+    const r = await getDernierePrimePayeeFromFront(p.copro.buildingId ?? "", p.id, [p.copro.adresse, p.copro.nom]);
+    primePayee = r.montant ?? null;
+  } catch { /* best-effort : sans prime payée, on retombe sur le contrat */ }
+
   return NextResponse.json({
     success: true,
     copro: {
       nom: p.copro.nom, adresse: p.copro.adresse, contactCsNom: p.copro.contactCsNom,
-      primeActuelle: p.copro.primeActuelle, primePayee: null,
+      primeActuelle: p.copro.primeActuelle, primePayee,
       gestionnaireEmail: p.copro.gestionnaireEmail, gestionnaireNom: p.copro.gestionnaireNom,
     },
     contratActuel, devis,

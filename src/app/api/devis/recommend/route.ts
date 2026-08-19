@@ -205,7 +205,7 @@ function buildPrompt(
     `- Commence l'email par "Bonjour${copro.contactCsNom ? ` ${copro.contactCsNom}` : ""}," sur la première ligne`,
     "- Structure : courte intro sur la démarche → résultats comparatifs en prose → recommandation argumentée → prochaines étapes",
     "- Base ton argumentation sur les données réelles ci-dessus (prix, franchises, garanties)",
-    "- Ajoute OBLIGATOIREMENT cette phrase : \"Sans retour de votre part dans les 7 jours, nous procéderons à la signature du contrat et à la résiliation de votre contrat actuel afin de vous assurer dans les meilleures conditions le plus rapidement possible.\"",
+    "- Termine le corps, juste avant la formule de politesse, par exactement cette phrase : \"Dans l'attente de votre retour afin de vous assurer dans les meilleures conditions le plus rapidement possible,\"",
     "- Sois professionnel, direct et commercial (250-350 mots maximum)",
     `- Termine par :\n  "Cordialement,\n  ${gestionnaireNom}\n  Matera"`,
     "- Ne mets pas d'objet, uniquement le corps du mail",
