@@ -205,7 +205,7 @@ function buildPrompt(
     "",
     "Vous trouverez le devis correspondant en pièce jointe.",
     "",
-    "Pour retenir cette offre, il vous suffit de nous retourner le devis ci-joint signé — la signature d'un membre du conseil syndical, pour le compte du CS, suffit. Nous nous chargeons ensuite de toutes les démarches de mise en place auprès de l'assureur.",
+    "Pour retenir cette offre, il vous suffit de nous donner votre accord en réponse à ce mail, ou de nous retourner le devis ci-joint signé (la signature d'un membre du conseil syndical, pour le compte du CS, suffit). Nous nous chargeons ensuite de toutes les démarches de mise en place auprès de l'assureur.",
     "",
     "Dans l'attente de votre retour afin de vous assurer dans les meilleures conditions le plus rapidement possible,",
     "",
