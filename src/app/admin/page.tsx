@@ -63,6 +63,27 @@ export default async function AdminPage() {
     { metadata: { path: ["auto"], equals: "devis6_notify_gestionnaire" } },
     { metadata: { path: ["auto"], equals: "devis6_gestio_response" } },
   ] }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
+  // Auto 7 — suivi des propositions au CS.
+  //  - à transmettre = dossiers entrés en validation CS (devis7_entered), encore à
+  //    l'étape envoye_cs et pas encore envoyés au CS ;
+  //  - transmises    = idem mais l'envoi au CS a été fait (event devis7_cs_sent) ;
+  //  - acceptées / refusées = décision du CS (dernier devis7_cs_statut par dossier).
+  const csEnteredIds = (await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "devis7_entered" } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).map((e) => e.pipelineId);
+  const csSentIds = new Set((await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "devis7_cs_sent" } }, select: { pipelineId: true }, distinct: ["pipelineId"] })).map((e) => e.pipelineId));
+  const csEnteredStatut = new Map((await prisma.insurancePipeline.findMany({ where: { id: { in: csEnteredIds } }, select: { id: true, statut: true } })).map((p) => [p.id, p.statut]));
+  let csTransmises = 0, csATransmettre = 0;
+  for (const id of csEnteredIds) {
+    if (csEnteredStatut.get(id) !== "envoye_cs") continue; // décidé → sorti de la validation CS
+    if (csSentIds.has(id)) csTransmises++; else csATransmettre++;
+  }
+  const csStatutEvents = await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "devis7_cs_statut" } }, orderBy: { createdAt: "desc" }, select: { pipelineId: true, metadata: true } });
+  const csSeen = new Set<string>();
+  let csAcceptees = 0, csRefusees = 0;
+  for (const e of csStatutEvents) {
+    if (csSeen.has(e.pipelineId)) continue; csSeen.add(e.pipelineId); // dernier statut par dossier
+    const v = (e.metadata as { value?: string } | null)?.value;
+    if (v === "accepte") csAcceptees++; else if (v === "refus") csRefusees++;
+  }
   const { getRsFlowDaily } = await import("@/lib/rs4");
   const rsFlow = await getRsFlowDaily();
   const { getDevisFlowDaily } = await import("@/lib/devis5");
@@ -142,6 +163,7 @@ export default async function AdminPage() {
           odrByInsurer={odrByInsurer}
           devisRecus={devisRecus}
           devis6={{ faites: devis6Table.faites, transmis: devis6Transmis }}
+          cs={{ transmises: csTransmises, aTransmettre: csATransmettre, acceptees: csAcceptees, refusees: csRefusees }}
           rsFlow={rsFlow}
           devisFlow={devisFlow}
           excludedCount={excludedCount}
