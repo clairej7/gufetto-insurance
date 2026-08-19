@@ -59,34 +59,67 @@ function formatPrime(val: number | null | undefined): string {
   return val.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
 }
 
+const GARANTIE_LABELS: Record<string, string> = {
+  incendie: "Incendie",
+  dommagesElectriques: "Dom. électriques",
+  evenementsClimatiques: "Événements clim.",
+  catastrophesNaturelles: "Cat. naturelles",
+  catastrophesTechnologiques: "Cat. technologiques",
+  degatsDesEaux: "Dégâts des eaux",
+  vol: "Vol",
+  brisDeGlace: "Bris de glace",
+  rc: "RC",
+  defenseRecours: "Défense-recours",
+  vandalisme: "Vandalisme",
+  effondrement: "Effondrement",
+  brisDeMachines: "Bris machines",
+  autresEvenements: "Autres évén.",
+  protectionJuridique: "Prot. juridique",
+  protectionCS: "Prot. CS",
+  honoSyndic: "Hono. syndic",
+};
+
+// Garanties légalement obligatoires (incluses dans tout contrat MRI couvrant
+// l'incendie, art. L128 code des assurances) → toujours présentes des deux côtés,
+// jamais un « ajout » du devis.
+const MANDATORY_GARANTIES = ["catastrophesNaturelles", "catastrophesTechnologiques"];
+
 function formatGaranties(g: GarantiesData | undefined): string {
   if (!g) return "Non détaillées";
-  const labels: Record<string, string> = {
-    incendie: "Incendie",
-    dommagesElectriques: "Dom. électriques",
-    evenementsClimatiques: "Événements clim.",
-    catastrophesNaturelles: "Cat. naturelles",
-    degatsDesEaux: "Dégâts des eaux",
-    vol: "Vol",
-    brisDeGlace: "Bris de glace",
-    rc: "RC",
-    vandalisme: "Vandalisme",
-    effondrement: "Effondrement",
-    brisDeMachines: "Bris machines",
-    protectionJuridique: "Prot. juridique",
-    protectionCS: "Prot. CS",
-    honoSyndic: "Hono. syndic",
-  };
-  const inclus = Object.entries(g)
-    .filter(([, v]) => v === true)
-    .map(([k]) => labels[k] ?? k);
-  const exclus = Object.entries(g)
-    .filter(([, v]) => v === false)
-    .map(([k]) => labels[k] ?? k);
+  const inclus = Object.entries(g).filter(([, v]) => v === true).map(([k]) => GARANTIE_LABELS[k] ?? k);
+  const exclus = Object.entries(g).filter(([, v]) => v === false).map(([k]) => GARANTIE_LABELS[k] ?? k);
   const parts: string[] = [];
   if (inclus.length) parts.push(`Incluses : ${inclus.join(", ")}`);
   if (exclus.length) parts.push(`Exclues : ${exclus.join(", ")}`);
   return parts.join(" | ") || "Non détaillées";
+}
+
+// Version CONTRAT ACTUEL : distingue explicitement les garanties au statut INCONNU
+// (null/non renseignées — souvent parce que le détail est dans un intercalaire non
+// capté, ex. contrats Groupama/ASSURIMO) pour empêcher le rédacteur d'affirmer une
+// absence non prouvée. Force les garanties obligatoires (cat. nat./tech.) à présentes.
+function formatGarantiesContrat(g: GarantiesData | undefined): string {
+  if (!g) return "Statut des garanties INCONNU (détail non extrait) — NE JAMAIS affirmer qu'une garantie est absente ni « ajoutée » par le devis";
+  const g2: Record<string, unknown> = { ...g };
+  for (const k of MANDATORY_GARANTIES) g2[k] = true;
+  const inclus = Object.entries(g2).filter(([, v]) => v === true).map(([k]) => GARANTIE_LABELS[k] ?? k);
+  const exclus = Object.entries(g2).filter(([, v]) => v === false).map(([k]) => GARANTIE_LABELS[k] ?? k);
+  const inconnues = Object.entries(g2).filter(([, v]) => v === null || v === undefined).map(([k]) => GARANTIE_LABELS[k] ?? k);
+  const parts: string[] = [];
+  if (inclus.length) parts.push(`Incluses : ${inclus.join(", ")}`);
+  if (exclus.length) parts.push(`Absentes (confirmé) : ${exclus.join(", ")}`);
+  if (inconnues.length) parts.push(`Statut INCONNU — NE PAS présenter comme absentes : ${inconnues.join(", ")}`);
+  return parts.join(" | ") || "Non détaillées";
+}
+
+// LCI : plus grand montant (≥ 1 M€) trouvé dans un texte libre. Renvoie null si non
+// chiffré (ex. « valeur de reconstruction à neuf ») → LCI jugée non comparable.
+function parseLciAmount(lci: string | null | undefined): number | null {
+  if (!lci) return null;
+  const groups = lci.match(/\d{1,3}(?:[\s .]\d{3})+|\d{7,}/g) ?? [];
+  let max = 0;
+  for (const grp of groups) { const n = Number(grp.replace(/[\s .]/g, "")); if (Number.isFinite(n) && n > max) max = n; }
+  return max >= 1_000_000 ? max : null;
 }
 
 function buildPrompt(
@@ -121,7 +154,7 @@ function buildPrompt(
   if (contratActuel.franchiseClimatique) lines.push(`Franchise climatique : ${contratActuel.franchiseClimatique}`);
   if (contratActuel.rcPlafond) lines.push(`RC plafond : ${contratActuel.rcPlafond}`);
   if (contratActuel.lci) lines.push(`LCI : ${contratActuel.lci}`);
-  lines.push(`Garanties : ${formatGaranties(contratActuel.garanties)}`);
+  lines.push(`Garanties : ${formatGarantiesContrat(contratActuel.garanties)}`);
   if ((contratActuel.pointsFaibles?.length ?? 0) > 0) {
     lines.push(`Points faibles : ${contratActuel.pointsFaibles!.join(", ")}`);
   }
@@ -157,6 +190,20 @@ function buildPrompt(
   const devisRecommande = recommandeAssureur
     ? devis.find((d) => d.assureur === recommandeAssureur)
     : devis[0];
+
+  // Fix 3 — directive LCI : n'autoriser « renforcée / portée à » que si la LCI du
+  // devis est STRICTEMENT supérieure à celle du contrat. Sinon (≤, égale, ou non
+  // comparable), interdire toute formulation d'amélioration.
+  const recoLci = parseLciAmount(devisRecommande?.data.lci);
+  const contratLci = parseLciAmount(contratActuel.lci);
+  let lciDirective: string;
+  if (recoLci != null && contratLci != null) {
+    lciDirective = recoLci > contratLci
+      ? `la LCI du devis (${recoLci.toLocaleString("fr-FR")} €) est SUPÉRIEURE à celle du contrat (${contratLci.toLocaleString("fr-FR")} €) — tu peux la valoriser (« portée à », « renforcée »).`
+      : `la LCI du devis (${recoLci.toLocaleString("fr-FR")} €) est INFÉRIEURE OU ÉGALE à celle du contrat (${contratLci.toLocaleString("fr-FR")} €) → NE dis JAMAIS « renforcée », « portée à » ni « plus élevée » ; ne fais pas de la LCI un argument (au besoin mentionne-la neutrement).`;
+  } else {
+    lciDirective = `la LCI n'est pas comparable (montant non chiffré d'un côté) → NE présente PAS la LCI comme un avantage, n'emploie ni « portée à » ni « renforcée ».`;
+  }
 
   // Inject partner knowledge if the recommended devis is AXA or MILA
   const rec = recommandeAssureur ?? devis[0]?.assureur ?? "";
@@ -214,6 +261,9 @@ function buildPrompt(
     "=== RÈGLES ===",
     "- Ne remplis QUE le paragraphe « Notre recommandation » (le contenu entre <…>). Garde toutes les autres phrases identiques, mot pour mot, y compris les sauts de ligne entre paragraphes.",
     "- Paragraphe recommandation : 2 à 3 phrases maximum, concret et chiffré, uniquement à partir des données réelles ci-dessus.",
+    "- N'affirme JAMAIS qu'une garantie est absente du contrat actuel, « ajoutée », « élargie » ou « nouvelle », SAUF si elle est explicitement listée dans « Absentes (confirmé) » du contrat. Une garantie au « Statut INCONNU » ou non mentionnée ne doit PAS être présentée comme absente ni comme un ajout du devis.",
+    "- Les catastrophes naturelles et technologiques sont obligatoires (toujours présentes dans les deux contrats) : ne les cite JAMAIS comme un ajout, une nouveauté ou un avantage du devis.",
+    `- LCI : ${lciDirective}`,
     "- Pour mettre un mot ou un chiffre en gras : **texte**. Mets le symbole € APRÈS les chiffres (« 3 979 € », jamais « €3 979 »).",
     "- Termine EXACTEMENT par « Cordialement, » : n'ajoute NI nom, NI « Matera », NI aucune note/commentaire après (la signature est ajoutée automatiquement)."
   );

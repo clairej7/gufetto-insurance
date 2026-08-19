@@ -62,7 +62,15 @@ export async function GET(req: NextRequest) {
   try {
     const r = await getDernierePrimePayeeFromFront(p.copro.buildingId ?? "", p.id, [p.copro.adresse, p.copro.nom]);
     primePayee = r.montant ?? null;
-  } catch { /* best-effort : sans prime payée, on retombe sur le contrat */ }
+  } catch { /* best-effort */ }
+
+  // Fix 4 — si Front ne trouve pas la prime payée, on retombe sur primeActuelle du
+  // dossier (souvent la vraie dernière prime, plus fiable que la prime du contrat
+  // extraite, parfois trop basse → comparaison faussée, ex. SDC 70 Nanterre : contrat
+  // 1 147 € vs prime réelle 1 491 €). resolvePrimeReference tranche ensuite.
+  if (primePayee == null && typeof p.copro.primeActuelle === "number" && p.copro.primeActuelle > 0) {
+    primePayee = p.copro.primeActuelle;
+  }
 
   // Garde-fou base de prime : si contrat et prime payée divergent trop
   // (resolvePrimeReference → flag "bloque"), la comparaison affichée dans le mail
