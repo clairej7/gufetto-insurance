@@ -43,8 +43,12 @@ export async function GET(req: NextRequest) {
   let pack: { storagePath: string; name: string }[] = [];
   const docKind = /axa/i.test(recoAssureur) ? "devis_axa" : /mila/i.test(recoAssureur) ? "devis_mila" : null;
   if (docKind) {
-    const docs = await prisma.pipelineDocument.findMany({ where: { pipelineId, kind: docKind }, orderBy: [{ part: "asc" }, { createdAt: "asc" }], select: { storagePath: true, fileName: true } });
-    pack = docs.map((d) => ({ storagePath: d.storagePath, name: d.fileName }));
+    // Un seul devis dossier par assureur : on prend le PLUS RÉCENT (l'assureur
+    // renvoie parfois son devis → plusieurs docs captés). C'est aussi celui que
+    // l'étape de comparaison utilise (find = le plus récent) → cohérent avec le prix
+    // affiché dans le mail. Éviter d'attacher les doublons/versions périmées au CS.
+    const latest = await prisma.pipelineDocument.findFirst({ where: { pipelineId, kind: docKind }, orderBy: { createdAt: "desc" }, select: { storagePath: true, fileName: true } });
+    if (latest) pack = [{ storagePath: latest.storagePath, name: latest.fileName }];
     const std = docKind === "devis_mila" ? MILA_STANDARD_DOCS : AXA_STANDARD_DOCS;
     pack = [...pack, ...std.map((s) => ({ storagePath: s.storagePath, name: s.name }))];
   }
