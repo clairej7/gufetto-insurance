@@ -186,7 +186,10 @@ type PreviewData = {
   devis: { assureur: string; primeTTC: number; data: Record<string, unknown> }[];
   recommandeAssureur: string | null;
   csEmails: string; pack: { storagePath: string; name: string }[]; subject: string;
+  prime?: { flag: "ok" | "bloque"; value: number | null; contrat: number | null; primePayee: number | null; ratio: number | null; source: string };
 };
+
+const fmtEur = (n: number | null | undefined) => (n == null ? "?" : Math.round(n).toLocaleString("fr-FR") + " €");
 
 function PreviewModal({ row, onClose, onSent }: { row: Row; onClose: () => void; onSent: () => void }) {
   const [loading, setLoading] = useState(true);
@@ -244,6 +247,7 @@ function PreviewModal({ row, onClose, onSent }: { row: Row; onClose: () => void;
 
   async function send() {
     if (!to.trim() || !body.trim()) { toast.error("Destinataire et corps requis"); return; }
+    if (data?.prime?.flag === "bloque") { toast.error("Prime de référence incohérente — envoi bloqué. Corrige la prime d'abord."); return; }
     const pack = data?.pack ?? [];
     if (!pack.length) { toast.error("Aucune pièce jointe — envoi bloqué"); return; }
     if (!confirm(`Envoyer la proposition au conseil syndical ?\n\nÀ : ${to}\nPièces jointes : ${pack.length}`)) return;
@@ -300,6 +304,14 @@ function PreviewModal({ row, onClose, onSent }: { row: Row; onClose: () => void;
                 <button onClick={() => data && generate(data)} disabled={generating} style={{ fontSize: 11.5, fontWeight: 600, color: "#8784FD", background: "none", border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}><RefreshCw size={12} /> Regénérer</button>
               </div>
             )}
+            {data?.prime?.flag === "bloque" && (
+              <div style={{ marginBottom: 10, display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 12px", border: "1px solid #F4C9CF", background: "#FDEEF0", borderRadius: 10, fontSize: 12, color: "#B4243A", lineHeight: 1.45 }}>
+                <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>
+                  <strong>Prime de référence incohérente — envoi bloqué.</strong> Le contrat extrait indique {fmtEur(data.prime.contrat)} mais la dernière prime payée est {fmtEur(data.prime.primePayee)} (écart ×{data.prime.ratio?.toFixed(1) ?? "?"}). La comparaison affichée serait trompeuse (sens économie/surcoût potentiellement inversé). Vérifie le vrai montant payé sur la fiche avant d&apos;envoyer.
+                </span>
+              </div>
+            )}
             <label style={{ fontSize: 11, fontWeight: 600, color: "#656576" }}>Corps du mail — modifiable avant envoi</label>
             <div style={{ position: "relative", marginTop: 4 }}>
               {generating && <div style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,.7)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#8784FD", fontSize: 13, borderRadius: 10, zIndex: 1 }}><Loader2 size={16} className="animate-spin" /> Génération de l'email…</div>}
@@ -338,7 +350,7 @@ function PreviewModal({ row, onClose, onSent }: { row: Row; onClose: () => void;
 
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <button onClick={onClose} style={{ fontSize: 12.5, fontWeight: 600, color: "#656576", background: "#F4F4F7", border: "1px solid #E8E8EC", borderRadius: 8, padding: "9px 14px", cursor: "pointer" }}>Annuler</button>
-              <button onClick={send} disabled={sending || generating || !to.trim() || !body.trim() || !(data?.pack?.length)} style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "#fff", background: "#4E49FC", border: "none", borderRadius: 8, padding: "9px 14px", cursor: sending ? "wait" : "pointer", opacity: sending || generating || !to.trim() || !body.trim() || !(data?.pack?.length) ? 0.6 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <button onClick={send} disabled={sending || generating || !to.trim() || !body.trim() || !(data?.pack?.length) || data?.prime?.flag === "bloque"} style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "#fff", background: "#4E49FC", border: "none", borderRadius: 8, padding: "9px 14px", cursor: sending ? "wait" : "pointer", opacity: sending || generating || !to.trim() || !body.trim() || !(data?.pack?.length) || data?.prime?.flag === "bloque" ? 0.6 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                 {sending ? <><Loader2 size={14} className="animate-spin" /> Envoi…</> : <><Mail size={14} /> Envoyer au CS</>}
               </button>
             </div>
