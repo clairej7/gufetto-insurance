@@ -6,7 +6,9 @@
 // Format : { adresse, numeroContrat }. L'adresse telle qu'écrite dans le doc ;
 // le n° tel qu'écrit (les multi-n° "A / B" sont gérés par le matcher).
 //
-// AXA : 502 ODR, ingérés le 2026-08-06 depuis "LISTE ODR MATERA A JOUR (4)" onglet "ODR VALABLES".
+// AXA : 502 ODR ingérés le 2026-08-06 depuis "LISTE ODR MATERA A JOUR (4)" onglet "ODR VALABLES",
+//       + 1 ajouté le 2026-08-19 (19 RUE CLAUDE DEBUSSY, 57120 ROMBAS — n° 5570386004), nouvel ODR
+//         apparu dans la v6 du fichier, absent partout de Gufetto → 503 docs.
 // SADA : 123 ODR, ingérés le 2026-08-06 depuis "ODR SADA 2", "ODR Sada - 03_08_2026",
 // "ODR Sada - 24_07_2026" (dédupliqués).
 
@@ -2021,6 +2023,10 @@ export const ODR_SENT_DOCS: Record<"AXA" | "GENERALI" | "SADA" | "MILA", OdrSent
   {
     "adresse": "68 RUE VICTOR HUGO 93170 BAGNOLET",
     "numeroContrat": "6936594704"
+  },
+  {
+    "adresse": "19 RUE CLAUDE DEBUSSY 57120 ROMBAS",
+    "numeroContrat": "5570386004"
   }
 ],
   GENERALI: [],
