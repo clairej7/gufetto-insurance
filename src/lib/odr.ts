@@ -88,7 +88,9 @@ export async function getOdrByPartner(): Promise<OdrPartnerBucket[]> {
     };
     const flagged = isFlagged(r.events);
     if (flagged) b.flagged.push(d);
-    else if (d.numeroContrat) b.ready.push(d);
+    // « prêt » exige un n° de contrat PLAUSIBLE ; sinon → « sans n° » (à compléter,
+    // jamais dans la lettre). Écarte « non », « MRI - … », building_id trop courts.
+    else if (d.numeroContrat && isPlausibleContractNumber(d.numeroContrat)) b.ready.push(d);
     else b.missingNum.push(d);
   }
 
@@ -172,6 +174,22 @@ function numMatch(a: string | null, b: string | null): boolean {
   const pa = contractParts(a);
   const pb = new Set(contractParts(b));
   return pa.some((p) => pb.has(p));
+}
+
+// Un n° de contrat est « plausible » (donc envoyable dans la lettre ODR) si ce n'est
+// pas un placeholder texte (« non », « MRI - … ») et s'il est assez consistant. Les
+// n° purement numériques trop courts (≤ 7 chiffres, type building_id : 81877, 2709137)
+// sont écartés ; les codes courtier/police AXA à lettres (JCV50683X) restent valides.
+// Un dossier sans n° plausible est rangé en « sans n° » (jamais dans le lot à envoyer).
+export function isPlausibleContractNumber(num: string | null | undefined): boolean {
+  const raw = (num || "").trim();
+  if (!raw) return false;
+  if (/\b(non|aucun|oui|n\/?a|sans|mri|contrat|devis|inconnu|compl[ée]ter)\b/i.test(raw)) return false;
+  const alnum = raw.replace(/[^a-z0-9]/gi, "");
+  if (alnum.length < 5) return false;
+  if (/[a-z]/i.test(alnum)) return true; // code courtier/police (ex. JCV50683X)
+  const digitRun = Math.max(0, ...(raw.match(/\d+/g) || []).map((s) => s.length));
+  return digitRun >= 8; // purement numérique → un vrai n° AXA fait ≥ 8 chiffres
 }
 
 // Adresse : on ISOLE la partie voie (tout ce qui précède le code postal) pour ne
