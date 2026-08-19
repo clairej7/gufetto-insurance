@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getDernierePrimePayeeFromFront } from "@/lib/front-insurance";
 import { MILA_STANDARD_DOCS, AXA_STANDARD_DOCS } from "@/lib/devis-standard-docs";
+import { resolvePrimeReference } from "@/lib/devis-prime";
 
 // GET /api/devis7/preview?pipelineId=… (admin)
 // Assemble les données nécessaires à la prévisualisation du mail au CS (auto 7) :
@@ -63,6 +64,16 @@ export async function GET(req: NextRequest) {
     primePayee = r.montant ?? null;
   } catch { /* best-effort : sans prime payée, on retombe sur le contrat */ }
 
+  // Garde-fou base de prime : si contrat et prime payée divergent trop
+  // (resolvePrimeReference → flag "bloque"), la comparaison affichée dans le mail
+  // serait trompeuse (ex. contrat 638 € pourri vs 3 400 € réellement payés → le mail
+  // annoncerait un surcoût au lieu d'une grosse économie). Dans ce cas on renvoie
+  // le flag pour bloquer l'envoi côté modale, sans jamais retomber silencieusement
+  // sur le contrat. Cf. src/lib/devis-prime.ts.
+  const contratPrime = typeof contratActuel.primeTTC === "number" ? contratActuel.primeTTC : null;
+  const primeRes = resolvePrimeReference(contratPrime, primePayee);
+  const prime = { flag: primeRes.flag, value: primeRes.value, contrat: primeRes.contrat, primePayee: primeRes.primePayee, ratio: primeRes.ratio, source: primeRes.source };
+
   return NextResponse.json({
     success: true,
     copro: {
@@ -74,6 +85,7 @@ export async function GET(req: NextRequest) {
     recommandeAssureur: recoRow?.assureur ?? null,
     csEmails,
     pack,
+    prime,
     subject: "Matera - Renégociation de votre contrat MRI",
   });
 }
