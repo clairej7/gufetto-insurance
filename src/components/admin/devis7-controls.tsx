@@ -9,8 +9,9 @@
 //  - Statut CS + Résiliation éditables → transitions auto (perdu / clos) serveur.
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Search, ExternalLink, Users, Eye, Mail, Loader2, X, RefreshCw } from "lucide-react";
+import { Search, ExternalLink, Users, Eye, Mail, Loader2, X, RefreshCw, Paperclip, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { getPdfSignedUrl } from "@/lib/actions";
 
 type CsStatut = "accepte" | "refus" | null;
 type Resiliation = "oui" | "non" | "-" | null;
@@ -196,6 +197,17 @@ function PreviewModal({ row, onClose, onSent }: { row: Row; onClose: () => void;
   const [subject, setSubject] = useState("");
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
+  const [openingPdf, setOpeningPdf] = useState(false);
+
+  async function apercu() {
+    if (!data?.recoPdfPath) return;
+    setOpeningPdf(true);
+    try {
+      const url = await getPdfSignedUrl(data.recoPdfPath);
+      if (url) window.open(url, "_blank"); else toast.error("PDF indisponible");
+    } catch { toast.error("PDF indisponible"); }
+    setOpeningPdf(false);
+  }
 
   const generate = useCallback(async (d: PreviewData) => {
     setGenerating(true);
@@ -233,6 +245,7 @@ function PreviewModal({ row, onClose, onSent }: { row: Row; onClose: () => void;
 
   async function send() {
     if (!to.trim() || !body.trim()) { toast.error("Destinataire et corps requis"); return; }
+    if (!data?.recoPdfPath) { toast.error("Aucun devis PDF — envoi bloqué"); return; }
     if (!confirm(`Envoyer la proposition au conseil syndical ?\n\nÀ : ${to}`)) return;
     setSending(true);
     try {
@@ -302,9 +315,25 @@ function PreviewModal({ row, onClose, onSent }: { row: Row; onClose: () => void;
               </div>
             </div>
 
+            {/* Pièce jointe : le devis recommandé. Envoi bloqué s'il n'y a pas de PDF. */}
+            {data?.recoPdfPath ? (
+              <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", border: "1px solid #D9D9F5", background: "#F5F5FF", borderRadius: 10 }}>
+                <Paperclip size={14} style={{ color: "#4E49FC", flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#26262C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{data.recoPdfName || "devis.pdf"}</div>
+                  <div style={{ fontSize: 10.5, color: "#A2A1AF" }}>Devis {data.recommandeAssureur ?? "recommandé"} — joint au mail</div>
+                </div>
+                <button onClick={apercu} disabled={openingPdf} style={{ fontSize: 11.5, fontWeight: 600, color: "#4E49FC", background: "#fff", border: "1px solid #D9D9F5", borderRadius: 8, padding: "5px 10px", cursor: "pointer", whiteSpace: "nowrap" }}>{openingPdf ? "Ouverture…" : "Aperçu"}</button>
+              </div>
+            ) : (
+              <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", border: "1px solid #F4C9CF", background: "#FDEEF0", borderRadius: 10, fontSize: 12, color: "#B4243A" }}>
+                <AlertTriangle size={14} style={{ flexShrink: 0 }} /> Aucun devis PDF stocké pour ce dossier — l&apos;envoi au CS est bloqué (le devis doit être joint).
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <button onClick={onClose} style={{ fontSize: 12.5, fontWeight: 600, color: "#656576", background: "#F4F4F7", border: "1px solid #E8E8EC", borderRadius: 8, padding: "9px 14px", cursor: "pointer" }}>Annuler</button>
-              <button onClick={send} disabled={sending || generating || !to.trim() || !body.trim()} style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "#fff", background: "#4E49FC", border: "none", borderRadius: 8, padding: "9px 14px", cursor: sending ? "wait" : "pointer", opacity: sending || generating || !to.trim() || !body.trim() ? 0.6 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <button onClick={send} disabled={sending || generating || !to.trim() || !body.trim() || !data?.recoPdfPath} style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "#fff", background: "#4E49FC", border: "none", borderRadius: 8, padding: "9px 14px", cursor: sending ? "wait" : "pointer", opacity: sending || generating || !to.trim() || !body.trim() || !data?.recoPdfPath ? 0.6 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                 {sending ? <><Loader2 size={14} className="animate-spin" /> Envoi…</> : <><Mail size={14} /> Envoyer au CS</>}
               </button>
             </div>
