@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getDernierePrimePayeeFromFront } from "@/lib/front-insurance";
+import { MILA_STANDARD_DOCS } from "@/lib/devis-standard-docs";
 
 // GET /api/devis7/preview?pipelineId=… (admin)
 // Assemble les données nécessaires à la prévisualisation du mail au CS (auto 7) :
@@ -35,6 +36,20 @@ export async function GET(req: NextRequest) {
   const members = (parseJson<CsMember[]>(p.copro.csMembersData) ?? []).filter((m) => m?.email);
   const csEmails = members.map((m) => m.email).join("; ");
 
+  // Pack de PJ à joindre au CS selon l'assureur recommandé :
+  //  - AXA  : les docs devis_axa du dossier (Contrat MRI + Conditions particulières) ;
+  //  - Mila : les docs devis_mila du dossier + CG/IPID standard globaux.
+  const recoAssureur = recoRow?.assureur ?? "";
+  let pack: { storagePath: string; name: string }[] = [];
+  const docKind = /axa/i.test(recoAssureur) ? "devis_axa" : /mila/i.test(recoAssureur) ? "devis_mila" : null;
+  if (docKind) {
+    const docs = await prisma.pipelineDocument.findMany({ where: { pipelineId, kind: docKind }, orderBy: [{ part: "asc" }, { createdAt: "asc" }], select: { storagePath: true, fileName: true } });
+    pack = docs.map((d) => ({ storagePath: d.storagePath, name: d.fileName }));
+    if (docKind === "devis_mila") pack = [...pack, ...MILA_STANDARD_DOCS.map((s) => ({ storagePath: s.storagePath, name: s.name }))];
+  }
+  // Secours : aucun doc typé → le devis uploadé (devisRecus.pdfUrl).
+  if (!pack.length && recoRow?.pdfUrl) pack = [{ storagePath: recoRow.pdfUrl, name: recoRow.pdfName ?? "Devis.pdf" }];
+
   // Base de comparaison = dernière prime payée (mail de demande de devis Front),
   // comme sur la fiche (resolvePrimeReference tranche entre elle et le contrat).
   let primePayee: number | null = null;
@@ -53,8 +68,7 @@ export async function GET(req: NextRequest) {
     contratActuel, devis,
     recommandeAssureur: recoRow?.assureur ?? null,
     csEmails,
-    recoPdfPath: recoRow?.pdfUrl ?? null,
-    recoPdfName: recoRow?.pdfName ?? null,
+    pack,
     subject: "Matera - Renégociation de votre contrat MRI",
   });
 }
