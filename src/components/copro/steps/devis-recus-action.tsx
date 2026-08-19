@@ -787,8 +787,9 @@ function RecoAndEmailSection({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
-          <Label className="text-xs font-medium" style={{ color: "#656576" }}>Destinataire (CS)</Label>
-          <Input type="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="email@cs.fr" />
+          <Label className="text-xs font-medium" style={{ color: "#656576" }}>Destinataires (CS)</Label>
+          <Input type="text" value={to} onChange={(e) => setTo(e.target.value)} placeholder="membre1@cs.fr, membre2@cs.fr" />
+          <p className="text-[11px]" style={{ color: "#A2A1AF" }}>Plusieurs adresses possibles, séparées par une virgule.</p>
         </div>
         <div className="space-y-1">
           <Label className="text-xs font-medium" style={{ color: "#656576" }}>Objet</Label>
@@ -1212,7 +1213,7 @@ export function DevisRecusAction({
 
       {/* Reco + Email CS fusionnés */}
       <div className="space-y-3">
-        <p className="text-sm font-semibold" style={{ color: "#26262C" }}>Recommandation et email au CS</p>
+        <p className="text-sm font-semibold" style={{ color: "#26262C" }}>Recommandation et email aux membres du CS</p>
         {dbDevis.length > 0 ? (
           <RecoAndEmailSection
             pipelineId={pipelineId}
