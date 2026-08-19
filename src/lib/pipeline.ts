@@ -122,8 +122,6 @@ export function categoriseDossier(input: {
 }): DossierBucket {
   // 1. Statut perdu prime sur tout (même si HubSpot dit client).
   if (LOST_STATUTS.includes(input.statut as PipelineStatut)) return "perdu";
-  // 1 bis. ODR (ordre de remplacement) : sortie de cycle, catégorie dédiée (fond jaune).
-  if (input.statut === "odr_en_cours") return "odr";
   // 1 bis-2. ODR ENVOYÉ : ordre transmis à l'assureur, en attente de réponse.
   // Toujours ACTIF (pas encore gagné), mais étape distincte pour le suivi.
   if (input.statut === "odr_envoye") return "odr_envoye";
@@ -131,8 +129,12 @@ export function categoriseDossier(input: {
   // encore actif (démarre à l'échéance du contrat en cours). Catégorie dédiée,
   // testée avant la clôture-client pour rester identifiable dans le suivi ODR.
   if (input.statut === "odr_accepte") return "odr_accepte";
-  // 2. Cliente MRI HubSpot (hors Wakam) → clos, aucune action.
+  // 2. Cliente MRI HubSpot (hors Wakam) → clos, aucune action. TESTÉ AVANT
+  // « odr_en_cours » : un ODR encore À ENVOYER pour une copro DÉJÀ cliente MRI n'a
+  // aucun sens (on est déjà courtier) → clos, et jamais dans le lot ODR à envoyer.
   if (isCloturePourClient(input.clientMriStatut, input.assureurActuel)) return "clos";
+  // 1 bis. ODR À ENVOYER : sortie de cycle, catégorie dédiée (fond jaune).
+  if (input.statut === "odr_en_cours") return "odr";
   // 3. Sinon on suit le sales status (comportement historique).
   if (CLOSED_BY_STATUT.includes(input.statut as PipelineStatut)) return "clos";
   const d = getDaysUntilEcheance(input.dateEcheance);
