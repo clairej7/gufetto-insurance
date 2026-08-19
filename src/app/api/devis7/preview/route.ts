@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getDernierePrimePayeeFromFront } from "@/lib/front-insurance";
-import { MILA_STANDARD_DOCS } from "@/lib/devis-standard-docs";
+import { MILA_STANDARD_DOCS, AXA_STANDARD_DOCS } from "@/lib/devis-standard-docs";
 
 // GET /api/devis7/preview?pipelineId=… (admin)
 // Assemble les données nécessaires à la prévisualisation du mail au CS (auto 7) :
@@ -45,7 +45,8 @@ export async function GET(req: NextRequest) {
   if (docKind) {
     const docs = await prisma.pipelineDocument.findMany({ where: { pipelineId, kind: docKind }, orderBy: [{ part: "asc" }, { createdAt: "asc" }], select: { storagePath: true, fileName: true } });
     pack = docs.map((d) => ({ storagePath: d.storagePath, name: d.fileName }));
-    if (docKind === "devis_mila") pack = [...pack, ...MILA_STANDARD_DOCS.map((s) => ({ storagePath: s.storagePath, name: s.name }))];
+    const std = docKind === "devis_mila" ? MILA_STANDARD_DOCS : AXA_STANDARD_DOCS;
+    pack = [...pack, ...std.map((s) => ({ storagePath: s.storagePath, name: s.name }))];
   }
   // Secours : aucun doc typé → le devis uploadé (devisRecus.pdfUrl).
   if (!pack.length && recoRow?.pdfUrl) pack = [{ storagePath: recoRow.pdfUrl, name: recoRow.pdfName ?? "Devis.pdf" }];
