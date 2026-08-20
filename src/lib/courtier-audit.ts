@@ -1,10 +1,10 @@
 // Automatisation 3 — audit & auto-remplissage des mails courtier, UNIQUEMENT
 // sur les dossiers à l'étape « Récupération du RS » (statut rs_en_cours).
 //
-// 3 buckets :
-//   vert   = courtier valable + mail cohérent (ou RS déjà envoyée)
-//   orange = courtier valable mais mail manquant ou incohérent (autre domaine)
-//   rouge  = pas de courtier (vide) ou un ASSUREUR renseigné à la place
+// 3 buckets (centrés sur « a-t-on un MAIL exploitable pour envoyer la RS ? ») :
+//   vert   = mail exploitable → courtier + mail cohérent, OU assureur EN DIRECT + mail, OU RS déjà envoyée
+//   orange = courtier valable mais mail manquant/incohérent → mail proposable depuis la base
+//   rouge  = aucun mail exploitable (ni courtier joignable ni assureur en direct) / ex-assureur Wakam-Matera
 //
 // Matching SOUPLE au-dessus de la base CourtierRef : variantes/fautes
 // (VESPIEREN→Verspieren, ODELIM→Odealim, ALLIANZ IARD→Allianz…) rapprochées par
@@ -375,9 +375,24 @@ export function classify(
   // Remarque 3 : RS déjà envoyée → vert d'office.
   if (row.rsSent) return { ...base, bucket: "vert", reason: "RS déjà envoyée", fillable: false, fillEmail: null };
 
-  if (res.kind === "none") return { ...base, bucket: "rouge", reason: "aucun courtier renseigné", fillable: false, fillEmail: null };
+  // « self » = Wakam / Matera Assurance (on ÉTAIT l'assureur) → RS non pertinent.
   if (res.kind === "self") return { ...base, bucket: "rouge", reason: `« ${res.label} » (ex-assureur / syndic — pas un courtier tiers)`, fillable: false, fillEmail: null };
-  if (res.kind === "assureur") return { ...base, bucket: "rouge", reason: `assureur renseigné à la place du courtier (${res.label})`, fillable: false, fillEmail: null };
+  // Pas de vrai courtier tiers (champ vide, ou un ASSUREUR écrit à la place) : ce
+  // n'est PAS un courtier, MAIS s'il y a un mail exploitable (cas fréquent = copro
+  // assurée en DIRECT chez l'assureur), la RS peut partir directement à ce mail.
+  // Décision via prepareSendMails (mêmes garde-fous perso/interne/Wakam qu'à l'envoi)
+  // → on ne recale plus à tort les assureur-direct qui sont en réalité envoyables.
+  if (res.kind === "none" || res.kind === "assureur") {
+    const plan = prepareSendMails(row.courtier, mail, idx, row.assureur);
+    if (!plan.hold && plan.mails.length) {
+      return { ...base, bucket: "vert", cleanMail: plan.mails.join(", "),
+        reason: res.kind === "assureur" ? `assureur en direct — mail exploitable (${res.label})` : "assureur en direct / sans courtier — mail exploitable",
+        fillable: false, fillEmail: null };
+    }
+    return { ...base, bucket: "rouge",
+      reason: res.kind === "assureur" ? `assureur à la place du courtier (${res.label}) — sans mail exploitable` : (plan.reason ? `sans courtier — ${plan.reason}` : "aucun courtier ni mail exploitable"),
+      fillable: false, fillEmail: null };
+  }
 
   // res.kind === "courtier" (valable). On peut remplir depuis la base si : courtier
   // connu en base, avec un mail, et match sûr. Vrai pour un mail manquant ET pour

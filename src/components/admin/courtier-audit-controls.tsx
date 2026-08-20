@@ -21,9 +21,9 @@ type Audit = { counts: Counts; total: number; stepTotal: number; fillable: numbe
 
 function Buckets({ counts, total }: { counts: Counts; total: number }) {
   const items = [
-    { key: "vert", label: "Courtier + mail", n: counts.vert, icon: CheckCircle2, bg: "#EAF7EE", fg: "#13762C", bd: "#B7E4C4" },
-    { key: "orange", label: "Courtier sans mail / mail incohérent", n: counts.orange, icon: AlertTriangle, bg: "#FDF0D5", fg: "#B4690E", bd: "#F3D9A6" },
-    { key: "rouge", label: "Sans courtier (ou assureur à la place)", n: counts.rouge, icon: XCircle, bg: "#FDECEA", fg: "#CA1E12", bd: "#F5C6C0" },
+    { key: "vert", label: "Envoyable (courtier ou assureur direct + mail)", n: counts.vert, icon: CheckCircle2, bg: "#EAF7EE", fg: "#13762C", bd: "#B7E4C4" },
+    { key: "orange", label: "Courtier sans mail / mail incohérent (mail proposable)", n: counts.orange, icon: AlertTriangle, bg: "#FDF0D5", fg: "#B4690E", bd: "#F3D9A6" },
+    { key: "rouge", label: "Sans mail exploitable (ni courtier ni assureur joignable)", n: counts.rouge, icon: XCircle, bg: "#FDECEA", fg: "#CA1E12", bd: "#F5C6C0" },
   ] as const;
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
@@ -229,7 +229,7 @@ export function CourtierAuditControls() {
           {audit.rouge.length > 0 && (
             <div style={{ marginTop: 12 }}>
               <button onClick={() => setShowRouge((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#CA1E12", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                {showRouge ? "▾" : "▸"} Détail des {audit.rouge.length} dossiers « sans courtier » (à vérifier à la main)
+                {showRouge ? "▾" : "▸"} Détail des {audit.rouge.length} dossiers « sans mail exploitable » (à compléter à la main)
               </button>
               {showRouge && (
                 <div style={{ marginTop: 8, maxHeight: 340, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
