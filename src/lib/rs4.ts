@@ -595,56 +595,80 @@ export async function scanReplies(offset: number, limit: number): Promise<{ tota
   const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({
     where: { statut: "rs_en_cours", rs4SentAt: { not: null }, rs4EnCoursAt: null, coproId: { notIn: excl }, copro: { archivedAt: null } },
-    select: { id: true, coproId: true, rs4SentAt: true, rs4RelanceAt: true, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } },
+    select: {
+      id: true, coproId: true, rs4SentAt: true, rs4RelanceAt: true, rs4ReplyConvId: true,
+      // Fils d'ENVOI (draft_sent) ET conversations récupérées hors-fil : le RS arrive
+      // souvent dans une NOUVELLE conversation (une relance ouvre un nouveau thread, ou
+      // la réponse tombe dans une autre inbox rapatriée). Il faut donc scanner TOUS ces
+      // fils, pas seulement le dernier envoi — sinon le RS reçu hors-fil est raté.
+      events: { where: { OR: [ { metadata: { path: ["rsType"], equals: "draft_sent" } }, { metadata: { path: ["auto"], equals: "rs4_recovered_offthread_reply" } } ] }, select: { metadata: true } },
+    },
     orderBy: { rs4SentAt: "asc" },
   });
   const slice = ps.slice(offset, offset + limit);
   const counts: Record<string, number> = {};
   const now = new Date();
+  type FMsg = { id: string; is_inbound: boolean; created_at: number; error_type?: string; blurb?: string; attachments?: { contentType?: string; filename?: string }[]; author?: { email?: string }; recipients?: { role: string; handle: string }[] };
   for (const p of slice) {
-    const cid = p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop();
-    if (!cid) { await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: "non_scanne" } }); counts["non_scanne"] = (counts["non_scanne"] ?? 0) + 1; continue; }
+    const metas = p.events.map((e) => e.metadata as { conversationId?: string; rsType?: string } | null);
+    const sendCids = [...new Set(metas.filter((m) => m?.rsType === "draft_sent").map((m) => m?.conversationId).filter(Boolean) as string[])];
+    // Périmètre de scan = fils d'envoi + convs récupérées + conv de réponse déjà connue.
+    const scanCids = [...new Set([...sendCids, ...(metas.map((m) => m?.conversationId).filter(Boolean) as string[]), ...(p.rs4ReplyConvId ? [p.rs4ReplyConvId] : [])])];
+    if (!scanCids.length) { await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: "non_scanne" } }); counts["non_scanne"] = (counts["non_scanne"] ?? 0) + 1; continue; }
+    const sendSet = new Set(sendCids);
     const sentMs = new Date(p.rs4SentAt!).getTime();
-    const list = await frontGet(`/conversations/${cid}/messages?limit=20`);
-    const results = ((list?._results as unknown[]) ?? []) as { id: string; is_inbound: boolean; created_at: number; error_type?: string; blurb?: string; attachments?: { contentType?: string; filename?: string }[]; author?: { email?: string }; recipients?: { role: string; handle: string }[] }[];
-    const bounce = results.some((m) => !m.is_inbound && m.error_type);
-    const inbound = results.filter((m) => m.is_inbound && m.created_at * 1000 > sentMs && !isFromMatera(m));
-    if (!inbound.length && !bounce) { await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: "sans_reponse", rs4ReplyAt: null, rs4ReplySnippet: null, rs4ReplyMsgId: null } }); counts["sans_reponse"] = (counts["sans_reponse"] ?? 0) + 1; continue; }
-    const last = inbound.sort((a, b) => b.created_at - a.created_at)[0];
-    let body = "", snippet = "", hasDoc = inbound.some((m) => realDoc(m.attachments ?? []));
+    const resultsByCid: Record<string, FMsg[]> = {};
+    const inboundAll: { m: FMsg; cid: string }[] = [];
+    let bounce = false;
+    for (const cid of scanCids) {
+      const list = await frontGet(`/conversations/${cid}/messages?limit=20`);
+      const results = ((list?._results as unknown[]) ?? []) as FMsg[];
+      resultsByCid[cid] = results;
+      const isSendConv = sendSet.has(cid);
+      if (isSendConv) bounce = bounce || results.some((m) => !m.is_inbound && m.error_type);
+      // Fil d'envoi : on ne compte que les entrants POSTÉRIEURS à notre envoi.
+      // Conv récupérée hors-fil : déjà validée comme réponse à notre demande → on
+      // ne la filtre pas sur la date (rs4SentAt a pu avancer avec les relances).
+      for (const m of results.filter((m) => m.is_inbound && !isFromMatera(m) && (!isSendConv || m.created_at * 1000 > sentMs))) inboundAll.push({ m, cid });
+    }
+    if (!inboundAll.length && !bounce) { await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: "sans_reponse", rs4ReplyAt: null, rs4ReplySnippet: null, rs4ReplyMsgId: null } }); counts["sans_reponse"] = (counts["sans_reponse"] ?? 0) + 1; continue; }
+    inboundAll.sort((a, b) => b.m.created_at - a.m.created_at); // plus récente en tête, tous fils confondus
+    const last = inboundAll[0] ?? null;
+    let body = "", snippet = "", hasDoc = inboundAll.some((x) => realDoc(x.m.attachments ?? []));
     if (last) {
-      const full = (await frontGet(`/messages/${last.id}`)) as { content?: string; attachments?: { contentType?: string; filename?: string }[] } | null;
-      body = stripHtml(full?.content || last.blurb || "").slice(0, 500);
+      const full = (await frontGet(`/messages/${last.m.id}`)) as { content?: string; attachments?: { contentType?: string; filename?: string }[] } | null;
+      body = stripHtml(full?.content || last.m.blurb || "").slice(0, 500);
       snippet = body.slice(0, 160);
       if (full?.attachments && realDoc(full.attachments)) hasDoc = true;
     }
-    const kind = classifyReply(body, hasDoc, bounce && !inbound.length);
-    // Cas « on a répondu en DERNIER » : le dernier message de l'échange est un
-    // mail SORTANT Matera, postérieur à leur dernier retour (ex. réponse d'attente
-    // « on revient vers vous » à laquelle on a répondu). La balle est dans leur
-    // camp → le dossier redevient RELANÇABLE : verdict « sans réponse » et le
-    // compteur repart de NOTRE dernier mail (rs4SentAt = date de notre réponse).
-    // Sauf si c'est déjà un « RS reçu » (là on garde, le doc prime).
-    const lastMsg = [...results].sort((a, b) => b.created_at - a.created_at)[0];
-    const weRepliedLast = kind !== "rs_recu" && !!last && !!lastMsg && !lastMsg.is_inbound && !lastMsg.error_type && lastMsg.created_at > last.created_at;
+    const kind = classifyReply(body, hasDoc, bounce && !inboundAll.length);
+    // Conv de la réponse : pour un RS reçu, on pointe vers le fil qui porte le doc.
+    const docItem = inboundAll.find((x) => realDoc(x.m.attachments ?? []));
+    const replyCid = (kind === "rs_recu" && docItem ? docItem.cid : last?.cid) ?? sendCids[sendCids.length - 1] ?? scanCids[0];
+    // « On a répondu en DERNIER » : UNIQUEMENT si la dernière réponse est dans un fil
+    // d'ENVOI (relance) et qu'on a répondu après → dossier relançable. Une réponse
+    // arrivée hors-fil (conv récupérée) est une VRAIE réponse (jamais weRepliedLast).
+    const lastConvResults = last ? (resultsByCid[last.cid] ?? []) : [];
+    const lastMsg = [...lastConvResults].sort((a, b) => b.created_at - a.created_at)[0];
+    const weRepliedLast = kind !== "rs_recu" && !!last && sendSet.has(last.cid) && !!lastMsg && !lastMsg.is_inbound && !lastMsg.error_type && lastMsg.created_at > last.m.created_at;
     if (weRepliedLast) {
-      await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: "sans_reponse", rs4ReplyAt: null, rs4ReplySnippet: "En attente de leur réponse (dernier message : nous)", rs4ReplyMsgId: null, rs4ReplyConvId: cid, rs4SentAt: new Date(lastMsg.created_at * 1000), ...(p.rs4RelanceAt ? { rs4RelanceAt: null } : {}) } });
+      await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: "sans_reponse", rs4ReplyAt: null, rs4ReplySnippet: "En attente de leur réponse (dernier message : nous)", rs4ReplyMsgId: null, rs4ReplyConvId: last!.cid, rs4SentAt: new Date(lastMsg.created_at * 1000), ...(p.rs4RelanceAt ? { rs4RelanceAt: null } : {}) } });
       counts["sans_reponse"] = (counts["sans_reponse"] ?? 0) + 1;
       continue;
     }
     // Réponse détectée sur un dossier en boucle de relances (V4) → retour auto au
     // détecteur (V3) pour re-tri : on efface rs4RelanceAt.
     const backToDetector = !!p.rs4RelanceAt;
-    await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: kind, rs4ReplyAt: last ? new Date(last.created_at * 1000) : now, rs4ReplySnippet: snippet || (bounce ? "Échec de remise (bounce)" : null), rs4ReplyMsgId: last?.id ?? null, rs4ReplyConvId: cid, ...(backToDetector ? { rs4RelanceAt: null } : {}) } });
+    await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: kind, rs4ReplyAt: last ? new Date(last.m.created_at * 1000) : now, rs4ReplySnippet: snippet || (bounce ? "Échec de remise (bounce)" : null), rs4ReplyMsgId: last?.m.id ?? null, rs4ReplyConvId: replyCid, ...(backToDetector ? { rs4RelanceAt: null } : {}) } });
     // Réponse détectée → rouvrir la conv Front (sans re-assigner) pour qu'elle
     // soit visible au même endroit dans l'inbox Gufetto.
-    await reopenConversation(cid);
+    if (last) await reopenConversation(last.cid);
     // « RS reçu » → capturer les PJ (relevé + contrat MRI) dans Gufetto (Supabase),
     // typées par contenu. Idempotent, best-effort (n'interrompt pas le scan).
     if (kind === "rs_recu" && hasDoc) {
       try {
         const cp = await prisma.copro.findUnique({ where: { id: p.coproId! }, select: { nom: true, adresse: true } });
-        if (cp) await captureReplyDocs({ pipelineId: p.id, coproId: p.coproId!, adresse: cp.adresse || cp.nom, msgIds: inbound.map((m) => m.id) });
+        if (cp) await captureReplyDocs({ pipelineId: p.id, coproId: p.coproId!, adresse: cp.adresse || cp.nom, msgIds: inboundAll.map((x) => x.m.id) });
       } catch { /* capture best-effort */ }
     }
     if (backToDetector) await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Réponse détectée (${kind}) — dossier renvoyé de la boucle de relances (V4) au détecteur (V3)`, metadata: { auto: "rs4_reply_back_to_detector", kind }, createdBy: "auto:scan_replies" } });
