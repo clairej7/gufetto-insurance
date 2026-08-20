@@ -597,11 +597,7 @@ export async function scanReplies(offset: number, limit: number): Promise<{ tota
     where: { statut: "rs_en_cours", rs4SentAt: { not: null }, rs4EnCoursAt: null, coproId: { notIn: excl }, copro: { archivedAt: null } },
     select: {
       id: true, coproId: true, rs4SentAt: true, rs4RelanceAt: true, rs4ReplyConvId: true,
-      // Fils d'ENVOI (draft_sent) ET conversations récupérées hors-fil : le RS arrive
-      // souvent dans une NOUVELLE conversation (une relance ouvre un nouveau thread, ou
-      // la réponse tombe dans une autre inbox rapatriée). Il faut donc scanner TOUS ces
-      // fils, pas seulement le dernier envoi — sinon le RS reçu hors-fil est raté.
-      events: { where: { OR: [ { metadata: { path: ["rsType"], equals: "draft_sent" } }, { metadata: { path: ["auto"], equals: "rs4_recovered_offthread_reply" } } ] }, select: { metadata: true } },
+      events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } },
     },
     orderBy: { rs4SentAt: "asc" },
   });
@@ -610,10 +606,12 @@ export async function scanReplies(offset: number, limit: number): Promise<{ tota
   const now = new Date();
   type FMsg = { id: string; is_inbound: boolean; created_at: number; error_type?: string; blurb?: string; attachments?: { contentType?: string; filename?: string }[]; author?: { email?: string }; recipients?: { role: string; handle: string }[] };
   for (const p of slice) {
-    const metas = p.events.map((e) => e.metadata as { conversationId?: string; rsType?: string } | null);
-    const sendCids = [...new Set(metas.filter((m) => m?.rsType === "draft_sent").map((m) => m?.conversationId).filter(Boolean) as string[])];
-    // Périmètre de scan = fils d'envoi + convs récupérées + conv de réponse déjà connue.
-    const scanCids = [...new Set([...sendCids, ...(metas.map((m) => m?.conversationId).filter(Boolean) as string[]), ...(p.rs4ReplyConvId ? [p.rs4ReplyConvId] : [])])];
+    const sendCids = [...new Set(p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean) as string[])];
+    // Périmètre de scan = fils d'ENVOI + la conv de réponse hors-fil DÉJÀ reliée au
+    // dossier (rs4ReplyConvId, posée par le récupérateur). On NE relit PAS les convs
+    // des events de récupération historiques : si un faux rapatriement a été annulé
+    // (rs4ReplyConvId remis à null), la conv hors sujet n'est plus jamais re-scannée.
+    const scanCids = [...new Set([...sendCids, ...(p.rs4ReplyConvId ? [p.rs4ReplyConvId] : [])])];
     if (!scanCids.length) { await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: "non_scanne" } }); counts["non_scanne"] = (counts["non_scanne"] ?? 0) + 1; continue; }
     const sendSet = new Set(sendCids);
     const sentMs = new Date(p.rs4SentAt!).getTime();
