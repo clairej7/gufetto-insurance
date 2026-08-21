@@ -32,6 +32,12 @@ const CARRIER_EXTRA = new Set([
   "msig", "wakam", "acte", "pacifica", "maaf", "thelem", "cfdp", "juridica", "gmfassurances",
 ]);
 
+// Agents généraux : compagnies qu'on contacte EN DIRECT (pas d'intermédiaire
+// courtier). Un dossier sans courtier renseigné mais avec des mails sur le
+// domaine de la compagnie est donc envoyable — et plusieurs boîtes du même
+// réseau (ex. allianz.fr + agents.allianz.fr) ne sont PAS « multi-cabinet ».
+const DIRECT_CARRIERS = new Set(["allianz", "gan", "mma", "smabtp", "cmam"]);
+
 // Prénoms courants : évitent qu'un contact « Pierre-Jean … » matche « Saint Pierre ».
 const FIRSTNAMES = new Set([
   "pierre", "jean", "marie", "paul", "jacques", "michel", "sophie", "vanessa", "coralie",
@@ -296,6 +302,10 @@ function applyAlwaysCc(mails: string[]): string[] {
   return out;
 }
 
+// True si l'assureur est un agent général qu'on contacte en direct (cf. DIRECT_CARRIERS).
+const isDirectContactCarrier = (assureur?: string | null): boolean =>
+  tokensOf(normNom(assureur ?? "")).some((t) => DIRECT_CARRIERS.has(t));
+
 export type SendMailPlan = { mails: string[]; hold: boolean; reason: string };
 export function prepareSendMails(courtierName: string | null, mailField: string | null, idx: CourtierIndex, assureur?: string | null): SendMailPlan {
   // GARDE-FOU assureur : Wakam / « Matera Assurance(s) » = on était l'assureur →
@@ -351,6 +361,14 @@ export function prepareSendMails(courtierName: string | null, mailField: string 
   const byName = mails.filter((m) => nameMatchesDomain(nameTokens, dom(m)));
   if (byName.length && byName.length < mails.length) return { mails: cap(byName), hold: false, reason: "" };
   if (byName.length) return { mails: cap(byName), hold: false, reason: "" };
+  // AGENT GÉNÉRAL sans courtier renseigné : on contacte la compagnie EN DIRECT.
+  // Tous les mails « pro » sur le domaine de l'assureur (allianz.fr,
+  // agents.allianz.fr…) sont légitimes → envoyable (max 2), et ce n'est pas un
+  // cas « multi-cabinet ».
+  if (isDirectContactCarrier(assureur)) {
+    const onCarrier = mails.filter((m) => nameMatchesDomain(assTokens, dom(m)));
+    if (onCarrier.length) return { mails: cap(onCarrier), hold: false, reason: "" };
+  }
   const nonGeneric = new Set(mails.map(dom).filter((d) => !GENERIC_DOM.has(d)));
   if (nonGeneric.size >= 2) return { mails: [], hold: true, reason: "multi-cabinet ambigu (plusieurs domaines, aucun ne matche le courtier)" };
   // GARDE-FOU perso : hors base, aucun mail ne matche le courtier, et il ne reste
