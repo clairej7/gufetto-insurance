@@ -523,6 +523,20 @@ async function loadRowsToAuto4(actorEmail: string, rows: CourtierAuditRow[]): Pr
       }
     }
     await prisma.insurancePipeline.update({ where: { id: r.pipelineId }, data: { rsBatchAt: now } });
+    // Si la RS est DÉJÀ partie (envoi historique), on place le dossier directement
+    // au Volet 3 (suivi des relances) au lieu de le laisser stagner dans
+    // l'échantillon à envoyer du Volet 1. rs4SentAt = date du 1er envoi RÉEL
+    // (relanceNum 0 + destinataire) → compteur « J+X » exact.
+    if (r.rsSent) {
+      const pl = await prisma.insurancePipeline.findUnique({ where: { id: r.pipelineId }, select: { rs4SentAt: true, rs4Volet2At: true, events: { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true, createdAt: true } } } });
+      if (pl && pl.rs4SentAt === null) {
+        const genuine = pl.events.filter((e) => { const m = e.metadata as { relanceNum?: number; to?: string } | null; return !!m && m.relanceNum === 0 && typeof m.to === "string" && m.to.trim().length > 0; });
+        if (genuine.length) {
+          const first = genuine.reduce((a, e) => (e.createdAt < a ? e.createdAt : a), genuine[0].createdAt);
+          await prisma.insurancePipeline.update({ where: { id: r.pipelineId }, data: { rs4SentAt: first, rs4Volet2At: pl.rs4Volet2At ?? first } });
+        }
+      }
+    }
   }
   if (rows.length) {
     await prisma.pipelineEvent.createMany({

@@ -184,6 +184,15 @@ export type Rs4Sample = {
 // passé au Volet 2 (rs4Volet2At null).
 const volet1Where = (excl: string[]) => ({ statut: "rs_en_cours" as const, rsBatchAt: { not: null }, rs4Volet2At: null, coproId: { notIn: excl }, copro: { archivedAt: null } });
 
+// Un dossier est « déjà envoyé » si un event draft_sent GENUINE existe (envoi
+// initial de NOTRE part : relanceNum 0 + destinataire). On ignore les vestiges
+// (« conv liée depuis Front », sans destinataire). Ces dossiers relèvent du
+// Volet 3 (suivi des relances), JAMAIS de l'échantillon à envoyer (Volet 1) :
+// sinon une RS déjà partie réapparaît indéfiniment « à vérifier / à envoyer ».
+export const isGenuineRsSent = (events: { metadata: unknown }[]): boolean =>
+  events.some((e) => { const m = e.metadata as { relanceNum?: number; to?: string } | null; return !!m && m.relanceNum === 0 && typeof m.to === "string" && m.to.trim().length > 0; });
+const DRAFT_SENT_EV = { where: { metadata: { path: ["rsType"], equals: "draft_sent" } }, select: { metadata: true } } as const;
+
 // Série quotidienne pour le graphe du dashboard : par jour, nb de demandes de RS
 // envoyées (event draft_sent) et nb de RS reçus « actés » (event description ~ « RS reçu »).
 // Alimenté en direct par l'activité Gufetto (aucun cache).
@@ -218,7 +227,7 @@ export async function getRs4Sample(): Promise<Rs4Sample> {
   const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({
     where: volet1Where(excl),
-    select: { id: true, rsBatchAt: true, copro: { select: { nom: true, assureurActuel: true, numeroContrat: true, courtierActuel: true, contactCourtierEmail: true } } },
+    select: { id: true, rsBatchAt: true, copro: { select: { nom: true, assureurActuel: true, numeroContrat: true, courtierActuel: true, contactCourtierEmail: true } }, events: DRAFT_SENT_EV },
     orderBy: { rsBatchAt: "desc" },
   });
   const idx = await getCourtierIndex();
@@ -226,6 +235,8 @@ export async function getRs4Sample(): Promise<Rs4Sample> {
   const completeRows: Rs4Row[] = [];
   const incompleteRows: Rs4Row[] = [];
   for (const p of ps) {
+    // RS déjà partie → relève du Volet 3, jamais de l'échantillon à envoyer.
+    if (isGenuineRsSent(p.events)) continue;
     const c = p.copro;
     const assureur = c.assureurActuel?.trim() || null;
     const numeroContrat = c.numeroContrat?.trim() || null;
@@ -246,12 +257,18 @@ export async function getRs4Sample(): Promise<Rs4Sample> {
     (manque.length === 0 ? completeRows : incompleteRows).push(row);
   }
 
-  return { total: ps.length, complete: completeRows.length, incomplete: incompleteRows.length, completeRows, incompleteRows };
+  const total = completeRows.length + incompleteRows.length;
+  return { total, complete: completeRows.length, incomplete: incompleteRows.length, completeRows, incompleteRows };
 }
 
 // Nb de dossiers encore au Volet 1 (échantillon à vérifier, pas encore passé au 2).
+// On EXCLUT les dossiers dont la RS est déjà partie (ils relèvent du Volet 3).
 export async function getRs4Volet1Count(): Promise<number> {
-  return prisma.insurancePipeline.count({ where: volet1Where(await getExcludedCoproIds()) });
+  const ps = await prisma.insurancePipeline.findMany({
+    where: volet1Where(await getExcludedCoproIds()),
+    select: { id: true, events: DRAFT_SENT_EV },
+  });
+  return ps.filter((p) => !isGenuineRsSent(p.events)).length;
 }
 
 // Nb de dossiers passés au Volet 2 (envoi des mails).
