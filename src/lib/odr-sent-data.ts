@@ -9,6 +9,9 @@
 // AXA : 502 ODR ingérés le 2026-08-06 depuis "LISTE ODR MATERA A JOUR (4)" onglet "ODR VALABLES",
 //       + 1 ajouté le 2026-08-19 (19 RUE CLAUDE DEBUSSY, 57120 ROMBAS — n° 5570386004), nouvel ODR
 //         apparu dans la v6 du fichier, absent partout de Gufetto → 503 docs.
+//       + 10 ajoutés le 2026-08-24 depuis "LISTE ODR MATERA A JOUR -24_08_2026" onglet "ODR VALABLES",
+//         absents du tableau interne (Gasny, Nanterre, Argenteuil, Ivry, 3× Prévessin-Moëns/Neutrino,
+//         Fresnes, Thiais, Pantin/Méhul) → 513 docs.
 // SADA : 123 ODR, ingérés le 2026-08-06 depuis "ODR SADA 2", "ODR Sada - 03_08_2026",
 // "ODR Sada - 24_07_2026" (dédupliqués).
 
@@ -2027,6 +2030,46 @@ export const ODR_SENT_DOCS: Record<"AXA" | "GENERALI" | "SADA" | "MILA", OdrSent
   {
     "adresse": "19 RUE CLAUDE DEBUSSY 57120 ROMBAS",
     "numeroContrat": "5570386004"
+  },
+  {
+    "adresse": "2 AVENUE DU GENERAL DE GAULLE 27620 GASNY",
+    "numeroContrat": "21986821504"
+  },
+  {
+    "adresse": "53 BOULEVARD DE PESARO 92000 NANTERRE",
+    "numeroContrat": "22197533404"
+  },
+  {
+    "adresse": "23 ALLEE PASTEUR 95100 ARGENTEUIL",
+    "numeroContrat": "11268132204"
+  },
+  {
+    "adresse": "67 RUE MAURICE GUNSBOURG 94200 IVRY SUR SEINE",
+    "numeroContrat": "21765013804"
+  },
+  {
+    "adresse": "32 MAIL DU NEUTRINO - BAT 1 01280 PREVESSIN MOENS",
+    "numeroContrat": "21561485704"
+  },
+  {
+    "adresse": "32 MAIL DU NEUTRINO - BAT 2 01280 PREVESSIN MOENS",
+    "numeroContrat": "21561493104"
+  },
+  {
+    "adresse": "32 MAIL DU NEUTRINO - VILLAS 24 A 46 01280 PREVESSIN MOENS",
+    "numeroContrat": "21561739004"
+  },
+  {
+    "adresse": "1/3 BD JEAN JAURES 94260 FRESNES",
+    "numeroContrat": "21969045404"
+  },
+  {
+    "adresse": "20 RUE PAUL CEZANNE 94320 THIAIS",
+    "numeroContrat": "21710688104"
+  },
+  {
+    "adresse": "ASL 10 BIS RUE MEHUL 93500 PANTIN",
+    "numeroContrat": "10793293804"
   }
 ],
   GENERALI: [],
