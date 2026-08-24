@@ -37,17 +37,35 @@ async function volet2PipelineIds(): Promise<string[]> {
   return ids.map((e) => e.pipelineId);
 }
 
-// Tableau initial : 1 ligne par dossier, SEULE la colonne A (nom) est remplie.
+const COPRO_SELECT = {
+  nom: true, adresse: true, primeActuelle: true, assureurActuel: true, surfaceDeveloppee: true,
+  periodeConstruction: true, natureOccupation: true, activitesAggravantes: true,
+  caracteristiquesParticulieres: true, proportionInoccupee: true, protectionJuridique: true,
+} as const;
+
+// Cellules à partir des données Gufetto déjà connues : vert si présente, rouge si vide.
+// (Persistance : une valeur déjà extraite/saisie a été écrite dans Copro → elle
+// réapparaît en vert après un rafraîchissement, plus de remise à zéro.)
+function cellsFromCopro(raw: Record<ColKey, string | null>): Record<ColKey, Cell> {
+  return Object.fromEntries(COLUMNS.map((c) => {
+    const v = raw[c.key];
+    return [c.key, v != null && v !== "" ? { value: v, color: "green" as CellColor } : { value: null, color: "red" as CellColor }];
+  })) as Record<ColKey, Cell>;
+}
+
+// Tableau initial : 1 ligne par dossier, pré-rempli avec ce que Gufetto sait déjà
+// (vert), le reste en rouge (à retrouver via l'extraction du contrat).
 export async function getDevis5ExcelRows(): Promise<{ count: number; rows: ExcelRow[] }> {
   const ids = await volet2PipelineIds();
   const ps = await prisma.insurancePipeline.findMany({
     where: { id: { in: ids } },
-    select: { id: true, copro: { select: { nom: true } } },
+    select: { id: true, copro: { select: COPRO_SELECT } },
   });
-  const byId = new Map(ps.map((p) => [p.id, p.copro.nom]));
-  const empty = (): Record<ColKey, Cell> =>
-    Object.fromEntries(COLUMNS.map((c) => [c.key, { value: null, color: "red" as CellColor }])) as Record<ColKey, Cell>;
-  const rows = ids.filter((id) => byId.has(id)).map((id) => ({ pipelineId: id, nom: byId.get(id)!, cells: empty() }));
+  const byId = new Map(ps.map((p) => [p.id, p.copro]));
+  const rows = ids.filter((id) => byId.has(id)).map((id) => {
+    const c = byId.get(id)!;
+    return { pipelineId: id, nom: c.nom, cells: cellsFromCopro(coproRaw(c)) };
+  });
   return { count: rows.length, rows };
 }
 
