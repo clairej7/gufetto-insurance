@@ -75,7 +75,7 @@ Réponds UNIQUEMENT un objet JSON sans markdown, avec seulement les clés trouv�
 - "prime": number — prime/cotisation annuelle TTC en euros (nombre seul).
 - "surface": number — surface développée / superficie totale en m² (nombre seul).
 - "periode": une valeur EXACTE parmi ${JSON.stringify(PERIODES)} (période/année de construction de l'immeuble).
-- "nature": une valeur EXACTE parmi ${JSON.stringify(NATURES)} ("habitation" si usage d'habitation, "mixte" si habitation + commerces/bureaux, "professionnelle" si uniquement professionnel).
+- "nature": "habitation" OU "mixte" (JAMAIS "professionnelle" : immeubles jamais 100% tertiaire). "mixte" s'il y a au moins un commerce/local pro/bureau ou une activité professionnelle ; sinon "habitation". « Activité(s) professionnelle(s) : Aucune » ⇒ "habitation".
 - "activites": tableau de valeurs EXACTES parmi ${JSON.stringify(ACTIVITES)} (activités commerciales aggravantes présentes dans l'immeuble ; ["Aucune"] si le contrat indique explicitement aucune).
 - "caracteristiques": tableau de valeurs EXACTES parmi ${JSON.stringify(CARACTERISTIQUES)} (["Aucune"] si explicitement aucune).
 - "proportion": une valeur EXACTE parmi ${JSON.stringify(PROPORTIONS)} (proportion de locaux inoccupés/vacants).
@@ -187,7 +187,7 @@ Réponds UNIQUEMENT un objet JSON sans markdown. Clés possibles :
 - "prime": value = number, prime/cotisation annuelle TTC en euros (nombre seul).
 - "surface": value = number, surface développée / superficie totale en m² (nombre seul).
 - "periode": value = une valeur EXACTE parmi ${JSON.stringify(PERIODES)} (période de construction).
-- "nature": value = une valeur EXACTE parmi ${JSON.stringify(NATURES)} ("habitation" si habitation, "mixte" si habitation + commerces/bureaux, "professionnelle" si uniquement pro).
+- "nature": value = "habitation" OU "mixte" UNIQUEMENT — ne réponds JAMAIS "professionnelle" (nos immeubles ne sont jamais 100% tertiaire). Règle : "mixte" s'il existe au moins un commerce / local professionnel / bureau, OU une activité professionnelle dans l'immeuble ; SINON "habitation". Un contrat qui indique « Usage : Habitation » et/ou « Activité(s) professionnelle(s) : Aucune » ⇒ value "habitation" avec sure:true (c'est une info claire).
 - "activites": value = tableau de valeurs EXACTES parmi ${JSON.stringify(ACTIVITES)} (["Aucune"] si le contrat indique explicitement aucune).
 - "caracteristiques": value = tableau de valeurs EXACTES parmi ${JSON.stringify(CARACTERISTIQUES)} (["Aucune"] si explicitement aucune).
 - "proportion": value = une valeur EXACTE parmi ${JSON.stringify(PROPORTIONS)} (proportion de locaux inoccupés/vacants).
@@ -225,6 +225,8 @@ Réponds UNIQUEMENT un objet JSON sans markdown. Clés possibles :
   str("adresse");
   num("prime"); num("surface");
   str("periode", PERIODES); str("nature", NATURES); str("proportion", PROPORTIONS);
+  // Sécurité : on ne retient jamais "professionnelle" (immeubles jamais 100% tertiaire) → mixte.
+  if (out.nature?.value === "professionnelle") out.nature = { value: "mixte", sure: out.nature.sure };
   const pjR = pick("pj");
   if (pjR && (pjR.value === "oui" || pjR.value === "non")) out.pj = { value: pjR.value, sure: pjR.sure };
   arr("activites", ACTIVITES); arr("caracteristiques", CARACTERISTIQUES);
