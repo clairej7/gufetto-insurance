@@ -6,8 +6,8 @@
 //    code couleur (vert = sûr, orange = douteux, rouge = manquant), barre de chargement.
 // 3) cellules éditables (menus déroulants) → sauvegarde + passage en vert.
 // 4) « Générer l'excel » → téléchargement .xlsx.
-import { useState } from "react";
-import { Loader2, FileSpreadsheet, Search, Download } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Loader2, FileSpreadsheet, Search, Download, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { COLUMNS, LABELS, displayValue, type ColKey, type Cell, type ExcelRow } from "@/lib/devis5-columns";
 
@@ -16,6 +16,10 @@ const TINT: Record<Cell["color"], { bg: string; bd: string }> = {
   orange: { bg: "#FDF3DF", bd: "#F0D28A" },
   red: { bg: "#FCEBEB", bd: "#F1C4C4" },
 };
+// Persistance locale : le tableau (valeurs + couleurs + dossiers déjà traités)
+// est sauvegardé à chaque changement et restauré au chargement → un
+// rafraîchissement de l'onglet ne remet plus tout à zéro.
+const STORAGE_KEY = "devis5-excel-v1";
 
 export function Devis5ExcelTable({ count }: { count: number }) {
   const [rows, setRows] = useState<ExcelRow[] | null>(null);
@@ -24,6 +28,26 @@ export function Devis5ExcelTable({ count }: { count: number }) {
   const [prog, setProg] = useState<{ done: number; total: number } | null>(null);
   const [extracted, setExtracted] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
+
+  // Restauration au montage.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw) as { rows?: ExcelRow[]; extracted?: string[] };
+      if (Array.isArray(s.rows) && s.rows.length) { setRows(s.rows); setExtracted(new Set(s.extracted ?? [])); }
+    } catch { /* ignore */ }
+  }, []);
+  // Sauvegarde à chaque changement.
+  useEffect(() => {
+    if (!rows) return;
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ rows, extracted: [...extracted] })); } catch { /* quota */ }
+  }, [rows, extracted]);
+
+  function reset() {
+    setRows(null); setExtracted(new Set());
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+  }
 
   async function generate() {
     setGenerating(true);
@@ -124,6 +148,9 @@ export function Devis5ExcelTable({ count }: { count: number }) {
             <button onClick={download} disabled={downloading} style={btn("#13762C", "#fff", "#13762C")}>
               {downloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Générer l&apos;excel
             </button>
+            <button onClick={reset} title="Vide le tableau (les données restent enregistrées côté dossier)" style={btn("#fff", "#656576", "#E8E8EC")}>
+              <RotateCcw size={13} /> Réinitialiser
+            </button>
             <span style={{ display: "inline-flex", gap: 12, fontSize: 11, color: "#656576", marginLeft: 4 }}>
               <span>🟢 sûr</span><span>🟠 à vérifier</span><span>🔴 manquant</span>
             </span>
@@ -139,19 +166,21 @@ export function Devis5ExcelTable({ count }: { count: number }) {
             </div>
           )}
 
-          {/* Tableau */}
-          <div style={{ overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 10 }}>
+          {/* Tableau — hauteur ~6-7 lignes, en-tête figé, scroll H+V */}
+          <div style={{ maxHeight: 340, overflow: "auto", border: "1px solid #E8E8EC", borderRadius: 10 }}>
             <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 1100 }}>
               <thead>
                 <tr style={{ background: "#F7F7FA" }}>
-                  <th style={thStyle}>Copropriété (A)</th>
-                  {COLUMNS.map((c) => <th key={c.key} style={thStyle}>{c.label} ({c.letter})</th>)}
+                  <th style={{ ...thStyle, position: "sticky", top: 0, left: 0, zIndex: 3, background: "#F7F7FA" }}>Copropriété (A)</th>
+                  {COLUMNS.map((c) => <th key={c.key} style={{ ...thStyle, position: "sticky", top: 0, zIndex: 2, background: "#F7F7FA" }}>{c.label} ({c.letter})</th>)}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.pipelineId} style={{ borderTop: "1px solid #EEE" }}>
-                    <td style={{ ...tdStyle, fontWeight: 600, position: "sticky", left: 0, background: "#fff", minWidth: 200 }}>{r.nom}</td>
+                    <td style={{ ...tdStyle, position: "sticky", left: 0, zIndex: 1, background: "#fff", minWidth: 200 }}>
+                      <a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none", fontWeight: 600 }}>{r.nom}</a>
+                    </td>
                     {COLUMNS.map((c) => (
                       <td key={c.key} style={{ ...tdStyle, background: TINT[r.cells[c.key].color].bg, borderColor: TINT[r.cells[c.key].color].bd }}>
                         <CellEditor col={c.key} cell={r.cells[c.key]} onSave={(v) => saveCell(r.pipelineId, c.key, v)} />
