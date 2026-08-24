@@ -21,12 +21,10 @@ export const DEVIS_FIELDS = [
 ] as const;
 export type DevisFieldKey = (typeof DEVIS_FIELDS)[number]["key"];
 
-// Valeurs autorisées (= listes du formulaire de demande de devis).
-const PERIODES = ["avant_1950", "1950_1970", "1970_1985", "1985_2000", "apres_2000", "inconnue"];
-const NATURES = ["habitation", "mixte", "professionnelle"];
-const PROPORTIONS = ["moins_25", "25_50", "50_75", "plus_75"];
-const ACTIVITES = ["Restaurant", "Boulangerie / Pâtisserie", "Discothèque / Bar de nuit / Bar avec piste de danse", "Pizzeria avec four à bois", "Kebab", "Travail du bois", "Activités industrielles & agricoles", "Activités de transformation de produits", "Activités de recherche et développement", "Station essence", "Ambassade ou Consulat", "Aucune"];
-const CARACTERISTIQUES = ["Présence d'amiante", "Ossature / façade / parement en bois (> 10%)", "Arrêté de péril en cours", "Monument historique", "Logements sociaux ou HLM", "Immeuble squatté", "Immeuble en cours de construction ou démolition", "Aucune"];
+// Valeurs autorisées (= listes du formulaire de demande de devis). Source unique
+// dans le module client-safe devis5-columns, ré-exportée ici pour compat.
+import { PERIODES, NATURES, PROPORTIONS, ACTIVITES, CARACTERISTIQUES } from "@/lib/devis5-columns";
+export { PERIODES, NATURES, PROPORTIONS, ACTIVITES, CARACTERISTIQUES };
 
 export type CoproInfoFields = {
   primeActuelle: number | null; surfaceDeveloppee: number | null; periodeConstruction: string | null;
@@ -144,4 +142,104 @@ export async function extractDevisInfoForPipeline(pipelineId: string, actorEmail
     await prisma.pipelineEvent.create({ data: { pipelineId, type: "action_manuelle", description: `Infos devis complétées depuis le contrat MRI : ${filled.join(", ")}`, metadata: { devis5Info: filled }, createdBy: actorEmail } });
   }
   return { ok: true, filled };
+}
+
+// ── Extraction AVEC CONFIANCE par champ (pour le tableau Excel Auto 5) ────────
+// Chaque champ : { value, sure }. sure=true => l'info est EXPLICITEMENT et
+// LISIBLEMENT indiquée dans le contrat (→ vert). sure=false => déduite, ambiguë
+// ou peu lisible (→ orange). Champ absent du JSON => information manquante (→ rouge).
+export type ConfVal<T> = { value: T; sure: boolean };
+export type DevisConfident = {
+  adresse?: ConfVal<string>;
+  prime?: ConfVal<number>;
+  surface?: ConfVal<number>;
+  periode?: ConfVal<string>;
+  nature?: ConfVal<string>;
+  activites?: ConfVal<string[]>;
+  caracteristiques?: ConfVal<string[]>;
+  proportion?: ConfVal<string>;
+  pj?: ConfVal<"oui" | "non">;
+};
+
+type RawConf = Record<string, { value: unknown; sure?: boolean } | null | undefined>;
+
+async function extractConfidentFromPdf(pdf: Buffer): Promise<DevisConfident> {
+  if (!process.env.ANTHROPIC_API_KEY) return {};
+  let raw: RawConf = {};
+  try {
+    const resp = await anthropic.messages.create({
+      model: "claude-sonnet-5",
+      max_tokens: 900,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdf.toString("base64") } },
+          { type: "text", text:
+`Tu lis un contrat d'assurance multirisque immeuble (MRI). Extrais les informations demandées ci-dessous.
+
+Pour CHAQUE information trouvée, renvoie un objet { "value": <valeur>, "sure": <true|false> } :
+- "sure": true UNIQUEMENT si l'information est EXPLICITEMENT et clairement indiquée, lisible sans ambiguïté dans le document.
+- "sure": false si tu la déduis, si le passage est peu lisible, ambigu, ou incohérent.
+- Si une information est TOTALEMENT absente du document, OMETS complètement sa clé (n'invente jamais).
+
+Réponds UNIQUEMENT un objet JSON sans markdown. Clés possibles :
+- "adresse": value = adresse complète du risque assuré (n° + voie + code postal + ville), telle qu'écrite.
+- "prime": value = number, prime/cotisation annuelle TTC en euros (nombre seul).
+- "surface": value = number, surface développée / superficie totale en m² (nombre seul).
+- "periode": value = une valeur EXACTE parmi ${JSON.stringify(PERIODES)} (période de construction).
+- "nature": value = une valeur EXACTE parmi ${JSON.stringify(NATURES)} ("habitation" si habitation, "mixte" si habitation + commerces/bureaux, "professionnelle" si uniquement pro).
+- "activites": value = tableau de valeurs EXACTES parmi ${JSON.stringify(ACTIVITES)} (["Aucune"] si le contrat indique explicitement aucune).
+- "caracteristiques": value = tableau de valeurs EXACTES parmi ${JSON.stringify(CARACTERISTIQUES)} (["Aucune"] si explicitement aucune).
+- "proportion": value = une valeur EXACTE parmi ${JSON.stringify(PROPORTIONS)} (proportion de locaux inoccupés/vacants).
+- "pj": value = "oui" ou "non" (présence d'une garantie Protection Juridique).` },
+        ],
+      }],
+    });
+    const c = resp.content.find((b) => b.type === "text");
+    if (!c || c.type !== "text") return {};
+    const txt = c.text.trim().replace(/^```json?\s*/i, "").replace(/\s*```$/i, "");
+    raw = JSON.parse(txt) as RawConf;
+  } catch { return {}; }
+
+  const out: DevisConfident = {};
+  const pick = (k: string): { value: unknown; sure: boolean } | null => {
+    const r = raw[k];
+    if (r == null || typeof r !== "object" || !("value" in r)) return null;
+    return { value: (r as { value: unknown }).value, sure: (r as { sure?: boolean }).sure === true };
+  };
+  const str = (k: keyof DevisConfident, whitelist?: string[]) => {
+    const r = pick(k); if (!r || typeof r.value !== "string" || !r.value.trim()) return;
+    const v = r.value.trim();
+    if (whitelist && !whitelist.includes(v)) return;
+    (out as Record<string, unknown>)[k] = { value: v, sure: r.sure };
+  };
+  const num = (k: keyof DevisConfident) => {
+    const r = pick(k); if (!r || typeof r.value !== "number" || !(r.value > 0)) return;
+    (out as Record<string, unknown>)[k] = { value: Math.round(r.value), sure: r.sure };
+  };
+  const arr = (k: keyof DevisConfident, whitelist: string[]) => {
+    const r = pick(k); if (!r || !Array.isArray(r.value)) return;
+    const a = (r.value as unknown[]).filter((x): x is string => typeof x === "string" && whitelist.includes(x));
+    if (a.length) (out as Record<string, unknown>)[k] = { value: a, sure: r.sure };
+  };
+  str("adresse");
+  num("prime"); num("surface");
+  str("periode", PERIODES); str("nature", NATURES); str("proportion", PROPORTIONS);
+  const pjR = pick("pj");
+  if (pjR && (pjR.value === "oui" || pjR.value === "non")) out.pj = { value: pjR.value, sure: pjR.sure };
+  arr("activites", ACTIVITES); arr("caracteristiques", CARACTERISTIQUES);
+  return out;
+}
+
+// Extraction « avec confiance » depuis le contrat MRI d'UN dossier (lecture seule).
+export async function extractDevisConfidentForPipeline(pipelineId: string): Promise<{ ok: boolean; data: DevisConfident; reason?: string }> {
+  const p = await prisma.insurancePipeline.findUnique({
+    where: { id: pipelineId },
+    select: { documents: { where: { kind: "contrat_mri" }, orderBy: { createdAt: "desc" }, select: { storagePath: true }, take: 1 } },
+  });
+  if (!p) return { ok: false, data: {}, reason: "introuvable" };
+  if (!p.documents.length) return { ok: false, data: {}, reason: "pas de contrat MRI" };
+  const pdf = await downloadStored(p.documents[0].storagePath);
+  if (!pdf) return { ok: false, data: {}, reason: "PDF illisible" };
+  return { ok: true, data: await extractConfidentFromPdf(pdf) };
 }
