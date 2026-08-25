@@ -25,7 +25,7 @@ export const COLUMNS: ColDef[] = [
   { key: "adresse", letter: "B", label: "Adresse", type: "text" },
   { key: "prime", letter: "C", label: "Dernière prime payée (€)", type: "number" },
   { key: "assureur", letter: "D", label: "Assureur actuel", type: "text" },
-  { key: "surface", letter: "E", label: "Surface développée (m²)", type: "number" },
+  { key: "surface", letter: "E", label: "Surface développée (m²)", type: "text" },
   { key: "periode", letter: "F", label: "Période de construction", type: "select", options: PERIODES },
   { key: "nature", letter: "G", label: "Nature de l'occupation", type: "select", options: NATURES },
   { key: "activites", letter: "H", label: "Activité aggravante", type: "multi", options: ACTIVITES },
