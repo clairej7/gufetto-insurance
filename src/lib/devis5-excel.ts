@@ -118,6 +118,7 @@ export async function extractDevis5Row(pipelineId: string): Promise<ExcelRow | n
   // Défauts « safe » appliqués si l'extraction ne trouve rien (règles métier
   // Quentin) : ces champs ne restent JAMAIS vides, au pire orange « à vérifier ».
   const DEFAULTS: Partial<Record<ColKey, string>> = {
+    surface: "Inconnue", // dernier recours : aucune surface trouvée au contrat
     periode: "inconnue",
     nature: "habitation",
     activites: JSON.stringify(["Aucune"]),
@@ -167,7 +168,12 @@ export async function saveDevis5Cell(pipelineId: string, key: ColKey, value: str
     caracteristiques: "caracteristiquesParticulieres", proportion: "proportionInoccupee", pj: "protectionJuridique",
   };
   let stored: unknown = v || null;
-  if (key === "prime" || key === "surface") stored = v ? Number(v.replace(/[^\d.]/g, "")) : null;
+  if (key === "prime" || key === "surface") {
+    // champ numérique en base → « Inconnue » ou tout texte non chiffré = null
+    // (la valeur affichée « Inconnue » vit dans le tableau, pas en base).
+    const cleaned = v.replace(/[^\d.]/g, "");
+    stored = cleaned ? Number(cleaned) : null;
+  }
   await prisma.copro.update({ where: { id: p.coproId }, data: { [field[key]]: stored } });
   // Une saisie manuelle est considérée fiable → vert (rouge si vidée).
   return { value: v || null, color: v ? "green" : "red" };
