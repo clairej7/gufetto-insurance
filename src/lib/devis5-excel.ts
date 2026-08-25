@@ -13,6 +13,8 @@ export type { Cell, CellColor, ColKey, ExcelRow } from "@/lib/devis5-columns";
 export { COLUMNS, LABELS, displayValue } from "@/lib/devis5-columns";
 
 // ── Périmètre = dossiers passés au Volet 2 (mêmes critères que getDevis5Volet2Data) ──
+// On EXCLUT aussi les dossiers déjà intégrés à un lot Excel (event devis5Lot) :
+// ils sont « sortis » du Volet 2 et vivent dans le Volet 3.
 async function volet2PipelineIds(): Promise<string[]> {
   const excl = await getExcludedCoproIds();
   const ev = await prisma.pipelineEvent.findMany({
@@ -20,7 +22,14 @@ async function volet2PipelineIds(): Promise<string[]> {
       metadata: { path: ["devis5Volet"], equals: 2 },
       pipeline: {
         statut: "devis_demandes", coproId: { notIn: excl }, copro: { archivedAt: null },
-        events: { none: { metadata: { path: ["devisType"], equals: "devis_sent" } } },
+        events: {
+          none: {
+            OR: [
+              { metadata: { path: ["devisType"], equals: "devis_sent" } },
+              { metadata: { path: ["devis5Lot"], equals: true } },
+            ],
+          },
+        },
       },
     },
     select: { pipelineId: true, pipeline: { select: { copro: { select: { dateEcheance: true } } } } },
@@ -197,4 +206,71 @@ export async function buildDevis5Xlsx(rows: ExcelRow[]): Promise<Buffer> {
   }
   const ab = await wb.xlsx.writeBuffer();
   return Buffer.from(ab);
+}
+
+// ─── Volet 3 : lots Excel ────────────────────────────────────────────────────
+export type Devis5LotRow = { id: string; createdAt: string; createdBy: string; sentAt: string | null; count: number };
+
+// Crée un lot à partir des lignes affichées : fige rows + pipelineIds, marque les
+// dossiers (event devis5Lot → ils sortent du Volet 2). Retourne l'id du lot.
+export async function createDevis5Lot(rows: ExcelRow[], actorEmail: string): Promise<{ id: string }> {
+  const pipelineIds = rows.map((r) => r.pipelineId).filter(Boolean);
+  const lot = await prisma.devis5Lot.create({
+    data: { createdBy: actorEmail, count: rows.length, rows: JSON.stringify(rows), pipelineIds: JSON.stringify(pipelineIds) },
+  });
+  if (pipelineIds.length) {
+    await prisma.pipelineEvent.createMany({
+      data: pipelineIds.map((pid) => ({
+        pipelineId: pid, type: "action_manuelle" as const,
+        description: "Intégré à un lot Excel de demandes de devis (Volet 3)",
+        metadata: { devis5Lot: true, lotId: lot.id }, createdBy: actorEmail,
+      })),
+    });
+  }
+  return { id: lot.id };
+}
+
+export async function getDevis5Lots(): Promise<Devis5LotRow[]> {
+  const lots = await prisma.devis5Lot.findMany({ orderBy: { createdAt: "desc" }, take: 50 });
+  return lots.map((l) => ({ id: l.id, createdAt: l.createdAt.toISOString(), createdBy: l.createdBy, sentAt: l.sentAt?.toISOString() ?? null, count: l.count }));
+}
+
+// Re-génère le .xlsx d'un lot depuis ses lignes figées.
+export async function getDevis5LotXlsx(lotId: string): Promise<Buffer | null> {
+  const lot = await prisma.devis5Lot.findUnique({ where: { id: lotId } });
+  if (!lot) return null;
+  let rows: ExcelRow[] = [];
+  try { rows = JSON.parse(lot.rows) as ExcelRow[]; } catch { rows = []; }
+  return buildDevis5Xlsx(rows);
+}
+
+// Marque un lot « envoyé » (à la main) → date + event devis_sent sur chaque dossier
+// (⇒ « demandes envoyées » du dashboard). Idempotent.
+export async function markDevis5LotSent(lotId: string, actorEmail: string): Promise<{ ok: boolean; sentAt: string; marked: number }> {
+  const lot = await prisma.devis5Lot.findUnique({ where: { id: lotId } });
+  if (!lot) throw new Error("lot introuvable");
+  const now = lot.sentAt ?? new Date();
+  let ids: string[] = [];
+  try { ids = JSON.parse(lot.pipelineIds) as string[]; } catch { ids = []; }
+  if (!lot.sentAt) {
+    await prisma.devis5Lot.update({ where: { id: lotId }, data: { sentAt: now, sentBy: actorEmail } });
+    // devis_sent sur les dossiers qui ne l'ont pas encore (anti-doublon).
+    const already = await prisma.pipelineEvent.findMany({
+      where: { pipelineId: { in: ids }, metadata: { path: ["devisType"], equals: "devis_sent" } },
+      select: { pipelineId: true },
+    });
+    const done = new Set(already.map((e) => e.pipelineId));
+    const todo = ids.filter((id) => !done.has(id));
+    if (todo.length) {
+      await prisma.pipelineEvent.createMany({
+        data: todo.map((pid) => ({
+          pipelineId: pid, type: "action_manuelle" as const,
+          description: `Demande de devis envoyée (lot Excel AXA du ${now.toLocaleDateString("fr-FR")})`,
+          metadata: { devisType: "devis_sent", relanceNum: 0, auto: "devis5_lot", lotId }, createdBy: actorEmail,
+        })),
+      });
+    }
+    return { ok: true, sentAt: now.toISOString(), marked: todo.length };
+  }
+  return { ok: true, sentAt: now.toISOString(), marked: 0 };
 }

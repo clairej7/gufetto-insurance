@@ -8,6 +8,8 @@ import { useRouter } from "next/navigation";
 import { Search, Loader2, Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Devis5ExcelTable } from "@/components/admin/devis5-excel-table";
+import { Devis5Volet3 } from "@/components/admin/devis5-volet3";
+type Devis5Lot = { id: string; createdAt: string; createdBy: string; sentAt: string | null; count: number };
 
 type Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; prime: number | null; courtier: string | null; gestionnaire: string | null; hasRs: boolean; hasContrat: boolean };
 type Data = { total: number; prets: number; docsManquants: number; rows: Row[] };
@@ -29,7 +31,7 @@ const DR_META: Record<DevisReplyKind, { label: string; color: string; bg: string
 type FieldKey = "prime" | "surface" | "periode" | "nature" | "activites" | "caracteristiques" | "proportion" | "pj";
 type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; passedAt: string; present: Record<FieldKey, boolean>; nb: number };
 type Volet2 = { count: number; complets: number; taux: number; toFill: number; rows: Volet2Row[] };
-export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], docsStats, volet2, suivi, auto6History = [] }: { data: Data; toLoad: number; docHistory?: DocHist[]; noDocs?: NoDoc[]; docsStats?: { rs: number; contrat: number }; volet2?: Volet2; suivi?: Suivi; auto6History?: Auto6HistRow[] }) {
+export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], docsStats, volet2, suivi, auto6History = [], lots = [] }: { data: Data; toLoad: number; docHistory?: DocHist[]; noDocs?: NoDoc[]; docsStats?: { rs: number; contrat: number }; volet2?: Volet2; suivi?: Suivi; auto6History?: Auto6HistRow[]; lots?: Devis5Lot[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [showSuivi, setShowSuivi] = useState(false);
@@ -285,14 +287,16 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
         )}
       </div>
 
-      {/* ── Volet 3 — placeholder ── */}
+      {/* ── Volet 3 — lots Excel (génération / envoi manuel) ── */}
       <div style={{ marginTop: 22, paddingTop: 18, borderTop: "1px solid #E8E8EC" }}>
         <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 3</span>
-          <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Prévisualisation &amp; envoi des mails aux assureurs</span>
-          <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>Contenu à venir</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Envoi des demandes aux assureurs</span>
         </div>
-        <p style={{ fontSize: 12.5, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>À construire : validation rapide des brouillons (AXA / Mila) par dossier puis envoi en masse.</p>
+        <p style={{ fontSize: 12.5, color: "#656576", margin: "0 0 12px" }}>
+          Chaque « Générer l&apos;excel » (Volet 2) crée un lot ici. Télécharge le fichier, envoie-le à l&apos;assureur (à la main pour l&apos;instant), puis clique <strong>« Envoyé ? »</strong> — chaque dossier du lot est alors compté comme <strong>demande envoyée</strong> (dashboard mis à jour).
+        </p>
+        <Devis5Volet3 lots={lots} />
       </div>
 
       {/* ── Volet 4 — Suivi des demandes de devis ── */}

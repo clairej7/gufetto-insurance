@@ -7,6 +7,7 @@
 // 3) cellules éditables (menus déroulants) → sauvegarde + passage en vert.
 // 4) « Générer l'excel » → téléchargement .xlsx.
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, FileSpreadsheet, Search, Download, RotateCcw, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { COLUMNS, LABELS, displayValue, type ColKey, type Cell, type ExcelRow } from "@/lib/devis5-columns";
@@ -22,6 +23,7 @@ const TINT: Record<Cell["color"], { bg: string; bd: string }> = {
 const STORAGE_KEY = "devis5-excel-v1";
 
 export function Devis5ExcelTable({ count }: { count: number }) {
+  const router = useRouter();
   const [rows, setRows] = useState<ExcelRow[] | null>(null);
   const [generating, setGenerating] = useState(false);
   const [extracting, setExtracting] = useState(false);
@@ -132,8 +134,9 @@ export function Devis5ExcelTable({ count }: { count: number }) {
     if (!rows) return;
     setDownloading(true);
     try {
+      // finalize=true : crée le lot (Volet 3) + sort les dossiers du Volet 2.
       const res = await fetch("/api/devis5/excel/download", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows, finalize: true }),
       });
       if (!res.ok) throw new Error("Erreur génération");
       const blob = await res.blob();
@@ -142,6 +145,9 @@ export function Devis5ExcelTable({ count }: { count: number }) {
       a.href = url; a.download = "demandes-devis-axa.xlsx";
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
+      toast.success("Excel généré et ajouté au Volet 3.");
+      reset();           // les dossiers ont quitté le Volet 2 → on vide le tableau
+      router.refresh();  // affiche le nouveau lot dans le Volet 3
     } catch (e) { toast.error(e instanceof Error ? e.message : "Erreur"); }
     finally { setDownloading(false); }
   }
