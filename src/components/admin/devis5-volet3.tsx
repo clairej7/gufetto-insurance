@@ -5,6 +5,7 @@
 // fichier, et marquer l'envoi (fait à la main) → le lot devient un historique daté.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import JSZip from "jszip";
 import { Loader2, Download, Mail, Check, FolderArchive } from "lucide-react";
 import { toast } from "sonner";
 
@@ -12,7 +13,8 @@ type Lot = { id: string; createdAt: string; createdBy: string; sentAt: string | 
 
 export function Devis5Volet3({ lots }: { lots: Lot[] }) {
   const router = useRouter();
-  const [busy, setBusy] = useState<string | null>(null); // "dl:<id>" | "sent:<id>"
+  const [busy, setBusy] = useState<string | null>(null); // "dl:<id>" | "sent:<id>" | "docs:<id>"
+  const [zipProg, setZipProg] = useState<{ lotId: string; done: number; total: number } | null>(null);
 
   async function download(id: string, createdAt: string) {
     setBusy(`dl:${id}`);
@@ -41,19 +43,35 @@ export function Devis5Volet3({ lots }: { lots: Lot[] }) {
     finally { setBusy(null); }
   }
 
-  async function downloadDocs(id: string, createdAt: string) {
+  async function downloadDocs(id: string) {
     setBusy(`docs:${id}`);
     try {
-      const res = await fetch("/api/devis5/lot/docs-zip", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lotId: id }) });
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Erreur ZIP"); }
-      const blob = await res.blob();
-      const d = new Date(createdAt);
-      const fname = `Docs_RS_Contrats_Matera_${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}.zip`;
+      // 1) manifest = liste des docs + URLs signées Supabase
+      const res = await fetch("/api/devis5/lot/docs-manifest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lotId: id }) });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Erreur");
+      const files: { name: string; url: string }[] = d.files ?? [];
+      if (!files.length) throw new Error("Aucun document");
+      // 2) le navigateur télécharge chaque PDF et alimente le zip (barre de progression)
+      const zip = new JSZip();
+      setZipProg({ lotId: id, done: 0, total: files.length });
+      let done = 0, failed = 0;
+      for (const f of files) {
+        try {
+          const r = await fetch(f.url);
+          if (r.ok) zip.file(f.name, await r.blob()); else failed++;
+        } catch { failed++; }
+        done++;
+        setZipProg({ lotId: id, done, total: files.length });
+      }
+      // 3) génère le .zip et le télécharge
+      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a"); a.href = url; a.download = fname;
+      const a = document.createElement("a"); a.href = url; a.download = d.zipName ?? "Docs_RS_Contrats_Matera.zip";
       document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      toast.success(`ZIP généré : ${done - failed}/${files.length} fichiers${failed ? ` (${failed} indisponibles)` : ""}.`);
     } catch (e) { toast.error(e instanceof Error ? e.message : "Erreur"); }
-    finally { setBusy(null); }
+    finally { setBusy(null); setZipProg(null); }
   }
 
   const fmt = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -75,12 +93,20 @@ export function Devis5Volet3({ lots }: { lots: Lot[] }) {
             </button>
             <span style={{ fontSize: 12, color: "#656576" }}>{l.count} dossier{l.count > 1 ? "s" : ""}</span>
 
-            {/* Tous les docs (RS + contrats MRI) en ZIP */}
-            <button onClick={() => downloadDocs(l.id, l.createdAt)} disabled={busy === `docs:${l.id}`}
+            {/* Tous les docs (RS + contrats MRI) en ZIP (construit côté navigateur) */}
+            <button onClick={() => downloadDocs(l.id)} disabled={busy === `docs:${l.id}`}
               style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "#26262C", background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "7px 12px", cursor: "pointer" }}
               title="Télécharge tous les RS + contrats MRI du lot (ZIP, un sous-dossier par copro)">
               {busy === `docs:${l.id}` ? <Loader2 size={14} className="animate-spin" /> : <FolderArchive size={14} />} Docs (ZIP)
             </button>
+            {zipProg && zipProg.lotId === l.id && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 160 }}>
+                <span style={{ flex: 1, height: 6, background: "#EEF0FF", borderRadius: 99, overflow: "hidden", minWidth: 90 }}>
+                  <span style={{ display: "block", height: "100%", width: `${Math.round((zipProg.done / zipProg.total) * 100)}%`, background: "#4E49FC" }} />
+                </span>
+                <span style={{ fontSize: 11, color: "#656576", fontVariantNumeric: "tabular-nums" }}>{zipProg.done}/{zipProg.total}</span>
+              </span>
+            )}
 
             <div style={{ flex: 1 }} />
 

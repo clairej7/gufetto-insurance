@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Archiver } from "archiver";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSupabaseAdmin, STORAGE_BUCKET } from "@/lib/supabase";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
 
 const sanitize = (s: string) => s.replace(/[\\/]+/g, "-").replace(/\s+/g, " ").trim();
 const extOf = (p: string) => { const m = p.match(/\.[a-z0-9]{2,5}$/i); return m ? m[0] : ".pdf"; };
 
-// POST /api/devis5/lot/docs-zip { lotId } — ZIP (streaming) de tous les RS +
-// contrats MRI des dossiers du lot, un sous-dossier par copro, noms Gufetto conservés.
+// POST /api/devis5/lot/docs-manifest { lotId }
+// Renvoie la liste des RS + contrats MRI du lot, chacun avec une URL SIGNÉE
+// Supabase (téléchargement direct par le navigateur → pas de proxy serveur).
+// Le zip est construit côté client (JSZip) avec barre de progression.
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.isAdmin) return NextResponse.json({ error: "Réservé aux admins" }, { status: 403 });
@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
   if (!docs.length) return NextResponse.json({ error: "aucun document" }, { status: 404 });
 
   const used = new Set<string>();
-  const entries = docs.map((d) => {
+  const byPath = new Map<string, string>(); // storagePath -> zip name
+  for (const d of docs) {
     const folder = sanitize(d.pipeline.copro.nom || "Sans nom");
     const base = sanitize(d.fileName || d.kind);
     const ext = extOf(d.storagePath);
@@ -39,34 +40,18 @@ export async function POST(req: NextRequest) {
     let i = 2;
     while (used.has(name)) { name = `${folder}/${base} (${i})${ext}`; i++; }
     used.add(name);
-    return { storagePath: d.storagePath, name };
-  });
+    byPath.set(d.storagePath, name);
+  }
 
-  const archive = new Archiver("zip", { zlib: { level: 6 } });
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      archive.on("data", (chunk: Buffer) => controller.enqueue(new Uint8Array(chunk)));
-      archive.on("end", () => controller.close());
-      archive.on("warning", () => { /* fichiers manquants tolérés */ });
-      archive.on("error", (err) => { try { controller.error(err); } catch { /* déjà fermé */ } });
-      (async () => {
-        const sb = getSupabaseAdmin();
-        for (const e of entries) {
-          try {
-            const { data, error } = await sb.storage.from(STORAGE_BUCKET).download(e.storagePath);
-            if (error || !data) continue;
-            archive.append(Buffer.from(await data.arrayBuffer()), { name: e.name });
-          } catch { /* on saute ce fichier */ }
-        }
-        archive.finalize().catch(() => {});
-      })();
-    },
-  });
+  const paths = [...byPath.keys()];
+  const { data, error } = await getSupabaseAdmin().storage.from(STORAGE_BUCKET).createSignedUrls(paths, 3600);
+  if (error || !data) return NextResponse.json({ error: "signature URLs échouée" }, { status: 500 });
+
+  const files = data
+    .filter((s) => s.signedUrl && s.path)
+    .map((s) => ({ name: byPath.get(s.path as string) ?? (s.path as string), url: s.signedUrl as string }));
 
   const d = lot.createdAt;
-  const fname = `Docs_RS_Contrats_Matera_${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}.zip`;
-  return new NextResponse(stream, {
-    status: 200,
-    headers: { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${fname}"` },
-  });
+  const zipName = `Docs_RS_Contrats_Matera_${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}.zip`;
+  return NextResponse.json({ files, zipName });
 }
