@@ -18,6 +18,7 @@ import { CourtierAuditControls } from "@/components/admin/courtier-audit-control
 import { getRs4Volet1Count, getRs4Volet2Data, getRs4DetectorData, getRs4Volet3Data, getRs4Volet4Data, getRs4SendHistory } from "@/lib/rs4";
 import { Rs4Controls } from "@/components/admin/rs4-controls";
 import { getDevis5Volet1Data, getDevis5DocsToLoad, getDocLoadHistory, getDevis5NoDocs, getDevis5Volet4Data, getDevis5Volet2Data, getDevis5Auto6History } from "@/lib/devis5";
+import { getDevis5Lots } from "@/lib/devis5-excel";
 import { getDevis6TableData } from "@/lib/devis6";
 import { Devis6Controls } from "@/components/admin/devis6-controls";
 import { getDevis7TableData } from "@/lib/devis7";
@@ -112,6 +113,7 @@ export default async function AutomatisationsPage() {
   const devis5Volet2 = await getDevis5Volet2Data();
   const devis5Suivi = await getDevis5Volet4Data(Date.now());
   const devis5Auto6History = await getDevis5Auto6History();
+  const devis5Lots = await getDevis5Lots();
   const devis6Table = await getDevis6TableData();
   const devis7Table = await getDevis7TableData();
   const docsStats = await getDocsStats();
@@ -169,11 +171,10 @@ export default async function AutomatisationsPage() {
     {
       n: 5,
       nom: "Demande de devis",
-      etat: "encours",
+      etat: "deploye",
       description: [
-        "Envoie les demandes de devis aux assureurs partenaires (AXA & Mila), réceptionne les deux devis, et fait avancer le dossier vers l'étape « Comparaison des devis ».",
-        "La base de comparaison s'appuie sur la dernière prime réellement payée par la copropriété (récupérée via Front), pour évaluer le gain proposé par chaque devis.",
-        "En cours de construction sur une autre session de travail.",
+        "Prépare et envoie les demandes de devis. Volet 1 : centralise les dossiers en « Demande des devis » et récupère les pièces (RS + contrat MRI). Volet 2 : construit le tableau Excel exigé par AXA (11 colonnes), rempli automatiquement depuis Gufetto + le contrat MRI (code couleur sûr/à vérifier/manquant), éditable, puis export .xlsx. Volet 3 : chaque Excel généré devient un lot ; on l'envoie à l'assureur puis on le marque « envoyé » (chaque dossier compte alors comme demande envoyée).",
+        "L'envoi ne fait pas avancer le dossier : il reste en « Demande des devis » jusqu'à réception d'un devis (bouton « Devis obtenu » ou détecteur automatique).",
       ],
     },
     {
@@ -279,7 +280,7 @@ export default async function AutomatisationsPage() {
                 {a.n === 5 && (
                   <details style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
                     <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content" }}>Contrôles admin</summary>
-                    <Devis5Controls data={devis5Volet1} toLoad={devis5ToLoad} docHistory={devis5DocHistory} noDocs={devis5NoDocs} docsStats={docsStats} volet2={devis5Volet2} suivi={devis5Suivi} auto6History={devis5Auto6History} />
+                    <Devis5Controls data={devis5Volet1} toLoad={devis5ToLoad} docHistory={devis5DocHistory} noDocs={devis5NoDocs} docsStats={docsStats} volet2={devis5Volet2} suivi={devis5Suivi} auto6History={devis5Auto6History} lots={devis5Lots} />
                   </details>
                 )}
 

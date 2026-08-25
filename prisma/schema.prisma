@@ -529,3 +529,18 @@ model DocLoadLog {
   created    Int // documents créés
   actorEmail String?
 }
+
+// Automatisation 5 Volet 3 : lots Excel de demandes de devis (AXA).
+// Créé au clic « Générer l'excel » du Volet 2 : fige les lignes (pour re-télécharger
+// le .xlsx) + la liste des dossiers couverts. Marqué « envoyé » à la main par le
+// gestionnaire → écrit un event devis_sent sur chaque dossier (met à jour le dashboard).
+model Devis5Lot {
+  id          String    @id @default(cuid())
+  createdAt   DateTime  @default(now())
+  createdBy   String
+  sentAt      DateTime?
+  sentBy      String?
+  count       Int
+  rows        String    @db.Text // JSON des lignes du tableau (re-génération du xlsx)
+  pipelineIds String    @db.Text // JSON des pipelineId couverts
+}
