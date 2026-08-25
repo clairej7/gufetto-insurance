@@ -185,7 +185,7 @@ Pour CHAQUE information trouvée, renvoie un objet { "value": <valeur>, "sure": 
 Réponds UNIQUEMENT un objet JSON sans markdown. Clés possibles :
 - "adresse": value = adresse complète du risque assuré (n° + voie + code postal + ville), telle qu'écrite.
 - "prime": value = number, prime/cotisation annuelle TTC en euros (nombre seul).
-- "surface": value = number, surface développée / superficie totale en m² (nombre seul).
+- "surface": value = surface/superficie DÉVELOPPÉE (ou superficie totale des bâtiments) en m². Cherche notamment « superficie développée de X m² », « surface développée : X », « les bâtiments ont une superficie développée de X ». Renvoie le NOMBRE (les unités sont tolérées).
 - "periode": value = une valeur EXACTE parmi ${JSON.stringify(PERIODES)} (période de construction).
 - "nature": value = "habitation" OU "mixte" UNIQUEMENT — ne réponds JAMAIS "professionnelle" (nos immeubles ne sont jamais 100% tertiaire). RENVOIE TOUJOURS une valeur. Fie-toi à la section « Le risque assuré / Usage(s) / Activité(s) professionnelle(s) » — elle PRIME sur le titre du produit (ex. « Multirisque Immeuble Habitation Bureau » en en-tête n'implique PAS mixte). Règle : "mixte" s'il existe au moins un commerce / local professionnel / bureau, OU une activité professionnelle dans l'immeuble ; SINON "habitation". Un contrat indiquant « Usage(s) : Habitation » et/ou « Activité(s) professionnelle(s) : Aucune » ⇒ value "habitation" avec sure:true. Une RÉPARTITION EN POURCENTAGES compte comme info claire : toute part de locaux commerciaux / artisanaux / industriels / bureaux / professions (ex. « 83% habitations/professions libérales/bureaux, 17% locaux commerciaux… ») ⇒ "mixte" avec sure:true ; 100% habitation ⇒ "habitation" avec sure:true. Si vraiment aucune info d'usage → défaut "habitation" avec sure:false.
 - "activites": value = tableau de valeurs EXACTES parmi ${JSON.stringify(ACTIVITES)}. Activité(s) aggravante(s) clairement présente(s) → liste-les (sure:true). Contrat indiquant explicitement aucune, OU usage habitation seul, OU une CLAUSE DE DÉCLARATIONS NÉGATIVE énumérant des activités ABSENTES (ex. « les biens assurés ne comportent pas … discothèque, bar avec piste de danse, cabaret… ») → ["Aucune"] avec sure:true. AUCUNE mention → renvoie QUAND MÊME ["Aucune"] avec sure:false.
@@ -213,9 +213,22 @@ Réponds UNIQUEMENT un objet JSON sans markdown. Clés possibles :
     if (whitelist && !whitelist.includes(v)) return;
     (out as Record<string, unknown>)[k] = { value: v, sure: r.sure };
   };
+  // Accepte un nombre OU une chaîne avec unité/format (« 780 m2 », « 3 018,00 € »).
+  // On prend le 1er groupe de chiffres, sans le rompre sur une unité collée (m2).
+  const parseNum = (v: unknown): number | null => {
+    if (typeof v === "number") return v > 0 ? v : null;
+    if (typeof v !== "string") return null;
+    // 1er groupe de chiffres (séparateurs : espace normal/insécable, point, virgule) ;
+    // s'arrête sur une unité collée (« 780 m2 » → 780, pas 7802).
+    const m = v.match(/\d[\d.,\s\u00A0]*/);
+    if (!m) return null;
+    const n = parseFloat(m[0].replace(/[\s\u00A0]/g, "").replace(",", "."));
+    return isNaN(n) || n <= 0 ? null : n;
+  };
   const num = (k: keyof DevisConfident) => {
-    const r = pick(k); if (!r || typeof r.value !== "number" || !(r.value > 0)) return;
-    (out as Record<string, unknown>)[k] = { value: Math.round(r.value), sure: r.sure };
+    const r = pick(k); if (!r) return;
+    const n = parseNum(r.value);
+    if (n != null) (out as Record<string, unknown>)[k] = { value: Math.round(n), sure: r.sure };
   };
   const arr = (k: keyof DevisConfident, whitelist: string[]) => {
     const r = pick(k); if (!r || !Array.isArray(r.value)) return;
