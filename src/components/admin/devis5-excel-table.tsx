@@ -7,7 +7,7 @@
 // 3) cellules éditables (menus déroulants) → sauvegarde + passage en vert.
 // 4) « Générer l'excel » → téléchargement .xlsx.
 import { useState, useEffect } from "react";
-import { Loader2, FileSpreadsheet, Search, Download, RotateCcw } from "lucide-react";
+import { Loader2, FileSpreadsheet, Search, Download, RotateCcw, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { COLUMNS, LABELS, displayValue, type ColKey, type Cell, type ExcelRow } from "@/lib/devis5-columns";
 
@@ -61,11 +61,8 @@ export function Devis5ExcelTable({ count }: { count: number }) {
     finally { setGenerating(false); }
   }
 
-  async function retrieve(limit?: number) {
-    if (!rows) return;
-    const pending = rows.filter((r) => !extracted.has(r.pipelineId));
-    const targets = typeof limit === "number" ? pending.slice(0, limit) : pending;
-    if (!targets.length) { toast.info("Tous les dossiers ont déjà été traités."); return; }
+  async function runExtract(targets: ExcelRow[]) {
+    if (!targets.length) { toast.info("Rien à traiter."); return; }
     setExtracting(true);
     setProg({ done: 0, total: targets.length });
     let done = 0;
@@ -87,6 +84,21 @@ export function Devis5ExcelTable({ count }: { count: number }) {
     setExtracting(false);
     setProg(null);
     toast.success(`${done} dossier(s) traité(s).`);
+  }
+
+  // Retrouver = seulement les dossiers pas encore traités (progression).
+  async function retrieve(limit?: number) {
+    if (!rows) return;
+    const pending = rows.filter((r) => !extracted.has(r.pipelineId));
+    if (!pending.length) { toast.info("Tous les dossiers ont déjà été traités — utilise « Rafraîchir » pour refaire une passe."); return; }
+    await runExtract(typeof limit === "number" ? pending.slice(0, limit) : pending);
+  }
+
+  // Rafraîchir = repasse l'extraction sur TOUS les dossiers (récupère les nouveaux
+  // docs / infos modifiées + applique les défauts si des champs sont encore vides).
+  async function refresh() {
+    if (!rows) return;
+    await runExtract(rows);
   }
 
   async function saveCell(pipelineId: string, key: ColKey, value: string | null) {
@@ -147,6 +159,9 @@ export function Devis5ExcelTable({ count }: { count: number }) {
             </button>
             <button onClick={download} disabled={downloading} style={btn("#13762C", "#fff", "#13762C")}>
               {downloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Générer l&apos;excel
+            </button>
+            <button onClick={refresh} disabled={extracting} title="Repasse l'extraction sur TOUS les dossiers (récupère les nouveaux docs / infos modifiées et applique les défauts sur les champs encore vides)" style={{ ...btn("#EEF0FF", "#4E49FC", "#D7DAFB"), opacity: extracting ? 0.5 : 1 }}>
+              {extracting ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Rafraîchir
             </button>
             <button onClick={reset} title="Vide le tableau (les données restent enregistrées côté dossier)" style={btn("#fff", "#656576", "#E8E8EC")}>
               <RotateCcw size={13} /> Réinitialiser
