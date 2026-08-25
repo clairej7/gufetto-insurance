@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { AdminBoard } from "@/components/admin/admin-board";
+import { getPenetrationSeries } from "@/lib/penetration";
 import { getPrimeByStage } from "@/lib/prime";
 import { getDocsStats, getDevisRecusStats } from "@/lib/rs-docs";
 import { getDevis6TableData } from "@/lib/devis6";
@@ -86,6 +87,7 @@ export default async function AdminPage() {
   }
   const { getRsFlowDaily } = await import("@/lib/rs4");
   const rsFlow = await getRsFlowDaily();
+  const penetrationSeries = await getPenetrationSeries();
   const { getDevisFlowDaily } = await import("@/lib/devis5");
   const devisFlow = await getDevisFlowDaily();
   const { getExcludedCoproIds } = await import("@/lib/exclusions");
@@ -149,6 +151,7 @@ export default async function AdminPage() {
         </div>
         <AdminBoard
           pipelines={pipelines as Parameters<typeof AdminBoard>[0]["pipelines"]}
+          penetrationSeries={penetrationSeries}
           taskTemplates={taskTemplates}
           gestionnaires={gestionnaires}
           events={events as Parameters<typeof AdminBoard>[0]["events"]}

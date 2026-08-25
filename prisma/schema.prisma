@@ -544,3 +544,16 @@ model Devis5Lot {
   rows        String    @db.Text // JSON des lignes du tableau (re-génération du xlsx)
   pipelineIds String    @db.Text // JSON des pipelineId couverts
 }
+
+// Snapshot hebdomadaire du taux de pénétration (pour la vue « Progression » de la
+// carte). weekStart = lundi de la semaine (1 point/semaine, upsert). Les 2 premiers
+// points (juillet/août) sont des repères « manuel » (l'historique n'était pas stocké).
+model PenetrationSnapshot {
+  id        String   @id @default(cuid())
+  weekStart DateTime @unique
+  taux      Int
+  won       Int
+  total     Int
+  source    String   @default("auto") // "auto" | "manuel"
+  createdAt DateTime @default(now())
+}
