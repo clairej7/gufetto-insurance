@@ -236,7 +236,8 @@ function CellEditor({ col, cell, onSave }: { col: ColKey; cell: Cell; onSave: (v
   if (meta.type === "select") {
     return (
       <select value={raw} onChange={(e) => onSave(e.target.value || null)} style={inputStyle}>
-        <option value="">—</option>
+        {/* placeholder non sélectionnable : ne compte pas comme une réponse */}
+        <option value="" disabled hidden>— choisir —</option>
         {meta.options!.map((o) => <option key={o} value={o}>{LABELS[o] ?? o}</option>)}
       </select>
     );
