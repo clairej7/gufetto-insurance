@@ -188,10 +188,10 @@ Réponds UNIQUEMENT un objet JSON sans markdown. Clés possibles :
 - "surface": value = number, surface développée / superficie totale en m² (nombre seul).
 - "periode": value = une valeur EXACTE parmi ${JSON.stringify(PERIODES)} (période de construction).
 - "nature": value = "habitation" OU "mixte" UNIQUEMENT — ne réponds JAMAIS "professionnelle" (nos immeubles ne sont jamais 100% tertiaire). Règle : "mixte" s'il existe au moins un commerce / local professionnel / bureau, OU une activité professionnelle dans l'immeuble ; SINON "habitation". Un contrat qui indique « Usage : Habitation » et/ou « Activité(s) professionnelle(s) : Aucune » ⇒ value "habitation" avec sure:true (c'est une info claire).
-- "activites": value = tableau de valeurs EXACTES parmi ${JSON.stringify(ACTIVITES)} (["Aucune"] si le contrat indique explicitement aucune).
-- "caracteristiques": value = tableau de valeurs EXACTES parmi ${JSON.stringify(CARACTERISTIQUES)} (["Aucune"] si explicitement aucune).
-- "proportion": value = une valeur EXACTE parmi ${JSON.stringify(PROPORTIONS)} (proportion de locaux inoccupés/vacants).
-- "pj": value = "oui" ou "non" (présence d'une garantie Protection Juridique).` },
+- "activites": value = tableau de valeurs EXACTES parmi ${JSON.stringify(ACTIVITES)}. Activité(s) aggravante(s) clairement présente(s) → liste-les (sure:true). Contrat indiquant explicitement aucune, OU usage habitation seul → ["Aucune"] (sure:true). AUCUNE mention → renvoie QUAND MÊME ["Aucune"] avec sure:false.
+- "caracteristiques": value = tableau de valeurs EXACTES parmi ${JSON.stringify(CARACTERISTIQUES)}. Clairement mentionnée(s) → liste (sure:true). Explicitement aucune → ["Aucune"] (sure:true). AUCUNE mention → renvoie QUAND MÊME ["Aucune"] avec sure:false.
+- "proportion": value = une valeur EXACTE parmi ${JSON.stringify(PROPORTIONS)}. Clairement indiquée → sure:true. AUCUNE mention → renvoie QUAND MÊME "moins_25" avec sure:false (cas le plus fréquent).
+- "pj": value = "oui" ou "non". Garantie Protection Juridique présente au contrat → "oui" (sure:true). Explicitement absente → "non" (sure:true). AUCUNE mention → renvoie QUAND MÊME "non" avec sure:false.` },
         ],
       }],
     });
