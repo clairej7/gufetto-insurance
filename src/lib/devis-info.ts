@@ -185,7 +185,7 @@ Pour CHAQUE information trouvée, renvoie un objet { "value": <valeur>, "sure": 
 Réponds UNIQUEMENT un objet JSON sans markdown. Clés possibles :
 - "adresse": value = adresse complète du risque assuré (n° + voie + code postal + ville), telle qu'écrite.
 - "prime": value = number, prime/cotisation annuelle TTC en euros (nombre seul).
-- "surface": value = surface/superficie DÉVELOPPÉE des bâtiments en m², QUEL QUE SOIT le libellé : « superficie développée », « surface développée », « superficie totale » (ex. « Superficie totale 1647 m² », « les bâtiments ont une superficie développée de 780 m² »). ⚠️ NE PAS prendre « superficie du TERRAIN » (le terrain n'est pas la surface développée) ni un plafond « X m² maximum » d'une autre section. Renvoie le NOMBRE (unités tolérées).
+- "surface": value = surface/superficie DÉVELOPPÉE des bâtiments en m², QUEL QUE SOIT le libellé : « superficie développée », « surface développée », « superficie totale » (ex. « Superficie totale 1647 m² », « les bâtiments ont une superficie développée de 780 m² »). ⚠️ NE PAS prendre : « superficie du TERRAIN » / « terrain attenant » (c'est le terrain), « surface du parc », un plafond « X m² maximum » d'une autre section, ni une valeur manifestement ABSURDE pour un immeuble entier (ex. 10 m²). Si aucune surface développée crédible n'est indiquée, OMETS la clé. Renvoie le NOMBRE (unités tolérées).
 - "periode": value = une valeur EXACTE parmi ${JSON.stringify(PERIODES)} (période de construction).
 - "nature": value = "habitation" OU "mixte" UNIQUEMENT — ne réponds JAMAIS "professionnelle" (nos immeubles ne sont jamais 100% tertiaire). RENVOIE TOUJOURS une valeur. Fie-toi à la section « Le risque assuré / Usage(s) / Activité(s) professionnelle(s) » — elle PRIME sur le titre du produit (ex. « Multirisque Immeuble Habitation Bureau » en en-tête n'implique PAS mixte). Règle : "mixte" s'il existe au moins un commerce / local professionnel / bureau, OU une activité professionnelle dans l'immeuble ; SINON "habitation". Un contrat indiquant « Usage(s) : Habitation » et/ou « Activité(s) professionnelle(s) : Aucune » ⇒ value "habitation" avec sure:true. Une RÉPARTITION EN POURCENTAGES compte comme info claire : toute part de locaux commerciaux / artisanaux / industriels / bureaux / professions (ex. « 83% habitations/professions libérales/bureaux, 17% locaux commerciaux… ») ⇒ "mixte" avec sure:true ; 100% habitation ⇒ "habitation" avec sure:true. Si vraiment aucune info d'usage → défaut "habitation" avec sure:false.
 - "activites": value = tableau de valeurs EXACTES parmi ${JSON.stringify(ACTIVITES)}. Activité(s) aggravante(s) clairement présente(s) → liste-les (sure:true). Contrat indiquant explicitement aucune, OU usage habitation seul, OU une CLAUSE DE DÉCLARATIONS NÉGATIVE énumérant des activités ABSENTES (ex. « les biens assurés ne comportent pas … discothèque, bar avec piste de danse, cabaret… ») → ["Aucune"] avec sure:true. AUCUNE mention → renvoie QUAND MÊME ["Aucune"] avec sure:false.
@@ -237,6 +237,9 @@ Réponds UNIQUEMENT un objet JSON sans markdown. Clés possibles :
   };
   str("adresse");
   num("prime"); num("surface");
+  // Plausibilité surface : < 50 m² pour un immeuble entier = absurde (ex. « surface
+  // du parc : 10 m² ») → on écarte, la colonne tombera sur le défaut « Inconnue ».
+  if (out.surface && out.surface.value < 50) delete out.surface;
   str("periode", PERIODES); str("nature", NATURES); str("proportion", PROPORTIONS);
   // Sécurité : on ne retient jamais "professionnelle" (immeubles jamais 100% tertiaire) → mixte.
   if (out.nature?.value === "professionnelle") out.nature = { value: "mixte", sure: out.nature.sure };
