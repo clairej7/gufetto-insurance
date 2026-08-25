@@ -118,6 +118,7 @@ export async function extractDevis5Row(pipelineId: string): Promise<ExcelRow | n
   // Défauts « safe » appliqués si l'extraction ne trouve rien (règles métier
   // Quentin) : ces champs ne restent JAMAIS vides, au pire orange « à vérifier ».
   const DEFAULTS: Partial<Record<ColKey, string>> = {
+    periode: "inconnue",
     nature: "habitation",
     activites: JSON.stringify(["Aucune"]),
     caracteristiques: JSON.stringify(["Aucune"]),
