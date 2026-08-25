@@ -14,14 +14,16 @@ export function Devis5Volet3({ lots }: { lots: Lot[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null); // "dl:<id>" | "sent:<id>"
 
-  async function download(id: string) {
+  async function download(id: string, createdAt: string) {
     setBusy(`dl:${id}`);
     try {
       const res = await fetch("/api/devis5/lot/download", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lotId: id }) });
       if (!res.ok) throw new Error("Erreur téléchargement");
       const blob = await res.blob();
+      const d = new Date(createdAt);
+      const fname = `Demandes_devis_Matera_${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}.xlsx`;
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a"); a.href = url; a.download = "demandes-devis-axa.xlsx";
+      const a = document.createElement("a"); a.href = url; a.download = fname;
       document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
     } catch (e) { toast.error(e instanceof Error ? e.message : "Erreur"); }
     finally { setBusy(null); }
@@ -52,7 +54,7 @@ export function Devis5Volet3({ lots }: { lots: Lot[] }) {
         return (
           <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 12px", border: "1px solid #E8E8EC", borderRadius: 10, background: sent ? "#FAFCFB" : "#fff" }}>
             {/* Fichier (toujours téléchargeable) */}
-            <button onClick={() => download(l.id)} disabled={busy === `dl:${l.id}`}
+            <button onClick={() => download(l.id, l.createdAt)} disabled={busy === `dl:${l.id}`}
               style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D7DAFB", borderRadius: 8, padding: "7px 12px", cursor: "pointer" }}>
               {busy === `dl:${l.id}` ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Excel du {fmt(l.createdAt)}
             </button>
