@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getDaysUntilEcheance, categoriseDossier } from "@/lib/pipeline";
 import type { PrimeStageRow } from "@/lib/prime";
+import type { PenetrationPoint } from "@/lib/penetration";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { gestionnaireLabel } from "@/lib/gestionnaire";
 import { EvolutionChart } from "./evolution-chart";
@@ -35,6 +36,7 @@ type RawEvent = {
 
 interface AdminBoardProps {
   pipelines: Pipeline[];
+  penetrationSeries?: PenetrationPoint[];
   taskTemplates: Array<{ id: string; statut: string; required: boolean }>;
   gestionnaires: string[];
   events: RawEvent[];
@@ -152,6 +154,41 @@ const TD_RIGHT: React.CSSProperties = { ...TD, textAlign: "right" };
 type KpiFilter = "actifs" | "gagnes" | "perdus" | null;
 
 // Grand en-tête de section « Partie N — Titre » (sépare nettement les 5 parties).
+// Petit graphe (SVG) de l'évolution du taux de pénétration par semaine.
+function PenetrationChart({ series }: { series: { weekStart: string; taux: number; source: string }[] }) {
+  const W = 720, H = 200, PL = 40, PR = 16, PT = 16, PB = 34;
+  if (series.length < 2) return <div style={{ fontSize: 12.5, color: "#A2A1AF", fontStyle: "italic", padding: "20px 0" }}>Pas encore assez de points — la courbe se remplit chaque semaine.</div>;
+  const maxY = Math.min(100, Math.max(50, Math.ceil((Math.max(...series.map((s) => s.taux)) + 8) / 10) * 10));
+  const x = (i: number) => PL + (i / (series.length - 1)) * (W - PL - PR);
+  const y = (v: number) => PT + (1 - v / maxY) * (H - PT - PB);
+  const line = series.map((s, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(s.taux).toFixed(1)}`).join(" ");
+  const area = `${line} L ${x(series.length - 1).toFixed(1)} ${y(0).toFixed(1)} L ${x(0).toFixed(1)} ${y(0).toFixed(1)} Z`;
+  const fmt = (iso: string) => { const d = new Date(iso); return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`; };
+  const gridVals = [0, maxY / 2, maxY];
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxWidth: W, minWidth: 520 }} role="img" aria-label="Évolution du taux de pénétration">
+        {gridVals.map((g) => (
+          <g key={g}>
+            <line x1={PL} y1={y(g)} x2={W - PR} y2={y(g)} stroke="#EEE" />
+            <text x={PL - 6} y={y(g) + 3} textAnchor="end" fontSize="10" fill="#A2A1AF">{Math.round(g)}%</text>
+          </g>
+        ))}
+        <path d={area} fill="#4E49FC" fillOpacity="0.08" />
+        <path d={line} fill="none" stroke="#4E49FC" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        {series.map((s, i) => (
+          <g key={s.weekStart}>
+            <circle cx={x(i)} cy={y(s.taux)} r={i === series.length - 1 ? 5 : 3.5} fill={s.source === "manuel" ? "#8A87E8" : "#4E49FC"} stroke="#fff" strokeWidth="1.5" />
+            <text x={x(i)} y={y(s.taux) - 9} textAnchor="middle" fontSize="10.5" fontWeight={700} fill="#4E49FC">{s.taux}%</text>
+            <text x={x(i)} y={H - 12} textAnchor="middle" fontSize="9.5" fill="#A2A1AF">{fmt(s.weekStart)}</text>
+          </g>
+        ))}
+      </svg>
+      <div style={{ fontSize: 10.5, color: "#A2A1AF", marginTop: 2 }}>● <span style={{ color: "#8A87E8" }}>violet clair</span> = repère estimé (historique non enregistré) · ● bleu = mesuré</div>
+    </div>
+  );
+}
+
 function PartTitle({ n, title, first }: { n: number; title: string; first?: boolean }) {
   return (
     <div style={{ marginTop: first ? 0 : 44, display: "flex", alignItems: "center", gap: 12 }}>
@@ -162,10 +199,11 @@ function PartTitle({ n, title, first }: { n: number; title: string; first?: bool
   );
 }
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRelances, rsRecus, contratsRecus, devisMailsEnvoyes, devisAReclamer, odrByInsurer, devisRecus, devis6, cs, rsFlow, devisFlow, excludedCount }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRelances, rsRecus, contratsRecus, devisMailsEnvoyes, devisAReclamer, odrByInsurer, devisRecus, devis6, cs, rsFlow, devisFlow, excludedCount, penetrationSeries = [] }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
+  const [penView, setPenView] = useState<"chiffres" | "progression">("chiffres");
 
   // Libellé d'affichage par email (nom Omni si présent, sinon dérivation).
   const gestioNomByEmail = new Map<string, string | null>();
@@ -210,6 +248,15 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
   const realTotal     = activePipelines.length + wonPipelines.length + lostCount;
   const tauxSignature = realTotal > 0 ? Math.round((wonPipelines.length / realTotal) * 100) : 0;
   const tauxPerte     = realTotal > 0 ? Math.round((lostCount / realTotal) * 100) : 0;
+
+  // Enregistre (upsert) le point de pénétration de la semaine courante avec les
+  // valeurs EXACTES de la carte → alimente la vue « Progression ». Idempotent.
+  useEffect(() => {
+    if (realTotal > 0) {
+      fetch("/api/penetration/snapshot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ won: wonPipelines.length, total: realTotal }) }).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wonPipelines.length, realTotal]);
 
   const kpiDetail: { label: string; rows: Pipeline[] } | null =
     activeKpi === "actifs" ? { label: "Dossiers actifs", rows: activePipelines } :
@@ -288,6 +335,14 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
   // (« Validation du CS » + « ODR en cours » + « ODR envoyées ») passaient tous en clos.
   const enPasseDeClos = rowsForCol("envoye_cs").length + aggEnCours.length + aggEnvoye.length;
   const tauxTheorique = realTotal > 0 ? Math.round(((wonPipelines.length + enPasseDeClos) / realTotal) * 100) : 0;
+
+  // Série affichée = points enregistrés + point LIVE de la semaine courante (= tauxSignature).
+  const mondayNowIso = (() => { const x = new Date(); const day = (x.getUTCDay() + 6) % 7; x.setUTCDate(x.getUTCDate() - day); x.setUTCHours(0, 0, 0, 0); return x.toISOString(); })();
+  const penSeries = (() => {
+    const map = new Map(penetrationSeries.map((p) => [p.weekStart, { ...p }]));
+    map.set(mondayNowIso, { weekStart: mondayNowIso, taux: tauxSignature, source: "auto" });
+    return [...map.values()].sort((a, b) => (a.weekStart < b.weekStart ? -1 : 1));
+  })();
 
   // Totaux de complétude des primes (tous stades confondus).
   const primeTotalDossiers = primeStages.reduce((a, s) => a + s.total, 0);
@@ -430,21 +485,41 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
       </div>
 
       {/* ── Taux de pénétration (= taux de signature) ── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 32, background: "#F5F5FF", border: "1.5px solid #4E49FC", borderRadius: 10, padding: "20px 26px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-          <span style={{ fontSize: 36, fontWeight: 800, color: "#4E49FC", letterSpacing: "-0.03em", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{tauxSignature}%</span>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Taux de pénétration</div>
-            <div style={{ fontSize: 12.5, color: "#656576", marginTop: 2 }}>{wonPipelines.length} gagnés sur {realTotal} dossiers</div>
-          </div>
+      <div style={{ background: "#F5F5FF", border: "1.5px solid #4E49FC", borderRadius: 10, padding: "16px 26px 20px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
+        {/* Double bouton Chiffres / Progression */}
+        <div style={{ display: "inline-flex", background: "#E7E7FB", borderRadius: 8, padding: 3, marginBottom: 16 }}>
+          {(["chiffres", "progression"] as const).map((v) => (
+            <button key={v} onClick={() => setPenView(v)}
+              style={{ fontSize: 12.5, fontWeight: 700, padding: "5px 14px", borderRadius: 6, border: "none", cursor: "pointer",
+                background: penView === v ? "#4E49FC" : "transparent", color: penView === v ? "#fff" : "#4E49FC" }}>
+              {v === "chiffres" ? "Chiffres" : "Progression"}
+            </button>
+          ))}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, borderLeft: "1px solid #C7C5F5", paddingLeft: 28, maxWidth: 380 }}>
-          <span style={{ fontSize: 26, fontWeight: 700, color: "#8A87E8", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{tauxTheorique}%</span>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, fontStyle: "italic", color: "#8A87E8" }}>Taux de pénétration théorique</div>
-            <div style={{ fontSize: 12, color: "#A2A1AF", marginTop: 2 }}>lorsque les « Validation du CS » / « ODR en cours » / « ODR envoyées » seront passés en clos</div>
+
+        {penView === "chiffres" ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 32 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+              <span style={{ fontSize: 36, fontWeight: 800, color: "#4E49FC", letterSpacing: "-0.03em", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{tauxSignature}%</span>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Taux de pénétration</div>
+                <div style={{ fontSize: 12.5, color: "#656576", marginTop: 2 }}>{wonPipelines.length} gagnés sur {realTotal} dossiers</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, borderLeft: "1px solid #C7C5F5", paddingLeft: 28, maxWidth: 380 }}>
+              <span style={{ fontSize: 26, fontWeight: 700, color: "#8A87E8", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{tauxTheorique}%</span>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, fontStyle: "italic", color: "#8A87E8" }}>Taux de pénétration théorique</div>
+                <div style={{ fontSize: 12, color: "#A2A1AF", marginTop: 2 }}>lorsque les « Validation du CS » / « ODR en cours » / « ODR envoyées » seront passés en clos</div>
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#26262C", marginBottom: 6 }}>Évolution du taux de pénétration</div>
+            <PenetrationChart series={penSeries} />
+          </div>
+        )}
       </div>
 
       {/* ── Bar chart : répartition par étape ── */}
