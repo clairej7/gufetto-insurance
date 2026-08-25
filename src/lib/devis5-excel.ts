@@ -115,6 +115,15 @@ export async function extractDevis5Row(pipelineId: string): Promise<ExcelRow | n
     periode: "periodeConstruction", nature: "natureOccupation", activites: "activitesAggravantes",
     caracteristiques: "caracteristiquesParticulieres", proportion: "proportionInoccupee", pj: "protectionJuridique",
   };
+  // Défauts « safe » appliqués si l'extraction ne trouve rien (règles métier
+  // Quentin) : ces champs ne restent JAMAIS vides, au pire orange « à vérifier ».
+  const DEFAULTS: Partial<Record<ColKey, string>> = {
+    nature: "habitation",
+    activites: JSON.stringify(["Aucune"]),
+    caracteristiques: JSON.stringify(["Aucune"]),
+    proportion: "moins_25",
+    pj: "non",
+  };
 
   for (const col of COLUMNS) {
     const k = col.key;
@@ -132,6 +141,10 @@ export async function extractDevis5Row(pipelineId: string): Promise<ExcelRow | n
         const field = coproCol[k]!;
         toPersist[field] = k === "prime" || k === "surface" ? Number(c.raw) : c.raw;
       }
+    } else if (DEFAULTS[k] !== undefined) {
+      // Défaut « safe » DÉTERMINISTE (dans le code, pas via le modèle qui omet
+      // parfois le champ) → orange « à vérifier », jamais persisté en base.
+      cells[k] = { value: DEFAULTS[k]!, color: "orange" };
     } else {
       cells[k] = { value: null, color: "red" };
     }
