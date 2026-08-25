@@ -1,19 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Readable } from "node:stream";
-import * as archiverNs from "archiver";
+import { Archiver } from "archiver";
 import { auth } from "@/lib/auth";
-
-// archiver est exporté en CommonJS (`export =`) → on caste le module en fonction.
-const createArchive = archiverNs as unknown as (format: string, options?: archiverNs.ArchiverOptions) => archiverNs.Archiver;
 import { prisma } from "@/lib/prisma";
 import { getSupabaseAdmin, STORAGE_BUCKET } from "@/lib/supabase";
 
-export const maxDuration = 300; // laisser le temps de zipper ~200 PDF
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
 const sanitize = (s: string) => s.replace(/[\\/]+/g, "-").replace(/\s+/g, " ").trim();
 const extOf = (p: string) => { const m = p.match(/\.[a-z0-9]{2,5}$/i); return m ? m[0] : ".pdf"; };
 
-// POST /api/devis5/lot/docs-zip { lotId } — ZIP en streaming de tous les RS +
+// POST /api/devis5/lot/docs-zip { lotId } — ZIP (streaming) de tous les RS +
 // contrats MRI des dossiers du lot, un sous-dossier par copro, noms Gufetto conservés.
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -33,7 +30,6 @@ export async function POST(req: NextRequest) {
   });
   if (!docs.length) return NextResponse.json({ error: "aucun document" }, { status: 404 });
 
-  // Chemins dans le zip : <copro>/<fileName>.<ext>, dédupliqués par dossier.
   const used = new Set<string>();
   const entries = docs.map((d) => {
     const folder = sanitize(d.pipeline.copro.nom || "Sans nom");
@@ -46,25 +42,30 @@ export async function POST(req: NextRequest) {
     return { storagePath: d.storagePath, name };
   });
 
-  const archive = createArchive("zip", { zlib: { level: 6 } });
-  archive.on("error", () => { try { archive.destroy(); } catch { /* noop */ } });
+  const archive = new Archiver("zip", { zlib: { level: 6 } });
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      archive.on("data", (chunk: Buffer) => controller.enqueue(new Uint8Array(chunk)));
+      archive.on("end", () => controller.close());
+      archive.on("warning", () => { /* fichiers manquants tolérés */ });
+      archive.on("error", (err) => { try { controller.error(err); } catch { /* déjà fermé */ } });
+      (async () => {
+        const sb = getSupabaseAdmin();
+        for (const e of entries) {
+          try {
+            const { data, error } = await sb.storage.from(STORAGE_BUCKET).download(e.storagePath);
+            if (error || !data) continue;
+            archive.append(Buffer.from(await data.arrayBuffer()), { name: e.name });
+          } catch { /* on saute ce fichier */ }
+        }
+        archive.finalize().catch(() => {});
+      })();
+    },
+  });
 
-  (async () => {
-    const sb = getSupabaseAdmin();
-    for (const e of entries) {
-      try {
-        const { data, error } = await sb.storage.from(STORAGE_BUCKET).download(e.storagePath);
-        if (error || !data) continue;
-        archive.append(Buffer.from(await data.arrayBuffer()), { name: e.name });
-      } catch { /* on saute ce fichier */ }
-    }
-    archive.finalize().catch(() => {});
-  })();
-
-  const webStream = Readable.toWeb(archive as unknown as Readable) as unknown as ReadableStream;
   const d = lot.createdAt;
   const fname = `Docs_RS_Contrats_Matera_${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}.zip`;
-  return new NextResponse(webStream, {
+  return new NextResponse(stream, {
     status: 200,
     headers: { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${fname}"` },
   });
