@@ -191,6 +191,18 @@ export function Devis5ExcelTable({ count }: { count: number }) {
               </tbody>
             </table>
           </div>
+
+          {/* Compteur de complétion — toujours visible (hors zone de scroll du tableau) */}
+          {(() => {
+            const totalCells = rows.length * COLUMNS.length;
+            const filled = rows.reduce((s, r) => s + COLUMNS.filter((c) => r.cells[c.key].color !== "red").length, 0);
+            const pct = totalCells ? Math.round((filled / totalCells) * 100) : 0;
+            return (
+              <div style={{ marginTop: 10, padding: "8px 12px", background: "#F7F7FA", border: "1px solid #E8E8EC", borderRadius: 8, fontSize: 13, fontWeight: 600, color: "#26262C" }}>
+                {filled} / {totalCells} cases remplies · <span style={{ color: "#4E49FC" }}>{pct}%</span> des informations complétées
+              </div>
+            );
+          })()}
         </>
       )}
     </div>

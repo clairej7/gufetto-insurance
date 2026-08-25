@@ -124,9 +124,14 @@ export async function extractDevis5Row(pipelineId: string): Promise<ExcelRow | n
     const c = k === "assureur" ? null : asStr((conf as Record<string, ConfVal<unknown> | undefined>)[k]);
     if (c) {
       cells[k] = { value: c.raw, color: c.sure ? "green" : "orange" };
-      // persiste dans Copro (champ vide uniquement) — la valeur « colle » pour la suite
-      const field = coproCol[k]!;
-      toPersist[field] = k === "prime" || k === "surface" ? Number(c.raw) : c.raw;
+      // On ne PERSISTE en base QUE les valeurs sûres (vertes). Les défauts « à
+      // vérifier » (orange) restent affichés (et conservés via le localStorage du
+      // tableau) mais NE sont PAS écrits dans Copro — sinon ils repasseraient
+      // verts au rechargement, perdant le signal « à vérifier ».
+      if (c.sure) {
+        const field = coproCol[k]!;
+        toPersist[field] = k === "prime" || k === "surface" ? Number(c.raw) : c.raw;
+      }
     } else {
       cells[k] = { value: null, color: "red" };
     }
