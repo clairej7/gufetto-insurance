@@ -141,8 +141,10 @@ export function Devis5ExcelTable({ count }: { count: number }) {
       if (!res.ok) throw new Error("Erreur génération");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
+      const d = new Date();
+      const fname = `Demandes_devis_Matera_${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}.xlsx`;
       const a = document.createElement("a");
-      a.href = url; a.download = "demandes-devis-axa.xlsx";
+      a.href = url; a.download = fname;
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
       toast.success("Excel généré et ajouté au Volet 3.");
