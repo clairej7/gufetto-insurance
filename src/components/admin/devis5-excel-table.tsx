@@ -74,7 +74,21 @@ export function Devis5ExcelTable({ count }: { count: number }) {
         });
         const d = await res.json();
         if (res.ok && d.row) {
-          setRows((prev) => prev?.map((r) => (r.pipelineId === t.pipelineId ? d.row : r)) ?? prev);
+          // MERGE (jamais de régression) : la nouvelle extraction ajoute / améliore,
+          // mais ne doit JAMAIS effacer une cellule déjà remplie. Si le nouveau
+          // résultat est "red" (rien trouvé ce coup-ci) alors qu'on avait une valeur
+          // (vert OU orange), on GARDE l'ancienne.
+          setRows((prev) => prev?.map((r) => {
+            if (r.pipelineId !== t.pipelineId) return r;
+            const row = d.row as ExcelRow;
+            const cells = { ...row.cells };
+            for (const c of COLUMNS) {
+              const nu = cells[c.key];
+              const old = r.cells[c.key];
+              if (nu && nu.color === "red" && old && old.color !== "red") cells[c.key] = old;
+            }
+            return { ...row, cells };
+          }) ?? prev);
         }
       } catch { /* on continue le lot */ }
       done++;
