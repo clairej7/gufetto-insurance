@@ -5,7 +5,7 @@
 // fichier, et marquer l'envoi (fait à la main) → le lot devient un historique daté.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Download, Mail, Check } from "lucide-react";
+import { Loader2, Download, Mail, Check, FolderArchive } from "lucide-react";
 import { toast } from "sonner";
 
 type Lot = { id: string; createdAt: string; createdBy: string; sentAt: string | null; count: number };
@@ -41,6 +41,21 @@ export function Devis5Volet3({ lots }: { lots: Lot[] }) {
     finally { setBusy(null); }
   }
 
+  async function downloadDocs(id: string, createdAt: string) {
+    setBusy(`docs:${id}`);
+    try {
+      const res = await fetch("/api/devis5/lot/docs-zip", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lotId: id }) });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Erreur ZIP"); }
+      const blob = await res.blob();
+      const d = new Date(createdAt);
+      const fname = `Docs_RS_Contrats_Matera_${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}.zip`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = fname;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Erreur"); }
+    finally { setBusy(null); }
+  }
+
   const fmt = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
   if (!lots.length) {
@@ -59,6 +74,13 @@ export function Devis5Volet3({ lots }: { lots: Lot[] }) {
               {busy === `dl:${l.id}` ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Excel du {fmt(l.createdAt)}
             </button>
             <span style={{ fontSize: 12, color: "#656576" }}>{l.count} dossier{l.count > 1 ? "s" : ""}</span>
+
+            {/* Tous les docs (RS + contrats MRI) en ZIP */}
+            <button onClick={() => downloadDocs(l.id, l.createdAt)} disabled={busy === `docs:${l.id}`}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "#26262C", background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "7px 12px", cursor: "pointer" }}
+              title="Télécharge tous les RS + contrats MRI du lot (ZIP, un sous-dossier par copro)">
+              {busy === `docs:${l.id}` ? <Loader2 size={14} className="animate-spin" /> : <FolderArchive size={14} />} Docs (ZIP)
+            </button>
 
             <div style={{ flex: 1 }} />
 
