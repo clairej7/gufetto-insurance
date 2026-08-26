@@ -53,6 +53,18 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
+// Le badge « Donnée périmée » ne doit rester que sur les dossiers dont l'échéance
+// est réellement dépassée d'au moins 3 mois (~90 j). On le calcule en live sur
+// l'échéance courante : dès que la donnée est mise à jour (échéance rafraîchie),
+// le badge disparaît immédiatement, sans attendre le batch de l'auto 8 qui
+// réconcilie le flag `donneePerimee`.
+const PERIME_BADGE_JOURS = 90;
+function echeancePerimeePourBadge(dateEcheance: Date | string | null): boolean {
+  if (!dateEcheance) return false;
+  const d = getDaysUntilEcheance(new Date(dateEcheance));
+  return d !== null && d <= -PERIME_BADGE_JOURS;
+}
+
 type Pipeline = {
   id: string;
   coproId: string;
@@ -771,7 +783,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
               {(pipeline.copro.primeActuelle ?? 0) > 10000 && (
                 <span title="Prime > 10 k€" style={{ fontSize: 20 }}>👑</span>
               )}
-              {pipeline.copro.donneePerimee && (
+              {pipeline.copro.donneePerimee && echeancePerimeePourBadge(pipeline.copro.dateEcheance) && (
                 <>
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full border" style={{ color: "#CA1E12", background: "#FDECEA", borderColor: "#F4C7C2" }}>
                     Donnée périmée
