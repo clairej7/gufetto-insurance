@@ -60,8 +60,9 @@ interface AdminBoardProps {
   odrByInsurer: { key: string; label: string; count: number; montant: number; arr: number; stages: { label: string; count: number; montant: number; arr: number; color: string }[] }[];
   // Devis reçus = dossiers avec au moins 1 devis reçu (+ détail par assureur).
   devisRecus: { total: number; axa: number; mila: number };
-  // Auto 6 : comparaisons effectuées + transmissions aux gestionnaires.
-  devis6: { faites: number; transmis: number };
+  // Auto 6 : comparaisons effectuées (cumul depuis le début) + transmissions aux
+  // gestionnaires + comparaisons prêtes mais pas encore transmises.
+  devis6: { faites: number; transmis: number; aTransmettre: number };
   // Auto 7 : suivi des propositions au CS. transmises/aTransmettre = état des
   // dossiers entrés en validation CS ; acceptees/refusees = décisions du CS.
   cs: { transmises: number; aTransmettre: number; acceptees: number; refusees: number };
@@ -817,6 +818,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                     <div>
                       <div style={{ fontSize: 18, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devis6.transmis}</div>
                       <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>transmissions aux gestionnaires</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: devis6.aTransmettre > 0 ? "#B4690E" : "#C0C0C9", lineHeight: 1, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{devis6.aTransmettre}</div>
+                      <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>comparaisons à transmettre</div>
                     </div>
                   </div>
                 )}

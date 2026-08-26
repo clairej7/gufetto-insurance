@@ -64,6 +64,24 @@ export default async function AdminPage() {
     { metadata: { path: ["auto"], equals: "devis6_notify_gestionnaire" } },
     { metadata: { path: ["auto"], equals: "devis6_gestio_response" } },
   ] }, select: { pipelineId: true }, distinct: ["pipelineId"] })).length;
+  // Comparaisons effectuées DEPUIS LE DÉBUT (cumul, indépendant de l'étape) :
+  // dossiers ayant produit une comparaison (DevisRecu.data), qu'ils aient avancé ou non.
+  const devis6ComparaisonsAllTime = (await prisma.devisRecu.findMany({
+    where: { data: { not: null }, pipeline: { copro: { archivedAt: null } } },
+    select: { pipelineId: true }, distinct: ["pipelineId"],
+  })).length;
+  // Comparaisons prêtes mais PAS ENCORE transmises au gestionnaire (encore en Comparaison des devis).
+  const devis6ATransmettre = await prisma.insurancePipeline.count({
+    where: {
+      statut: "devis_recus", copro: { archivedAt: null },
+      devisRecus: { some: { data: { not: null } } },
+      events: { none: { OR: [
+        { metadata: { path: ["auto"], equals: "devis6_notify_gestionnaire" } },
+        { metadata: { path: ["auto"], equals: "devis6_gestio_response" } },
+      ] } },
+    },
+  });
+
   // Auto 7 — suivi des propositions au CS.
   //  - à transmettre = dossiers entrés en validation CS (devis7_entered), encore à
   //    l'étape envoye_cs et pas encore envoyés au CS ;
@@ -165,7 +183,7 @@ export default async function AdminPage() {
           devisAReclamer={devisAReclamer}
           odrByInsurer={odrByInsurer}
           devisRecus={devisRecus}
-          devis6={{ faites: devis6Table.faites, transmis: devis6Transmis }}
+          devis6={{ faites: devis6ComparaisonsAllTime, transmis: devis6Transmis, aTransmettre: devis6ATransmettre }}
           cs={{ transmises: csTransmises, aTransmettre: csATransmettre, acceptees: csAcceptees, refusees: csRefusees }}
           rsFlow={rsFlow}
           devisFlow={devisFlow}
