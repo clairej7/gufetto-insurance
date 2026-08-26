@@ -49,6 +49,7 @@ export function Devis6Controls({ table }: { table: Table }) {
   const [compFilter, setCompFilter] = useState<"tous" | "oui" | "non">("tous");
   const [generating, setGenerating] = useState<string | null>(null);
   const [envoi, setEnvoi] = useState<string | null>(null);
+  const [statutBusy, setStatutBusy] = useState<string | null>(null);
   const [sending7, setSending7] = useState(false);
   const prets = table.rows.filter((r) => r.statut === "valide").length;
   const aComparer = table.rows.filter((r) => !r.comparaisonFaite).length;
@@ -141,6 +142,22 @@ export function Devis6Controls({ table }: { table: Table }) {
       toast.error(e instanceof Error ? e.message : "Échec de l'envoi Slack");
     } finally {
       setEnvoi(null);
+    }
+  }
+
+  // Mise à jour manuelle du statut (transmission/validation faite à la main).
+  async function setStatut(pipelineId: string, statut: "attente" | "valide" | "refus") {
+    setStatutBusy(pipelineId);
+    try {
+      const res = await fetch("/api/devis6/set-statut", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId, statut }) });
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; advanced?: boolean; error?: string };
+      if (!res.ok || !j.ok) throw new Error(j.error ?? "Échec");
+      toast.success(statut === "valide" ? "Validé par le gestionnaire → passé en Validation du CS (auto 7)." : statut === "refus" ? "Marqué refusé." : "Marqué transmis au gestionnaire.");
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Échec");
+    } finally {
+      setStatutBusy(null);
     }
   }
 
@@ -290,9 +307,26 @@ export function Devis6Controls({ table }: { table: Table }) {
                     </button>
                   )}
                 </td>
-                <td style={{ ...td, textAlign: "center" }}>{r.statut === "non_envoye"
-                  ? <span style={{ color: "#A2A1AF" }}>–</span>
-                  : (() => { const s = STATUT[r.statut]; return <span title={r.statutComment ? `💬 ${r.statutComment}` : "Réponse du gestionnaire"} style={{ fontSize: 11, fontWeight: 700, color: s.color, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 999, padding: "2px 10px", whiteSpace: "nowrap", cursor: r.statutComment ? "help" : "default" }}>{s.label}{r.statutComment ? " 💬" : ""}</span>; })()}</td>
+                <td style={{ ...td, textAlign: "center" }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {r.statutComment && <span title={`💬 ${r.statutComment}`} style={{ cursor: "help" }}>💬</span>}
+                    {statutBusy === r.pipelineId ? <Loader2 size={12} className="animate-spin" /> : (
+                      <select
+                        value={r.statut === "non_envoye" ? "" : r.statut}
+                        onChange={(e) => { const v = e.target.value; if (v === "attente" || v === "valide" || v === "refus") setStatut(r.pipelineId, v); }}
+                        title="Mettre à jour le statut à la main (transmission / réponse du gestionnaire)"
+                        style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "3px 8px", cursor: "pointer",
+                          color: r.statut === "non_envoye" ? "#656576" : STATUT[r.statut].color,
+                          background: r.statut === "non_envoye" ? "#fff" : STATUT[r.statut].bg,
+                          border: `1px solid ${r.statut === "non_envoye" ? "#E8E8EC" : STATUT[r.statut].border}` }}>
+                        <option value="" disabled hidden>— statut —</option>
+                        <option value="attente">Transmis au gestio</option>
+                        <option value="valide">Validé par le gestio</option>
+                        <option value="refus">Refusé</option>
+                      </select>
+                    )}
+                  </div>
+                </td>
               </tr>
               );
             })}
