@@ -38,6 +38,7 @@ import {
   Check,
   RotateCcw,
   Loader2,
+  Ban,
   ListChecks,
   ExternalLink,
 } from "lucide-react";
@@ -521,6 +522,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
   const [editingContrat, setEditingContrat] = useState(false);
   const [verifPrime, setVerifPrime] = useState(false);
   const [verifPerime, setVerifPerime] = useState(false);
+  const [excluding, setExcluding] = useState(false);
   // Champs corrigés depuis l'excel GHC (volet 3 auto 8) → check vert « GHC ».
   const ghcSet = new Set<string>((() => { try { return pipeline.copro.ghcFields ? (JSON.parse(pipeline.copro.ghcFields) as string[]) : []; } catch { return []; } })());
   const [editingEcheance, setEditingEcheance] = useState(false);
@@ -551,6 +553,29 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
       toast.error(e instanceof Error ? e.message : "Erreur lors de la vérification");
     } finally {
       setVerifPerime(false);
+    }
+  }
+
+  // Exclure ce dossier précis de toute automatisation (exclusion « copro »).
+  // Idempotent (upsert côté API). Après succès → refresh : le marqueur 🚫 et le
+  // badge « Exclu de toute automatisation » apparaissent, et le dossier rejoint
+  // la liste des exclusions (admin › Autres › Dossiers exclus).
+  async function handleExclure() {
+    setExcluding(true);
+    try {
+      const res = await fetch("/api/exclusions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "copro", value: pipeline.coproId, label: pipeline.copro.adresse || pipeline.copro.nom }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || `Erreur ${res.status}`);
+      toast.success("Dossier exclu des automatisations.");
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur lors de l'exclusion");
+    } finally {
+      setExcluding(false);
     }
   }
 
@@ -1730,6 +1755,25 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
                 </div>
               )}
             </div>
+          )}
+
+          {/* Exclure ce dossier de toute automatisation */}
+          {excluded ? (
+            <div className="w-full text-sm flex items-center gap-2 rounded-md border px-3 py-2" style={{ borderColor: "#F4C7C2", background: "#FDECEA", color: "#CA1E12" }}>
+              <Ban className="h-4 w-4 flex-shrink-0" />
+              <span className="font-medium">Exclu des automatisations</span>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={handleExclure}
+              disabled={excluding}
+              className="w-full text-sm justify-start gap-2"
+              style={{ borderColor: "#F4C7C2", color: "#CA1E12" }}
+            >
+              {excluding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+              Exclure des automatisations
+            </Button>
           )}
 
           {/* Échéance (éditable à la main — pose le cliquet anti-Omni) */}
