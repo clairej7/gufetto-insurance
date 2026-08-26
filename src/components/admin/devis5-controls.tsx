@@ -11,7 +11,7 @@ import { Devis5ExcelTable } from "@/components/admin/devis5-excel-table";
 import { Devis5Volet3 } from "@/components/admin/devis5-volet3";
 type Devis5Lot = { id: string; createdAt: string; createdBy: string; sentAt: string | null; count: number };
 
-type Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; prime: number | null; courtier: string | null; gestionnaire: string | null; hasRs: boolean; hasContrat: boolean };
+type Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; prime: number | null; courtier: string | null; gestionnaire: string | null; hasRs: boolean; hasContrat: boolean; frontUrl: string | null };
 type Data = { total: number; prets: number; docsManquants: number; rows: Row[] };
 type DocHist = { loadedAt: string; dossiers: number; created: number };
 type NoDoc = { pipelineId: string; nom: string; adresse: string | null; checkedAt: string };
@@ -230,7 +230,7 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-                  {["Copropriété", "RS", "Contrat", "Assureur actuel", "N° contrat", "Prime", "Courtier", "Gestionnaire"].map((h) => (
+                  {["Copropriété", "RS", "Contrat", "Assureur actuel", "N° contrat", "Prime", "Courtier", "Gestionnaire", "Demande Front"].map((h) => (
                     <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
                   ))}
                 </tr>
@@ -248,10 +248,11 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
                       <td style={{ padding: "6px 10px", color: "#656576" }}>{r.prime != null ? `${r.prime.toLocaleString("fr-FR")} €` : "—"}</td>
                       <td style={{ padding: "6px 10px", color: "#656576" }}>{r.courtier || "—"}</td>
                       <td style={{ padding: "6px 10px", color: "#656576", whiteSpace: "nowrap" }}>{r.gestionnaire || "—"}</td>
+                      <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>{r.frontUrl ? <a href={r.frontUrl} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none", fontWeight: 600 }}>Ouvrir ↗</a> : <span style={{ color: "#C4C4CE" }}>—</span>}</td>
                     </tr>
                   );
                 })}
-                {rows.length === 0 && <tr><td colSpan={8} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>}
+                {rows.length === 0 && <tr><td colSpan={9} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier ne correspond.</td></tr>}
               </tbody>
             </table>
           </div>
