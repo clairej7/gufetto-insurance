@@ -22,6 +22,7 @@ export type Devis5Row = {
   gestionnaire: string | null;
   hasRs: boolean;
   hasContrat: boolean;
+  frontUrl: string | null; // fil Front de la demande (RS courtier), pour relancer à la main
 };
 
 // prets = RS + contrat présents ; docsManquants = au moins un des deux absent.
@@ -31,6 +32,26 @@ function gestLabel(nom: string | null, email: string | null): string | null {
   if (nom?.trim()) return nom.trim();
   if (!email) return null;
   return email.split("@")[0].split(/[._-]/).filter(Boolean).map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+}
+
+// Récupère, pour chaque dossier, l'URL Front de la demande RS au courtier
+// (event rsType=draft_sent le plus récent → conversationId). C'est le fil où
+// arrivent RS + contrat MRI, donc le bon endroit pour relancer à la main.
+async function getFrontConvByPipeline(pipelineIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!pipelineIds.length) return out;
+  const evs = await prisma.pipelineEvent.findMany({
+    where: { pipelineId: { in: pipelineIds }, metadata: { path: ["rsType"], equals: "draft_sent" } },
+    select: { pipelineId: true, metadata: true },
+    orderBy: { createdAt: "desc" },
+  });
+  for (const e of evs) {
+    if (out.has(e.pipelineId)) continue; // le premier vu = le plus récent (desc)
+    const cid = (e.metadata as { conversationId?: string } | null)?.conversationId;
+    const url = FRONT_CONV(cid ?? null);
+    if (url) out.set(e.pipelineId, url);
+  }
+  return out;
 }
 
 export async function getDevis5Volet1Data(): Promise<Devis5Data> {
@@ -52,11 +73,15 @@ export async function getDevis5Volet1Data(): Promise<Devis5Data> {
     },
     orderBy: { copro: { dateEcheance: "asc" } },
   });
+  // Lien Front = fil de la demande RS au courtier (là où arrivent RS + contrat MRI),
+  // pour relancer à la main les copros où il manque un des deux docs.
+  const frontByPipeline = await getFrontConvByPipeline(ps.map((p) => p.id));
   const rows: Devis5Row[] = ps.map((p) => ({
     pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse,
     assureur: p.copro.assureurActuel, numeroContrat: p.copro.numeroContrat, prime: p.copro.primeActuelle,
     courtier: p.copro.courtierActuel, gestionnaire: gestLabel(p.copro.gestionnaireNom, p.copro.gestionnaireEmail),
     hasRs: p.documents.some((d) => d.kind === "rs"), hasContrat: p.documents.some((d) => d.kind === "contrat_mri"),
+    frontUrl: frontByPipeline.get(p.id) ?? null,
   }));
   return {
     total: rows.length,
