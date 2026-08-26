@@ -54,11 +54,13 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-// Le badge « Donnée périmée » ne doit rester que sur les dossiers dont l'échéance
-// est réellement dépassée d'au moins 3 mois (~90 j). On le calcule en live sur
-// l'échéance courante : dès que la donnée est mise à jour (échéance rafraîchie),
-// le badge disparaît immédiatement, sans attendre le batch de l'auto 8 qui
-// réconcilie le flag `donneePerimee`.
+// Le badge « Donnée périmée » se calcule EN LIVE sur l'échéance courante, sans
+// dépendre du flag persisté `donneePerimee` (que seul le batch de l'auto 8
+// réconcilie, et qui se désynchronise donc dans les deux sens). Règle : afficher
+// dès que l'échéance est dépassée d'au moins 3 mois (~90 j) — et seulement si le
+// dossier est actif et non résolu (perimeeResolvedAt). Ainsi le badge apparaît
+// sur tout dossier à donnée manifestement vieille, et disparaît immédiatement
+// dès que l'échéance est mise à jour ou la donnée confirmée.
 const PERIME_BADGE_JOURS = 90;
 function echeancePerimeePourBadge(dateEcheance: Date | string | null): boolean {
   if (!dateEcheance) return false;
@@ -83,6 +85,7 @@ type Pipeline = {
     primeActuelle: number | null;
     primeAVerifier: boolean;
     donneePerimee: boolean;
+    perimeeResolvedAt: Date | null;
     ghcFields: string | null;
     dateEcheance: Date | null;
     dateDebutContrat: Date | null;
@@ -808,7 +811,7 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
               {(pipeline.copro.primeActuelle ?? 0) > 10000 && (
                 <span title="Prime > 10 k€" style={{ fontSize: 20 }}>👑</span>
               )}
-              {pipeline.copro.donneePerimee && echeancePerimeePourBadge(pipeline.copro.dateEcheance) && (
+              {!isTerminal && !pipeline.copro.perimeeResolvedAt && echeancePerimeePourBadge(pipeline.copro.dateEcheance) && (
                 <>
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full border" style={{ color: "#CA1E12", background: "#FDECEA", borderColor: "#F4C7C2" }}>
                     Donnée périmée
