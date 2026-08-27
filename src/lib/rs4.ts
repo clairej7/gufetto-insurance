@@ -440,7 +440,7 @@ export async function moveSentToVolet3(actorEmail: string): Promise<{ moved: num
 }
 
 // ─── Volet 3 : suivi + boucle de relances ────────────────────────────────────
-export type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null; commentText: string | null; commentBy: string | null; commentAt: string | null; devisMixup: boolean; relanceTried: boolean; joursOuvresDepuisDerniereRelance: number };
+export type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null; commentText: string | null; commentBy: string | null; commentAt: string | null; devisMixup: boolean; relanceTried: boolean; joursOuvresDepuisDerniereRelance: number; relancePaused: boolean };
 export type Volet3Data = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null; commentedCount: number; devisMixupCount: number };
 
 // Adresses de DEMANDE DE DEVIS (assureurs) — jamais un destinataire de relance RS.
@@ -532,7 +532,7 @@ function toVolet3Row(p: Rs4Pipeline, nowMs: number): Volet3Row {
   // Lien Front : conv de réponse si détectée, sinon la conv du dernier envoi initial
   // → chaque dossier a toujours un lien, même « sans réponse ».
   const sentCid = base?.cid ?? p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop() ?? null;
-  return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events), replyKind: p.rs4ReplyKind, replyAt: p.rs4ReplyAt ? p.rs4ReplyAt.toISOString() : null, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId ?? sentCid), commentText: p.rs4CommentText, commentBy: p.rs4CommentBy, commentAt: p.rs4CommentAt ? p.rs4CommentAt.toISOString() : null, devisMixup, relanceTried: false, joursOuvresDepuisDerniereRelance };
+  return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events), replyKind: p.rs4ReplyKind, replyAt: p.rs4ReplyAt ? p.rs4ReplyAt.toISOString() : null, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId ?? sentCid), commentText: p.rs4CommentText, commentBy: p.rs4CommentBy, commentAt: p.rs4CommentAt ? p.rs4CommentAt.toISOString() : null, devisMixup, relanceTried: false, joursOuvresDepuisDerniereRelance, relancePaused: false };
 }
 function replyCountsOf(ps: Rs4Pipeline[]): Record<string, number> {
   const c: Record<string, number> = {};
@@ -556,10 +556,16 @@ export async function getRs4Volet3Data(nowMs: number): Promise<Volet3Data> {
   const triedMap = new Map<string, Set<number>>();
   for (const e of triedEv) { const n = Number((e.metadata as { relanceNum?: number } | null)?.relanceNum); if (!n) continue; if (!triedMap.has(e.pipelineId)) triedMap.set(e.pipelineId, new Set()); triedMap.get(e.pipelineId)!.add(n); }
   for (const r of rows) r.relanceTried = triedMap.get(r.pipelineId)?.has(r.relances + 1) ?? false;
+  // Mis en pause manuellement (« exclure de la boucle ») → exclu des relances tant
+  // qu'on ne « remet pas dans la boucle ». État = dernier event rs4_relance_paused.
+  const pausedEv = await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "rs4_relance_paused" } }, select: { pipelineId: true, metadata: true }, orderBy: { createdAt: "asc" } });
+  const pausedState = new Map<string, boolean>();
+  for (const e of pausedEv) pausedState.set(e.pipelineId, !!(e.metadata as { paused?: boolean } | null)?.paused);
+  for (const r of rows) r.relancePaused = pausedState.get(r.pipelineId) ?? false;
   // Éligibles à la relance N = délai atteint, EXACTEMENT N-1 relances déjà faites
-  // (séquence 1→2→3), pas de réponse réelle, et pas déjà tenté récemment.
+  // (séquence 1→2→3), pas de réponse réelle, pas déjà tenté récemment, pas en pause.
   const noRealReply = (k: string | null) => !k || k === "sans_reponse" || k === "non_scanne";
-  const stages = RELANCE_STAGES.map((s) => ({ num: s.num, day: s.day, eligibles: rows.filter((r) => !r.relanceTried && r.joursDepuisEnvoi >= s.day && r.joursOuvresDepuisDerniereRelance >= MIN_OPEN_DAYS_BETWEEN_RELANCES && r.relances === s.num - 1 && noRealReply(r.replyKind)).length }));
+  const stages = RELANCE_STAGES.map((s) => ({ num: s.num, day: s.day, eligibles: rows.filter((r) => !r.relanceTried && !r.relancePaused && r.joursDepuisEnvoi >= s.day && r.joursOuvresDepuisDerniereRelance >= MIN_OPEN_DAYS_BETWEEN_RELANCES && r.relances === s.num - 1 && noRealReply(r.replyKind)).length }));
   return { total: rows.length, rows, stages, replyCounts: replyCountsOf(ps), lastScanAt: lastScanOf(ps), commentedCount: rows.filter((r) => r.commentText).length, devisMixupCount: rows.filter((r) => r.devisMixup).length };
 }
 
@@ -575,7 +581,16 @@ export async function scanFrontComments(offset: number, limit: number): Promise<
     if (!cid) { await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4CommentAt: null, rs4CommentText: null, rs4CommentBy: null } }); continue; }
     const cm = await frontGet(`/conversations/${cid}/comments`);
     const results = ((cm?._results as { author?: { email?: string; is_teammate?: boolean }; body?: string; posted_at?: number }[]) ?? [])
-      .filter((c) => (c.author?.email ?? "").includes("@") && !/associated to a project|marked as|custom field/i.test(c.body ?? ""));
+      .filter((c) => {
+        const body = (c.body ?? "").trim();
+        if (!(c.author?.email ?? "").includes("@")) return false;
+        if (/associated to a project|marked as|custom field/i.test(body)) return false;
+        // On ne garde QUE les vrais commentaires : on écarte les pings de statut
+        // « En cours » et les commentaires automatiques « Nom du PCS : … ».
+        if (/^en\s*cours\.?$/i.test(body)) return false;
+        if (/nom du pcs/i.test(body)) return false;
+        return true;
+      });
     if (!results.length) { await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4CommentAt: null, rs4CommentText: null, rs4CommentBy: null } }); continue; }
     const last = results.sort((a, b) => (b.posted_at ?? 0) - (a.posted_at ?? 0))[0];
     await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4CommentAt: last.posted_at ? new Date(last.posted_at * 1000) : new Date(), rs4CommentText: (last.body ?? "").replace(/\s+/g, " ").slice(0, 240), rs4CommentBy: last.author?.email ?? null } });
@@ -910,6 +925,16 @@ export async function closeRedirectConversation(actorEmail: string, pipelineId: 
   return { ok: true, archived };
 }
 
+// Toggle « exclure de la boucle » / « remettre dans la boucle » : met en pause un
+// dossier des relances SANS changer son étape ni son compteur (mise de côté
+// temporaire). État = dernier event rs4_relance_paused.
+export async function setRelancePause(pipelineId: string, paused: boolean, actorEmail: string): Promise<{ ok: boolean }> {
+  const p = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, select: { id: true } });
+  if (!p) return { ok: false };
+  await prisma.pipelineEvent.create({ data: { pipelineId, type: "action_manuelle", description: paused ? "Exclu de la boucle de relances (mise de côté temporaire)" : "Remis dans la boucle de relances", metadata: { auto: "rs4_relance_paused", paused }, createdBy: actorEmail } });
+  return { ok: true };
+}
+
 // Envoie la relance n° `relanceNum` aux dossiers éligibles (J+seuil atteint et
 // relance pas encore envoyée). Les dossiers restent au volet 3 jusqu'au RS reçu.
 export async function sendRelance(actorEmail: string, relanceNum: number, nowMs: number, limit?: number): Promise<{ sent: number; failed: number; skippedReplied: number; errors: string[] }> {
@@ -930,6 +955,10 @@ export async function sendRelance(actorEmail: string, relanceNum: number, nowMs:
     select: { pipelineId: true, metadata: true },
   });
   const triedSet = new Set(triedEv.filter((e) => Number((e.metadata as { relanceNum?: number } | null)?.relanceNum) === relanceNum).map((e) => e.pipelineId));
+  // Dossiers mis en pause manuellement (« exclure de la boucle ») → jamais relancés.
+  const pausedEv2 = await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "rs4_relance_paused" } }, select: { pipelineId: true, metadata: true }, orderBy: { createdAt: "asc" } });
+  const pausedSet = new Map<string, boolean>();
+  for (const e of pausedEv2) pausedSet.set(e.pipelineId, !!(e.metadata as { paused?: boolean } | null)?.paused);
   const markTried = (pipelineId: string, reason: string) =>
     prisma.pipelineEvent.create({ data: { pipelineId, type: "action_manuelle", description: `Relance ${relanceNum} non envoyée (${reason}) — passée, on tente les suivantes`, metadata: { auto: "rs4_relance_tried", relanceNum, reason }, createdBy: actorEmail } });
   // Éligibles : délai atteint, EXACTEMENT relanceNum-1 relances déjà faites
@@ -937,6 +966,7 @@ export async function sendRelance(actorEmail: string, relanceNum: number, nowMs:
   const isRealReply = (k: string | null) => !!k && k !== "sans_reponse" && k !== "non_scanne";
   const eligible = ps.filter((p) => {
     if (triedSet.has(p.id)) return false; // déjà tenté récemment → on passe aux suivants
+    if (pausedSet.get(p.id)) return false; // mis en pause manuellement → jamais relancé
     // GARDE-FOU : on ne relance QUE si un VRAI envoi de notre part existe (draft_sent
     // relanceNum 0 + destinataire). Un dossier « lié » à une conv étrangère/ancienne
     // (pas d'envoi de nous) n'est jamais relancé.
