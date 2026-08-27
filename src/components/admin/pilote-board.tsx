@@ -47,9 +47,15 @@ const FUNNEL: CardData[] = [
 ];
 
 const ODR: CardData[] = [
-  { key: "odr_en_cours", title: "ODR en cours", deployed: false, tasks: [] },
-  { key: "odr_envoye", title: "ODR envoyé", deployed: false, tasks: [] },
-  { key: "odr_accepte", title: "ODR accepté", deployed: false, tasks: [] },
+  { key: "odr_en_cours", title: "ODR en cours", deployed: false, tasks: [
+    { key: "verifier_infos", name: "Vérifier les infos", automated: false },
+    { key: "retrouver_infos_manquantes", name: "Retrouver les infos manquantes", automated: false },
+  ] },
+  { key: "odr_envoye", title: "ODR envoyé", deployed: false, tasks: [
+    { key: "verifier_doublons", name: "Vérifier les doublons", automated: false },
+    { key: "envoyer_partenaires", name: "Envoyer aux partenaires", automated: false },
+  ] },
+  { key: "odr_accepte", title: "ODR accepté", deployed: false, tasks: [], manualOnly: true },
 ];
 
 const PISCINE: CardData = { key: "piscine", title: "Piscine", deployed: false, tasks: [] };
