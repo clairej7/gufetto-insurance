@@ -70,19 +70,21 @@ function VoletTitle({ n, children }: { n: number; children: React.ReactNode }) {
 
 const V1_COLS = ["Copropriété", "Assureur", "N° de contrat", "Courtier", "Mail courtier"] as const;
 
-function V1Table({ rows, showManque }: { rows: Row[]; showManque?: boolean }) {
+function V1Table({ rows, showManque, onMove, movingId }: { rows: Row[]; showManque?: boolean; onMove?: (pipelineId: string, direction: "next" | "identification") => void; movingId?: string | null }) {
   return (
     <div style={{ marginTop: 8, maxHeight: 320, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8 }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
         <thead>
           <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-            {[...V1_COLS, ...(showManque ? ["Manque"] : [])].map((h) => (
+            {[...V1_COLS, ...(showManque ? ["Manque"] : []), ...(onMove ? ["Actions"] : [])].map((h) => (
               <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {rows.map((r) => {
+            const busy = movingId === r.pipelineId;
+            return (
             <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
               <td style={{ padding: "6px 10px", color: "#26262C" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.nom}</a></td>
               <td style={{ padding: "6px 10px", color: r.assureur ? "#656576" : "#CA1E12" }}>{r.assureur || "manquant"}</td>
@@ -90,8 +92,21 @@ function V1Table({ rows, showManque }: { rows: Row[]; showManque?: boolean }) {
               <td style={{ padding: "6px 10px", color: "#656576" }}>{r.courtier || "—"}</td>
               <td style={{ padding: "6px 10px", color: r.mail ? "#13762C" : "#CA1E12" }}>{r.mail || "manquant"}</td>
               {showManque && <td style={{ padding: "6px 10px", color: "#B4690E" }}>{r.manque.join(", ")}</td>}
+              {onMove && (
+                <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>
+                  <div style={{ display: "inline-flex", gap: 6 }}>
+                    <button disabled={busy} onClick={() => onMove(r.pipelineId, "next")} style={btn("#13762C", "#EAF7EE", "#B7E4C4")} title="Passer à l'étape suivante">
+                      {busy ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Valider
+                    </button>
+                    <button disabled={busy} onClick={() => onMove(r.pipelineId, "identification")} style={btn("#B4690E", "#FDF0D5", "#F3D9A6")} title="Renvoyer à l'étape Identification">
+                      {busy ? <Loader2 size={12} className="animate-spin" /> : <ArrowRight size={12} style={{ transform: "rotate(180deg)" }} />} Renvoyer en identification
+                    </button>
+                  </div>
+                </td>
+              )}
             </tr>
-          ))}
+          );
+          })}
         </tbody>
       </table>
     </div>
@@ -131,6 +146,7 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
   const [sample, setSample] = useState<Sample | null>(null);
   const [loading, setLoading] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [movingId, setMovingId] = useState<string | null>(null);
   const [perso, setPerso] = useState<{ total: number; perso: number; csMatch: number; rows: { pipelineId: string; nom: string; courtier: string | null; mail: string | null; motif: string }[] } | null>(null);
   const [checkingPerso, setCheckingPerso] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
@@ -189,6 +205,20 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Erreur");
       setSample(await res.json());
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setLoading(false); }
+  }
+
+  // Volet 1 — déplacement manuel d'un dossier « à vérifier » (valider / renvoyer).
+  async function verifMove(pipelineId: string, direction: "next" | "identification") {
+    setMovingId(pipelineId);
+    try {
+      const res = await fetch("/api/rs4/verif-move", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId, direction }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || "Erreur");
+      toast.success(direction === "next" ? "Dossier validé → étape suivante" : "Dossier renvoyé en Identification");
+      // Retire la ligne localement + rafraîchit compteurs/étapes.
+      setSample((s) => s ? { ...s, incomplete: Math.max(0, s.incomplete - 1), incompleteRows: s.incompleteRows.filter((r) => r.pipelineId !== pipelineId) } : s);
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setMovingId(null); }
   }
 
   async function checkPerso() {
@@ -430,7 +460,7 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
               {sample.incomplete > 0 && (
                 <div>
                   <button onClick={() => setShowIncomplete((v) => !v)} style={{ fontSize: 12, fontWeight: 600, color: "#B4690E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>{showIncomplete ? "▾" : "▸"} Détail des {sample.incomplete} dossiers à vérifier (incomplets / erronés)</button>
-                  {showIncomplete && <V1Table rows={sample.incompleteRows} showManque />}
+                  {showIncomplete && <V1Table rows={sample.incompleteRows} showManque onMove={verifMove} movingId={movingId} />}
                 </div>
               )}
             </div>
