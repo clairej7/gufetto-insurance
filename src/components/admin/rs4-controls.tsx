@@ -17,7 +17,7 @@ type Row = { pipelineId: string; nom: string; assureur: string | null; numeroCon
 type Sample = { total: number; complete: number; incomplete: number; completeRows: Row[]; incompleteRows: Row[] };
 type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; sendMail: string | null; hold: boolean; holdReason: string; gestionnaire: string | null };
 type Volet2 = { total: number; nouveaux: number; dejaEnvoyes: number; sent: number; rows: Volet2Row[] };
-type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null; commentText: string | null; commentBy: string | null; commentAt: string | null; devisMixup: boolean };
+type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null; commentText: string | null; commentBy: string | null; commentAt: string | null; devisMixup: boolean; relanceTried: boolean };
 type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null; commentedCount: number; devisMixupCount: number };
 type Detector = { total: number; scanned: number; nonScanne: number; sansReponse: number; replyCounts: Record<string, number>; lastScanAt: string | null; rows: Volet3Row[] };
 type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; replyKind: string | null; replySnippet: string | null; replyConvUrl: string | null };
@@ -803,7 +803,7 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
               const stage = volet3.stages.find((s) => s.num === selectedStage);
               if (!stage) return null;
               const isNoReal = (k: string | null) => !k || k === "sans_reponse" || k === "non_scanne";
-              const eligRows = volet3.rows.filter((r) => r.joursDepuisEnvoi >= stage.day && r.relances === selectedStage - 1 && isNoReal(r.replyKind));
+              const eligRows = volet3.rows.filter((r) => !r.relanceTried && r.joursDepuisEnvoi >= stage.day && r.relances === selectedStage - 1 && isNoReal(r.replyKind));
               const ton = selectedStage === 1 ? "amical" : selectedStage === 2 ? "pressant" : "juridique";
               return (
                 <div style={{ marginTop: 12, border: "1px solid #D9D9F5", background: "#F7F7FF", borderRadius: 10, padding: 14 }}>
