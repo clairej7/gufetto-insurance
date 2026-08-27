@@ -3,7 +3,7 @@
 // Mode « Pilote » — MAQUETTE esthétique uniquement (à remplir/coder ensuite).
 // Vue façon n8n : on voit l'enchaînement des grandes étapes du funnel + le parcours ODR.
 // Chaque carte : titre / état (déployé = vert, non déployé = rouge) / % d'automatisation.
-// Pour l'instant : toutes les cartes en « Non déployé » + « 100% automatisé » (placeholder).
+// Pour l'instant : toutes les cartes en « Non déployé » + « 0% automatisé » (placeholder).
 
 import { ChevronRight, CircleDot } from "lucide-react";
 
@@ -11,20 +11,20 @@ type CardData = { key: string; title: string; deployed: boolean; pct: number };
 
 // Ligne 1 — grandes étapes du funnel (6 cartes chaînées).
 const FUNNEL: CardData[] = [
-  { key: "identification", title: "Identification", deployed: false, pct: 100 },
-  { key: "rs", title: "Récupération du RS", deployed: false, pct: 100 },
-  { key: "devis_demandes", title: "Demandes de devis", deployed: false, pct: 100 },
-  { key: "devis_compare", title: "Comparaison des devis", deployed: false, pct: 100 },
-  { key: "validation_cs", title: "Validation du CS", deployed: false, pct: 100 },
-  { key: "signe", title: "Signé", deployed: false, pct: 100 },
+  { key: "identification", title: "Identification", deployed: false, pct: 0 },
+  { key: "rs", title: "Récupération du RS", deployed: false, pct: 0 },
+  { key: "devis_demandes", title: "Demandes de devis", deployed: false, pct: 0 },
+  { key: "devis_compare", title: "Comparaison des devis", deployed: false, pct: 0 },
+  { key: "validation_cs", title: "Validation du CS", deployed: false, pct: 0 },
+  { key: "signe", title: "Signé", deployed: false, pct: 0 },
 ];
 
 // Ligne 2 — parcours ODR, aligné sous des colonnes précises de la ligne 1.
 // col = index 1-based de la carte funnel sous laquelle la carte ODR se place.
 const ODR: (CardData & { col: number })[] = [
-  { key: "odr_en_cours", title: "ODR en cours", deployed: false, pct: 100, col: 2 }, // sous Récupération du RS
-  { key: "odr_envoye", title: "ODR envoyé", deployed: false, pct: 100, col: 5 }, // sous Validation du CS
-  { key: "odr_accepte", title: "ODR accepté", deployed: false, pct: 100, col: 6 }, // sous Signé
+  { key: "odr_en_cours", title: "ODR en cours", deployed: false, pct: 0, col: 2 }, // sous Récupération du RS
+  { key: "odr_envoye", title: "ODR envoyé", deployed: false, pct: 0, col: 5 }, // sous Validation du CS
+  { key: "odr_accepte", title: "ODR accepté", deployed: false, pct: 0, col: 6 }, // sous Signé
 ];
 
 function StatusPill({ deployed }: { deployed: boolean }) {
