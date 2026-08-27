@@ -61,6 +61,8 @@ export type AutofillResult = {
   moved: boolean;
   // A écrit au moins un champ contrat (assureur/courtier/n°/mail) trouvé dans Front.
   wroteFields: boolean;
+  // Libellés des champs effectivement complétés (pour l'affichage du détail).
+  writtenFields: string[];
   // Décision EFFECTIVE (extraction Front + fallback champs Omni existants).
   reliable: boolean;
   assureur: string | null;
@@ -74,13 +76,14 @@ export async function applyAutofill(
   pipelineId: string,
   actorEmail: string,
   eventType: "action_manuelle" | "sync_auto" = "action_manuelle",
+  route = true, // false = complète les champs SANS aiguiller (Volet 1 : le routage est le rôle du Volet 2)
 ): Promise<AutofillResult> {
   const pipeline = await prisma.insurancePipeline.findUnique({
     where: { id: pipelineId },
     include: { copro: true },
   });
   if (!pipeline) {
-    return { pipelineId, buildingId: null, info: null, targetStatut: "identifie", moved: false, wroteFields: false, reliable: false, assureur: null, numeroContrat: null, mailCourtier: null, usedOmni: false, skippedReason: "pipeline introuvable" };
+    return { pipelineId, buildingId: null, info: null, targetStatut: "identifie", moved: false, wroteFields: false, writtenFields: [], reliable: false, assureur: null, numeroContrat: null, mailCourtier: null, usedOmni: false, skippedReason: "pipeline introuvable" };
   }
 
   const copro = pipeline.copro;
@@ -91,6 +94,8 @@ export async function applyAutofill(
   //    face aux syncs Omni. Les corrections d'assureur sont tracées en note.
   const { data, auditNotes } = planContractWrite(copro, info);
   const wroteFields = Object.keys(data).length > 0;
+  const FIELD_LABELS: Record<string, string> = { assureurActuel: "assureur", courtierActuel: "courtier", numeroContrat: "n° contrat", contactCourtierEmail: "mail courtier" };
+  const writtenFields = Object.keys(data).map((k) => FIELD_LABELS[k] ?? k);
   if (wroteFields) {
     data.contratVerrouilleLe = new Date();
     await prisma.copro.update({ where: { id: copro.id }, data });
@@ -149,7 +154,7 @@ export async function applyAutofill(
   };
 
   let moved = false;
-  if (pipeline.statut === "identifie" && targetStatut !== "identifie") {
+  if (route && pipeline.statut === "identifie" && targetStatut !== "identifie") {
     const src = usedOmni ? " [via données existantes]" : "";
     const desc =
       targetStatut === "odr_en_cours"
@@ -192,7 +197,7 @@ export async function applyAutofill(
   //    (Front a pu voir un vieux mail d'un ancien assureur). On pose une note à
   //    marqueur stable "Possible faux ODR" (une seule fois) : les futures
   //    automatisations ODR pourront exclure ces cas d'office pour traitement manuel.
-  if (targetStatut === "odr_en_cours") {
+  if (route && targetStatut === "odr_en_cours") {
     const champAssureur = typeof data.assureurActuel === "string" ? data.assureurActuel : copro.assureurActuel;
     const odrPartner = info.partnerKey ?? matchPartner(effAssureur);
     if (champAssureur && !looksLikeCourtierValue(champAssureur) && matchPartner(champAssureur) !== odrPartner) {
@@ -215,7 +220,7 @@ export async function applyAutofill(
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${pipelineId}`);
   return {
-    pipelineId, buildingId: copro.buildingId, info, targetStatut, moved, wroteFields,
+    pipelineId, buildingId: copro.buildingId, info, targetStatut, moved, wroteFields, writtenFields,
     reliable: effReliable, assureur: effAssureur, numeroContrat: effNumero, mailCourtier: effMail, usedOmni,
   };
 }

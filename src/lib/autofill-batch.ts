@@ -11,12 +11,24 @@ import { getExcludedCoproIds } from "@/lib/exclusions";
 // de repasser plus tard sur les non-fiables (Front rétabli / données nettoyées).
 export const RETRY_APRES_JOURS = 7;
 
-export type AutofillStats = { traites: number; versRs: number; versOdr: number; nonFiables: number; erreurs: number };
+// Volet 1 = REMPLISSAGE SEUL : on complète les champs manquants depuis Front, on
+// n'aiguille PAS (le routage ODR/RS est le rôle du Volet 2, avec validation).
+export type AutofillStats = { traites: number; completes: number; sansInfo: number; erreurs: number };
+export type AutofillDetail = {
+  pipelineId: string;
+  nom: string;
+  adresse: string | null;
+  assureur: string | null;
+  numero: string | null;
+  mail: string | null;
+  wroteFields: boolean;
+  champs: string[]; // champs effectivement complétés
+};
 export type AutofillChunkResult = {
   count: number; // dossiers pris dans ce lot
   restants_potentiels: boolean; // le lot était plein → il reste probablement du stock
   stats: AutofillStats;
-  details: Array<Record<string, unknown>>;
+  details: AutofillDetail[];
 };
 
 // Traite UN lot borné : sélectionne `limit` dossiers éligibles (« identifié »
@@ -44,7 +56,7 @@ export async function runAutofillChunk(actor: string, limit: number): Promise<Au
       },
       OR: [{ autofillTenteLe: null }, { autofillTenteLe: { lt: cooldown } }],
     },
-    select: { id: true },
+    select: { id: true, copro: { select: { nom: true, adresse: true } } },
     orderBy: { id: "asc" },
     take: limit,
   });
@@ -56,27 +68,27 @@ export async function runAutofillChunk(actor: string, limit: number): Promise<Au
     });
   }
 
-  const stats: AutofillStats = { traites: 0, versRs: 0, versOdr: 0, nonFiables: 0, erreurs: 0 };
-  const details: Array<Record<string, unknown>> = [];
+  const stats: AutofillStats = { traites: 0, completes: 0, sansInfo: 0, erreurs: 0 };
+  const details: AutofillDetail[] = [];
 
   for (const p of pipelines) {
     try {
-      // "action_manuelle" (et non "sync_auto") : l'aiguillage du batch est une
-      // décision délibérée qui doit TENIR. Un event non-sync_auto par un acteur
-      // marque le pipeline "touché" → la synchro Omni nocturne ne réécrase plus
-      // son statut (sinon elle le renvoyait en "Identification" chaque nuit).
-      const r = await applyAutofill(p.id, actor, "action_manuelle");
+      // route=false : Volet 1 COMPLÈTE seulement (pas d'aiguillage — Volet 2).
+      // "action_manuelle" → event non-sync_auto = pipeline "touché" → la synchro
+      // Omni nocturne ne réécrase pas les champs figés (cliquet contratVerrouilleLe).
+      const r = await applyAutofill(p.id, actor, "action_manuelle", false);
       stats.traites++;
-      if (r.moved && r.targetStatut === "rs_en_cours") stats.versRs++;
-      else if (r.moved && r.targetStatut === "odr_en_cours") stats.versOdr++;
-      else stats.nonFiables++;
+      if (r.wroteFields) stats.completes++;
+      else stats.sansInfo++;
       details.push({
         pipelineId: p.id,
-        assureur: r.info?.assureur ?? null,
-        numero: r.info?.numeroContrat ?? null,
-        mail: r.info?.mailCourtier ?? null,
-        target: r.targetStatut,
-        moved: r.moved,
+        nom: p.copro.nom,
+        adresse: p.copro.adresse,
+        assureur: r.assureur ?? null,
+        numero: r.numeroContrat ?? null,
+        mail: r.mailCourtier ?? null,
+        wroteFields: r.wroteFields,
+        champs: r.writtenFields,
       });
     } catch (e) {
       stats.erreurs++;
@@ -89,16 +101,5 @@ export async function runAutofillChunk(actor: string, limit: number): Promise<Au
     restants_potentiels: pipelines.length === limit,
     stats,
     details,
-  };
-}
-
-// Combine plusieurs AutofillStats (pour la boucle du scan nocturne).
-export function mergeStats(a: AutofillStats, b: AutofillStats): AutofillStats {
-  return {
-    traites: a.traites + b.traites,
-    versRs: a.versRs + b.versRs,
-    versOdr: a.versOdr + b.versOdr,
-    nonFiables: a.nonFiables + b.nonFiables,
-    erreurs: a.erreurs + b.erreurs,
   };
 }
