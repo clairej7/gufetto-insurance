@@ -440,7 +440,7 @@ export async function moveSentToVolet3(actorEmail: string): Promise<{ moved: num
 }
 
 // ─── Volet 3 : suivi + boucle de relances ────────────────────────────────────
-export type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null; commentText: string | null; commentBy: string | null; commentAt: string | null; devisMixup: boolean };
+export type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null; commentText: string | null; commentBy: string | null; commentAt: string | null; devisMixup: boolean; relanceTried: boolean };
 export type Volet3Data = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null; commentedCount: number; devisMixupCount: number };
 
 // Adresses de DEMANDE DE DEVIS (assureurs) — jamais un destinataire de relance RS.
@@ -504,7 +504,7 @@ function toVolet3Row(p: Rs4Pipeline, nowMs: number): Volet3Row {
   // Lien Front : conv de réponse si détectée, sinon la conv du dernier envoi initial
   // → chaque dossier a toujours un lien, même « sans réponse ».
   const sentCid = base?.cid ?? p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop() ?? null;
-  return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events), replyKind: p.rs4ReplyKind, replyAt: p.rs4ReplyAt ? p.rs4ReplyAt.toISOString() : null, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId ?? sentCid), commentText: p.rs4CommentText, commentBy: p.rs4CommentBy, commentAt: p.rs4CommentAt ? p.rs4CommentAt.toISOString() : null, devisMixup };
+  return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events), replyKind: p.rs4ReplyKind, replyAt: p.rs4ReplyAt ? p.rs4ReplyAt.toISOString() : null, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId ?? sentCid), commentText: p.rs4CommentText, commentBy: p.rs4CommentBy, commentAt: p.rs4CommentAt ? p.rs4CommentAt.toISOString() : null, devisMixup, relanceTried: false };
 }
 function replyCountsOf(ps: Rs4Pipeline[]): Record<string, number> {
   const c: Record<string, number> = {};
@@ -520,10 +520,18 @@ function lastScanOf(ps: Rs4Pipeline[]): string | null {
 export async function getRs4Volet3Data(nowMs: number): Promise<Volet3Data> {
   const ps = await volet3Pipelines();
   const rows = ps.map((p) => toVolet3Row(p, nowMs));
+  // Curseur relance : dossiers tentés SANS SUCCÈS récemment (12 h) → sortis des
+  // éligibles (compteur + aperçu) pour que « envoyer N » enchaîne les suivants et
+  // ne reboucle pas sur les mêmes échecs. Marqueur = event rs4_relance_tried.
+  const triedCooldown = new Date(Date.now() - 12 * 60 * 60 * 1000);
+  const triedEv = await prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "rs4_relance_tried" }, createdAt: { gte: triedCooldown } }, select: { pipelineId: true, metadata: true } });
+  const triedMap = new Map<string, Set<number>>();
+  for (const e of triedEv) { const n = Number((e.metadata as { relanceNum?: number } | null)?.relanceNum); if (!n) continue; if (!triedMap.has(e.pipelineId)) triedMap.set(e.pipelineId, new Set()); triedMap.get(e.pipelineId)!.add(n); }
+  for (const r of rows) r.relanceTried = triedMap.get(r.pipelineId)?.has(r.relances + 1) ?? false;
   // Éligibles à la relance N = délai atteint, EXACTEMENT N-1 relances déjà faites
-  // (séquence 1→2→3), et pas de réponse réelle. Le compte = ce qui partira vraiment.
+  // (séquence 1→2→3), pas de réponse réelle, et pas déjà tenté récemment.
   const noRealReply = (k: string | null) => !k || k === "sans_reponse" || k === "non_scanne";
-  const stages = RELANCE_STAGES.map((s) => ({ num: s.num, day: s.day, eligibles: rows.filter((r) => r.joursDepuisEnvoi >= s.day && r.relances === s.num - 1 && noRealReply(r.replyKind)).length }));
+  const stages = RELANCE_STAGES.map((s) => ({ num: s.num, day: s.day, eligibles: rows.filter((r) => !r.relanceTried && r.joursDepuisEnvoi >= s.day && r.relances === s.num - 1 && noRealReply(r.replyKind)).length }));
   return { total: rows.length, rows, stages, replyCounts: replyCountsOf(ps), lastScanAt: lastScanOf(ps), commentedCount: rows.filter((r) => r.commentText).length, devisMixupCount: rows.filter((r) => r.devisMixup).length };
 }
 
@@ -868,10 +876,23 @@ export async function sendRelance(actorEmail: string, relanceNum: number, nowMs:
   const signature = await getSignatureHtml(actorEmail);
   const idx = await getCourtierIndex();
   const now = new Date();
+  // Curseur : dossiers déjà TENTÉS sans succès (hold/pas de mail/erreur) récemment
+  // → exclus du lot pour que « envoyer N » enchaîne les SUIVANTS et ne reboucle pas
+  // sur les mêmes échecs. Cooldown 12 h : ils redeviennent tentables après (ou une
+  // fois le mail/courtier corrigé). Marqueur = event rs4_relance_tried.
+  const triedCooldown = new Date(Date.now() - 12 * 60 * 60 * 1000);
+  const triedEv = await prisma.pipelineEvent.findMany({
+    where: { metadata: { path: ["auto"], equals: "rs4_relance_tried" }, createdAt: { gte: triedCooldown } },
+    select: { pipelineId: true, metadata: true },
+  });
+  const triedSet = new Set(triedEv.filter((e) => Number((e.metadata as { relanceNum?: number } | null)?.relanceNum) === relanceNum).map((e) => e.pipelineId));
+  const markTried = (pipelineId: string, reason: string) =>
+    prisma.pipelineEvent.create({ data: { pipelineId, type: "action_manuelle", description: `Relance ${relanceNum} non envoyée (${reason}) — passée, on tente les suivantes`, metadata: { auto: "rs4_relance_tried", relanceNum, reason }, createdBy: actorEmail } });
   // Éligibles : délai atteint, EXACTEMENT relanceNum-1 relances déjà faites
   // (séquence 1→2→3) et aucune réponse réelle connue.
   const isRealReply = (k: string | null) => !!k && k !== "sans_reponse" && k !== "non_scanne";
   const eligible = ps.filter((p) => {
+    if (triedSet.has(p.id)) return false; // déjà tenté récemment → on passe aux suivants
     // GARDE-FOU : on ne relance QUE si un VRAI envoi de notre part existe (draft_sent
     // relanceNum 0 + destinataire). Un dossier « lié » à une conv étrangère/ancienne
     // (pas d'envoi de nous) n'est jamais relancé.
@@ -896,7 +917,7 @@ export async function sendRelance(actorEmail: string, relanceNum: number, nowMs:
     const jours = Math.floor((nowMs - baseMs) / 86400000);
     const cid = base?.cid
       ?? p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop() ?? null;
-    if (!cid) { failed++; errors.push(`${c.nom} : pas de conversation d'origine — non relancé`); continue; }
+    if (!cid) { failed++; errors.push(`${c.nom} : pas de conversation d'origine — non relancé`); await markTried(p.id, "pas de conversation d'origine"); continue; }
 
     // GARDE-FOU FINAL (live) : si une réponse externe existe depuis notre demande,
     // on NE RELANCE PAS. On regarde le fil d'origine ET tous les autres fils
@@ -933,16 +954,16 @@ export async function sendRelance(actorEmail: string, relanceNum: number, nowMs:
 
     // Destinataire propre (mêmes garde-fous qu'à l'envoi initial).
     const plan = prepareSendMails(c.courtierActuel, c.contactCourtierEmail, idx, c.assureurActuel);
-    if (plan.hold) { failed++; errors.push(`${c.nom} : ${plan.reason} — non relancé`); continue; }
+    if (plan.hold) { failed++; errors.push(`${c.nom} : ${plan.reason} — non relancé`); await markTried(p.id, plan.reason); continue; }
     const toList = plan.mails;
-    if (DEVIS_ADDRESSES.some((a) => toList.join(", ").toLowerCase().includes(a))) { failed++; errors.push(`${c.nom} : destinataire = adresse de devis (AXA/Mila) — non relancé`); continue; }
+    if (DEVIS_ADDRESSES.some((a) => toList.join(", ").toLowerCase().includes(a))) { failed++; errors.push(`${c.nom} : destinataire = adresse de devis (AXA/Mila) — non relancé`); await markTried(p.id, "adresse de devis"); continue; }
 
     const vars = { adresse: c.adresse || c.nom, assureur: c.assureurActuel || "", numeroContrat: c.numeroContrat || "", nom: c.nom, jours: String(jours) };
     const subject = fillTemplate(tpl.subject, vars);
     const html = renderHtml(fillTemplate(tpl.body, vars), signature, `<span style="display:none;font-size:0;line-height:0;color:transparent">gufetto-ref:${p.id}:rs_relance</span>`);
     // Envoi EN RÉPONSE dans le fil d'origine (pas de nouvelle conversation).
     const r = await frontReply({ conversationId: cid, toList, subject, html, authorEmail: actorEmail });
-    if (!r.ok) { failed++; errors.push(`${c.nom} : ${r.error ?? "échec"}`); continue; }
+    if (!r.ok) { failed++; errors.push(`${c.nom} : ${r.error ?? "échec"}`); await markTried(p.id, "échec d'envoi Front"); continue; }
     await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Relance ${relanceNum} de la demande de RS envoyée (${toList.join(", ")})`, metadata: { rsType: "draft_sent", relanceNum, to: toList.join(", "), conversationId: cid, auto: "rs4_relance" }, createdBy: actorEmail } });
     sent++;
   }
