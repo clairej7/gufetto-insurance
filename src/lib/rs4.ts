@@ -440,7 +440,7 @@ export async function moveSentToVolet3(actorEmail: string): Promise<{ moved: num
 }
 
 // ─── Volet 3 : suivi + boucle de relances ────────────────────────────────────
-export type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null; commentText: string | null; commentBy: string | null; commentAt: string | null; devisMixup: boolean; relanceTried: boolean };
+export type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null; commentText: string | null; commentBy: string | null; commentAt: string | null; devisMixup: boolean; relanceTried: boolean; joursOuvresDepuisDerniereRelance: number };
 export type Volet3Data = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null; commentedCount: number; devisMixupCount: number };
 
 // Adresses de DEMANDE DE DEVIS (assureurs) — jamais un destinataire de relance RS.
@@ -482,6 +482,32 @@ function relanceCountOf(events: { metadata: unknown }[]): number {
 // (relanceNum absent, `to` vide) qui pointent vers une conversation étrangère ou
 // ancienne qu'on n'a pas envoyée — sinon on relancerait un mail qui n'est pas de nous.
 // Renvoie le plus récent (la « boucle de mail » courante), ou null si aucun vrai envoi.
+// Plancher entre deux relances : on ne re-relance pas avant N jours OUVRÉS depuis
+// le dernier envoi (initial ou relance), en plus du seuil J+X depuis l'envoi initial.
+export const MIN_OPEN_DAYS_BETWEEN_RELANCES = 4;
+
+// Date du DERNIER envoi sortant (draft_sent : envoi initial OU relance), pour
+// mesurer le délai « entre relances ».
+function latestSendDate(events: { metadata: unknown; createdAt: Date }[]): Date | null {
+  const sends = events.filter((e) => (e.metadata as { rsType?: string } | null)?.rsType === "draft_sent");
+  if (!sends.length) return null;
+  return sends.reduce((mx, e) => (e.createdAt.getTime() > mx.getTime() ? e.createdAt : mx), sends[0].createdAt);
+}
+
+// Nombre de jours OUVRÉS (lun-ven) écoulés depuis `from` jusqu'à maintenant.
+function openDaysSince(from: Date | null, nowMs: number): number {
+  if (!from) return Number.POSITIVE_INFINITY; // pas d'envoi connu → pas de blocage
+  const d = new Date(from); d.setHours(0, 0, 0, 0);
+  const end = new Date(nowMs); end.setHours(0, 0, 0, 0);
+  let count = 0;
+  while (d < end) {
+    d.setDate(d.getDate() + 1);
+    const wd = d.getDay();
+    if (wd !== 0 && wd !== 6) count++;
+  }
+  return count;
+}
+
 function latestInitialSend(events: { metadata: unknown; createdAt: Date }[]): { date: Date; cid: string | null } | null {
   const inits = events
     .filter((e) => { const m = e.metadata as { relanceNum?: number; to?: string } | null; return !!m && m.relanceNum === 0 && typeof m.to === "string" && m.to.trim().length > 0; })
@@ -499,12 +525,14 @@ function toVolet3Row(p: Rs4Pipeline, nowMs: number): Volet3Row {
   const base = latestInitialSend(p.events);
   const baseMs = Math.max(base ? base.date.getTime() : 0, p.rs4SentAt ? new Date(p.rs4SentAt).getTime() : 0);
   const jours = Math.floor((nowMs - baseMs) / 86400000);
+  // Jours ouvrés depuis le DERNIER envoi (initial/relance) → plancher inter-relance.
+  const joursOuvresDepuisDerniereRelance = openDaysSince(latestSendDate(p.events), nowMs);
   const recips = [p.copro.contactCourtierEmail ?? "", ...p.events.map((e) => (e.metadata as { to?: string } | null)?.to ?? "")].join(" ").toLowerCase();
   const devisMixup = DEVIS_ADDRESSES.some((a) => recips.includes(a));
   // Lien Front : conv de réponse si détectée, sinon la conv du dernier envoi initial
   // → chaque dossier a toujours un lien, même « sans réponse ».
   const sentCid = base?.cid ?? p.events.map((e) => (e.metadata as { conversationId?: string } | null)?.conversationId).filter(Boolean).pop() ?? null;
-  return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events), replyKind: p.rs4ReplyKind, replyAt: p.rs4ReplyAt ? p.rs4ReplyAt.toISOString() : null, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId ?? sentCid), commentText: p.rs4CommentText, commentBy: p.rs4CommentBy, commentAt: p.rs4CommentAt ? p.rs4CommentAt.toISOString() : null, devisMixup, relanceTried: false };
+  return { pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse, courtier: p.copro.courtierActuel, mail: p.copro.contactCourtierEmail, joursDepuisEnvoi: jours, relances: relanceCountOf(p.events), replyKind: p.rs4ReplyKind, replyAt: p.rs4ReplyAt ? p.rs4ReplyAt.toISOString() : null, replySnippet: p.rs4ReplySnippet, replyConvUrl: FRONT_CONV_URL(p.rs4ReplyConvId ?? sentCid), commentText: p.rs4CommentText, commentBy: p.rs4CommentBy, commentAt: p.rs4CommentAt ? p.rs4CommentAt.toISOString() : null, devisMixup, relanceTried: false, joursOuvresDepuisDerniereRelance };
 }
 function replyCountsOf(ps: Rs4Pipeline[]): Record<string, number> {
   const c: Record<string, number> = {};
@@ -531,7 +559,7 @@ export async function getRs4Volet3Data(nowMs: number): Promise<Volet3Data> {
   // Éligibles à la relance N = délai atteint, EXACTEMENT N-1 relances déjà faites
   // (séquence 1→2→3), pas de réponse réelle, et pas déjà tenté récemment.
   const noRealReply = (k: string | null) => !k || k === "sans_reponse" || k === "non_scanne";
-  const stages = RELANCE_STAGES.map((s) => ({ num: s.num, day: s.day, eligibles: rows.filter((r) => !r.relanceTried && r.joursDepuisEnvoi >= s.day && r.relances === s.num - 1 && noRealReply(r.replyKind)).length }));
+  const stages = RELANCE_STAGES.map((s) => ({ num: s.num, day: s.day, eligibles: rows.filter((r) => !r.relanceTried && r.joursDepuisEnvoi >= s.day && r.joursOuvresDepuisDerniereRelance >= MIN_OPEN_DAYS_BETWEEN_RELANCES && r.relances === s.num - 1 && noRealReply(r.replyKind)).length }));
   return { total: rows.length, rows, stages, replyCounts: replyCountsOf(ps), lastScanAt: lastScanOf(ps), commentedCount: rows.filter((r) => r.commentText).length, devisMixupCount: rows.filter((r) => r.devisMixup).length };
 }
 
@@ -918,6 +946,8 @@ export async function sendRelance(actorEmail: string, relanceNum: number, nowMs:
     // (nouvelle boucle de mail) ou de notre dernière réponse, jamais de la conv de base.
     const baseMs = Math.max(base.date.getTime(), new Date(p.rs4SentAt!).getTime());
     const jours = Math.floor((nowMs - baseMs) / 86400000);
+    // Plancher : au moins 4 jours OUVRÉS depuis le dernier envoi (initial/relance).
+    if (openDaysSince(latestSendDate(p.events), nowMs) < MIN_OPEN_DAYS_BETWEEN_RELANCES) return false;
     return jours >= stage.day && relanceCountOf(p.events) === relanceNum - 1 && !isRealReply(p.rs4ReplyKind);
   });
   const slice = typeof limit === "number" ? eligible.slice(0, limit) : eligible;
