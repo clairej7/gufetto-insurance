@@ -727,11 +727,29 @@ export async function scanReplies(offset: number, limit: number): Promise<{ tota
     // Conv de la réponse : pour un RS reçu, on pointe vers le fil qui porte le doc.
     const docItem = inboundAll.find((x) => realDoc(x.m.attachments ?? []));
     const replyCid = (kind === "rs_recu" && docItem ? docItem.cid : last?.cid) ?? sendCids[sendCids.length - 1] ?? scanCids[0];
+    const lastConvResults = last ? (resultsByCid[last.cid] ?? []) : [];
+    const lastMsg = [...lastConvResults].sort((a, b) => b.created_at - a.created_at)[0];
+    // RETOUR REÇU (hors RS reçu) sur un dossier DÉJÀ relancé → on ne monte JAMAIS en
+    // relance 2/3 : le compteur repart à zéro (relance repart à 1, ton amical) et le
+    // délai est recalculé depuis le dernier échange. (Choix Quentin : toute réponse
+    // reçue, même une transmission interne, remet en relance 1.)
+    if (kind !== "rs_recu" && relanceCountOf(p.events) > 0) {
+      const lastActMs = Math.max(last?.m.created_at ?? 0, lastMsg?.created_at ?? 0) * 1000;
+      await prisma.pipelineEvent.deleteMany({ where: { pipelineId: p.id, metadata: { path: ["auto"], equals: "rs4_relance" } } });
+      await prisma.insurancePipeline.update({ where: { id: p.id }, data: {
+        rs4ReplyScanAt: now, rs4ReplyKind: "sans_reponse", rs4ReplyMsgId: last?.m.id ?? null, rs4ReplyConvId: replyCid,
+        rs4ReplyAt: last ? new Date(last.m.created_at * 1000) : now,
+        rs4ReplySnippet: `↩︎ retour reçu (relance remise à 1) : ${snippet || "(voir conversation)"}`.slice(0, 240),
+        rs4SentAt: lastActMs ? new Date(lastActMs) : p.rs4SentAt,
+        ...(p.rs4RelanceAt ? { rs4RelanceAt: null } : {}),
+      } });
+      await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Retour reçu (${kind}) après relance → relance remise à 1 (ton amical), délai recalculé depuis le dernier échange`, metadata: { auto: "rs4_relance_reset_to_1", kind }, createdBy: "auto:scan" } });
+      counts["relance_reset"] = (counts["relance_reset"] ?? 0) + 1;
+      continue;
+    }
     // « On a répondu en DERNIER » : UNIQUEMENT si la dernière réponse est dans un fil
     // d'ENVOI (relance) et qu'on a répondu après → dossier relançable. Une réponse
     // arrivée hors-fil (conv récupérée) est une VRAIE réponse (jamais weRepliedLast).
-    const lastConvResults = last ? (resultsByCid[last.cid] ?? []) : [];
-    const lastMsg = [...lastConvResults].sort((a, b) => b.created_at - a.created_at)[0];
     const weRepliedLast = kind !== "rs_recu" && !!last && sendSet.has(last.cid) && !!lastMsg && !lastMsg.is_inbound && !lastMsg.error_type && lastMsg.created_at > last.m.created_at;
     if (weRepliedLast) {
       await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: "sans_reponse", rs4ReplyAt: null, rs4ReplySnippet: "En attente de leur réponse (dernier message : nous)", rs4ReplyMsgId: null, rs4ReplyConvId: last!.cid, rs4SentAt: new Date(lastMsg.created_at * 1000), ...(p.rs4RelanceAt ? { rs4RelanceAt: null } : {}) } });
