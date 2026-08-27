@@ -172,6 +172,7 @@ interface CoproDetailProps {
   userEmail: string;
   pipelineTasks?: PipelineTask[];
   excluded?: boolean;
+  exclusionKind?: "copro" | "gestionnaire" | null;
   documents?: { id: string; kind: string; part: number | null; fileName: string; storagePath: string; source: string }[];
 }
 
@@ -455,7 +456,7 @@ function RecoSentBlock({
   );
 }
 
-export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks = [], excluded = false, documents = [] }: CoproDetailProps) {
+export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks = [], excluded = false, exclusionKind = null, documents = [] }: CoproDetailProps) {
   const [isPending, startTransition] = useTransition();
   const [showAbandonDialog, setShowAbandonDialog] = useState(false);
   const [abandonRaison, setAbandonRaison] = useState("");
@@ -577,6 +578,28 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erreur lors de l'exclusion");
+    } finally {
+      setExcluding(false);
+    }
+  }
+
+  // Ré-inclure ce dossier : retire l'exclusion « copro » (par kind+value). Ne
+  // s'applique qu'aux exclusions au niveau copro — une exclusion héritée du
+  // gestionnaire se retire côté admin (elle impacte tous ses dossiers).
+  async function handleReintegrer() {
+    setExcluding(true);
+    try {
+      const res = await fetch("/api/exclusions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "copro", value: pipeline.coproId }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || `Erreur ${res.status}`);
+      toast.success("Dossier remis dans les automatisations.");
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur lors de la réintégration");
     } finally {
       setExcluding(false);
     }
@@ -1760,13 +1783,8 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
             </div>
           )}
 
-          {/* Exclure ce dossier de toute automatisation */}
-          {excluded ? (
-            <div className="w-full text-sm flex items-center gap-2 rounded-md border px-3 py-2" style={{ borderColor: "#F4C7C2", background: "#FDECEA", color: "#CA1E12" }}>
-              <Ban className="h-4 w-4 flex-shrink-0" />
-              <span className="font-medium">Exclu des automatisations</span>
-            </div>
-          ) : (
+          {/* Exclure / réintégrer ce dossier dans les automatisations */}
+          {!excluded ? (
             <Button
               variant="outline"
               onClick={handleExclure}
@@ -1776,6 +1794,23 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
             >
               {excluding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
               Exclure des automatisations
+            </Button>
+          ) : exclusionKind === "gestionnaire" ? (
+            // Exclu via son gestionnaire → non ré-incluable à la maille dossier.
+            <div className="w-full text-sm flex items-start gap-2 rounded-md border px-3 py-2" style={{ borderColor: "#F4C7C2", background: "#FDECEA", color: "#CA1E12" }}>
+              <Ban className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              <span>Exclu via son gestionnaire — à réactiver depuis l’admin (Automatisations › Dossiers exclus).</span>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={handleReintegrer}
+              disabled={excluding}
+              className="w-full text-sm justify-start gap-2"
+              style={{ borderColor: "#B7E1C4", color: "#13762C" }}
+            >
+              {excluding ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+              Remettre dans les automatisations
             </Button>
           )}
 

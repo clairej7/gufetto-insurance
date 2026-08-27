@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { CoproDetail } from "@/components/copro/copro-detail";
-import { getExcludedCoproIds } from "@/lib/exclusions";
+import { getCoproExclusion } from "@/lib/exclusions";
 import { getPipelineDocuments } from "@/lib/rs-docs";
 
 export default async function CoproDetailPage({
@@ -47,6 +47,8 @@ export default async function CoproDetailPage({
     orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
   });
 
+  const exclusion = await getCoproExclusion(pipeline.coproId, pipeline.copro.gestionnaireEmail);
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar user={user} />
@@ -56,7 +58,8 @@ export default async function CoproDetailPage({
           taskTemplates={taskTemplates}
           userEmail={user.email ?? ""}
           pipelineTasks={pipelineTasks}
-          excluded={(await getExcludedCoproIds()).includes(pipeline.coproId)}
+          excluded={!!exclusion}
+          exclusionKind={exclusion?.kind ?? null}
           documents={await getPipelineDocuments(id)}
         />
       </main>

@@ -25,6 +25,17 @@ export async function getExcludedCoproIds(): Promise<string[]> {
   return [...coproIds];
 }
 
+// Dit COMMENT une copro est exclue : par une exclusion « copro » (directement
+// ré-incluable depuis la fiche) ou via son « gestionnaire » (retrait = admin,
+// impacte tous ses dossiers). null = pas exclue. La copro prime sur le gestio.
+export async function getCoproExclusion(coproId: string, gestionnaireEmail: string | null): Promise<{ kind: "copro" | "gestionnaire"; value: string } | null> {
+  const excl = await prisma.automationExclusion.findMany({ select: { kind: true, value: true } });
+  if (excl.some((e) => e.kind === "copro" && e.value === coproId)) return { kind: "copro", value: coproId };
+  const g = gestionnaireEmail?.toLowerCase().trim();
+  if (g && excl.some((e) => e.kind === "gestionnaire" && e.value.toLowerCase() === g)) return { kind: "gestionnaire", value: g };
+  return null;
+}
+
 export type ExcludedCopro = { id: string; nom: string; adresse: string | null; gestionnaireNom: string | null };
 
 // Compteur + liste des copros concernées pour l'affichage admin.
