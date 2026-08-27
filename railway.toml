@@ -13,4 +13,4 @@ name = "crm-assurance-web"
 
 [[services]]
 name = "crm-assurance-cron"
-startCommand = "node -e \"const h=require('https');function call(path){const host=process.env.APP_URL?.replace('https://','');h.request({host,path,method:'POST',headers:{'authorization':'Bearer '+process.env.CRON_SECRET,'x-cron-secret':process.env.CRON_SECRET,'content-length':0}},r=>{console.log(new Date().toISOString(),path,r.statusCode)}).end()}function run(){call('/api/sync/omni');call('/api/cron/echeances')}run();setInterval(run,24*60*60*1000)\""
+startCommand = "node -e \"const h=require('https');function call(path){const host=process.env.APP_URL?.replace('https://','');h.request({host,path,method:'POST',headers:{'authorization':'Bearer '+process.env.CRON_SECRET,'x-cron-secret':process.env.CRON_SECRET,'content-length':0}},r=>{console.log(new Date().toISOString(),path,r.statusCode)}).end()}function run(){call('/api/sync/omni');call('/api/cron/echeances');call('/api/cron/autofill')}run();setInterval(run,24*60*60*1000)\""

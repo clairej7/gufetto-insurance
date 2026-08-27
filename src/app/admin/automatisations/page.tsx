@@ -296,6 +296,10 @@ export default async function AutomatisationsPage() {
                         (hors dossiers déjà clients / gagnés).
                       </p>
                       <AutofillBatchButton defaultTarget={Math.min(100, eligibleAuto1)} stock={eligibleAuto1} />
+                      <p style={{ fontSize: 12, color: "#8A8A99", margin: "12px 0 0", display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: 999, background: "#13762C" }} />
+                        Scan nocturne actif — le stock est drainé automatiquement chaque nuit (par lots, curseur persistant). Le bouton ci-dessus sert à traiter à la demande.
+                      </p>
                     </div>
                   </details>
                 )}
