@@ -33,6 +33,39 @@ function gestLabel(nom: string | null, email: string | null): string | null {
   return local.split(/[._-]/).map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
 }
 
+// Récupère les membres du CS (Matera, role=council) pour les dossiers de l'auto 7
+// où ils ne sont PAS encore renseignés, et les met en cache (comme l'auto 6 volet 2).
+export async function fetchCsMembersDevis7(): Promise<{ processed: number; withMembers: number; totalMembers: number; materaConfigure: boolean; error?: string }> {
+  if (!process.env.MATERA_API_TOKEN) return { processed: 0, withMembers: 0, totalMembers: 0, materaConfigure: false, error: "MATERA_API_TOKEN non configuré côté serveur." };
+  const { getCouncilMembers } = await import("@/lib/matera");
+  const excl = await getExcludedCoproIds();
+  const ps = await prisma.insurancePipeline.findMany({
+    where: {
+      coproId: { notIn: excl }, copro: { archivedAt: null },
+      events: { some: { metadata: { path: ["auto"], equals: "devis7_entered" } } },
+    },
+    select: { coproId: true, copro: { select: { buildingId: true, csMembersData: true } } },
+  });
+  // Seulement ceux SANS membres déjà renseignés (dédup par copro).
+  const seen = new Set<string>();
+  const todo = ps.filter((p) => {
+    if (seen.has(p.coproId)) return false; seen.add(p.coproId);
+    if (!p.copro.buildingId) return false;
+    const raw = p.copro.csMembersData;
+    if (!raw) return true;
+    try { const a = JSON.parse(raw); return !(Array.isArray(a) && a.some((m) => m?.email)); } catch { return true; }
+  });
+  let withMembers = 0, totalMembers = 0;
+  for (const p of todo) {
+    try {
+      const members = await getCouncilMembers(p.copro.buildingId!);
+      await prisma.copro.update({ where: { id: p.coproId }, data: { csMembersData: JSON.stringify(members), csMembersSyncedAt: new Date() } });
+      if (members.length) { withMembers++; totalMembers += members.length; }
+    } catch { /* immeuble sans accès / erreur ponctuelle → on continue */ }
+  }
+  return { processed: todo.length, withMembers, totalMembers, materaConfigure: true };
+}
+
 export async function getDevis7TableData(): Promise<Devis7Table> {
   const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({
