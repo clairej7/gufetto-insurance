@@ -94,21 +94,24 @@ function formatGaranties(g: GarantiesData | undefined): string {
   return parts.join(" | ") || "Non détaillées";
 }
 
-// Version CONTRAT ACTUEL : distingue explicitement les garanties au statut INCONNU
-// (null/non renseignées — souvent parce que le détail est dans un intercalaire non
-// capté, ex. contrats Groupama/ASSURIMO) pour empêcher le rédacteur d'affirmer une
-// absence non prouvée. Force les garanties obligatoires (cat. nat./tech.) à présentes.
+// Version CONTRAT ACTUEL. RÈGLE CLÉ : l'extraction du contrat actuel ne peut
+// JAMAIS PROUVER qu'une garantie est absente — un `false` signifie « non détectée
+// dans le PDF » (souvent le détail est dans un intercalaire non capté, ex.
+// Groupama/ASSURIMO), PAS « confirmée absente ». Donc on ne produit AUCUNE
+// catégorie « absente » côté contrat actuel : `false` ET `null` → statut INCONNU.
+// Seules les garanties explicitement présentes (`true`) + les obligatoires
+// (cat. nat./tech.) sont listées comme incluses. Empêche toute affirmation
+// « garantie absente / ajoutée » vs le contrat actuel (incident CS 2026-08-28).
 function formatGarantiesContrat(g: GarantiesData | undefined): string {
   if (!g) return "Statut des garanties INCONNU (détail non extrait) — NE JAMAIS affirmer qu'une garantie est absente ni « ajoutée » par le devis";
   const g2: Record<string, unknown> = { ...g };
   for (const k of MANDATORY_GARANTIES) g2[k] = true;
   const inclus = Object.entries(g2).filter(([, v]) => v === true).map(([k]) => GARANTIE_LABELS[k] ?? k);
-  const exclus = Object.entries(g2).filter(([, v]) => v === false).map(([k]) => GARANTIE_LABELS[k] ?? k);
-  const inconnues = Object.entries(g2).filter(([, v]) => v === null || v === undefined).map(([k]) => GARANTIE_LABELS[k] ?? k);
+  // false OU null/undefined → INCONNU (absence non prouvable par extraction).
+  const inconnues = Object.entries(g2).filter(([, v]) => v !== true).map(([k]) => GARANTIE_LABELS[k] ?? k);
   const parts: string[] = [];
   if (inclus.length) parts.push(`Incluses : ${inclus.join(", ")}`);
-  if (exclus.length) parts.push(`Absentes (confirmé) : ${exclus.join(", ")}`);
-  if (inconnues.length) parts.push(`Statut INCONNU — NE PAS présenter comme absentes : ${inconnues.join(", ")}`);
+  if (inconnues.length) parts.push(`Statut INCONNU (NON prouvées absentes — NE PAS présenter comme absentes ni comme un ajout du devis) : ${inconnues.join(", ")}`);
   return parts.join(" | ") || "Non détaillées";
 }
 
@@ -261,7 +264,7 @@ function buildPrompt(
     "=== RÈGLES ===",
     "- Ne remplis QUE le paragraphe « Notre recommandation » (le contenu entre <…>). Garde toutes les autres phrases identiques, mot pour mot, y compris les sauts de ligne entre paragraphes.",
     "- Paragraphe recommandation : 2 à 3 phrases maximum, concret et chiffré, uniquement à partir des données réelles ci-dessus.",
-    "- N'affirme JAMAIS qu'une garantie est absente du contrat actuel, « ajoutée », « élargie » ou « nouvelle », SAUF si elle est explicitement listée dans « Absentes (confirmé) » du contrat. Une garantie au « Statut INCONNU » ou non mentionnée ne doit PAS être présentée comme absente ni comme un ajout du devis.",
+    "- N'affirme JAMAIS qu'une garantie est absente du contrat actuel, « ajoutée », « élargie » ou « nouvelle » : le statut des garanties du contrat actuel n'est jamais prouvé (extraction partielle). Présente les garanties du DEVIS comme une couverture complète (« couvre notamment … »), SANS jamais dire ou sous-entendre qu'elles manqueraient au contrat actuel. Argumente les vraies différences prouvables : prix, franchises, plafonds/LCI chiffrés.",
     "- Les catastrophes naturelles et technologiques sont obligatoires (toujours présentes dans les deux contrats) : ne les cite JAMAIS comme un ajout, une nouveauté ou un avantage du devis.",
     `- LCI : ${lciDirective}`,
     "- Pour mettre un mot ou un chiffre en gras : **texte**. Mets le symbole € APRÈS les chiffres (« 3 979 € », jamais « €3 979 »).",
