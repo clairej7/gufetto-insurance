@@ -14,7 +14,7 @@ import { PrimeBatchButton } from "@/components/admin/prime-batch-button";
 import { PerimeBatchButton } from "@/components/admin/perime-batch-button";
 import { getPrimeCleanHistory } from "@/lib/prime";
 import { computePerimeState, getPerimeCleanHistory, ensurePerimeBaseline } from "@/lib/perime";
-import { GhcApplyButton } from "@/components/admin/ghc-apply-button";
+import { GhcImportControls } from "@/components/admin/ghc-import-controls";
 import { computeGhcState, getGhcImportHistory, getGhcReviews } from "@/lib/ghc";
 import { getCourtierRefState, getCourtierRefSample } from "@/lib/courtier-ref";
 import { CourtierAuditControls } from "@/components/admin/courtier-audit-controls";
@@ -136,15 +136,35 @@ export default async function AutomatisationsPage() {
   const ghcReviewLabel: Record<string, string> = { assureur_divergent: "Assureur divergent", courtier_divergent: "Courtier divergent", numero_divergent: "N° divergent", echeance_divergente: "Échéance divergente", prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
 
   // Volet 4 « Piscine » : read-model dérivé en direct des sources déjà chargées
-  // ci-dessus (aucune requête en plus) → synchro automatique avec les autos.
+  // ci-dessus (aucune requête en plus, hormis la résolution des liens dossier GHC)
+  // → synchro automatique avec les autos.
+  const ghcBuildingIds = [...new Set(ghcReviews.map((rv) => rv.buildingId))];
+  const ghcPipelines = ghcBuildingIds.length
+    ? await prisma.insurancePipeline.findMany({ where: { copro: { buildingId: { in: ghcBuildingIds } } }, select: { id: true, copro: { select: { buildingId: true } } } })
+    : [];
+  const ghcPipelineByBuilding: Record<string, string> = {};
+  for (const p of ghcPipelines) { const b = p.copro?.buildingId; if (b && !ghcPipelineByBuilding[b]) ghcPipelineByBuilding[b] = p.id; }
   const piscineState = buildPiscine({
     odrFlagged: odrBuckets.flatMap((b) => b.flagged.map((d) => ({ pipelineId: d.pipelineId, nom: d.nom, adresse: d.adresse, numeroContrat: d.numeroContrat }))),
     rs4Holds: rs4Volet2.rows.map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, hold: r.hold, holdReason: r.holdReason })),
     rs4Relances: rs4Volet3.rows.map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, relancePaused: r.relancePaused, devisMixup: r.devisMixup, replyConvUrl: r.replyConvUrl })),
     csReplies: devis7Volet2.rows.map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, replyKind: r.replyKind, proposedStatut: r.proposedStatut, snippet: r.snippet, convUrl: r.convUrl })),
-    ghcReviews: ghcReviews.map((rv) => ({ id: rv.id, coproNom: rv.coproNom, kind: rv.kind, message: rv.message })),
+    ghcReviews: ghcReviews.map((rv) => ({ id: rv.id, buildingId: rv.buildingId, coproNom: rv.coproNom, kind: rv.kind, message: rv.message })),
     ghcReviewLabel,
+    ghcPipelineByBuilding,
   });
+
+  // Lien de téléchargement d'une version GHC en historique :
+  //  - upload self-service (fileName = chemin de stockage) → route de download ;
+  //  - versions historiques v1/v2 → fichiers statiques committés dans /public/ghc.
+  const GHC_STATIC_FILES: Record<string, string> = {
+    v1: "/ghc/GHC-cleaning-contrats-assurance-v1.xlsx",
+    v2: "/ghc/GHC-cleaning-contrats-assurance-v2.xlsx",
+  };
+  const ghcHistoryHref = (h: { id: string; label: string; fileName: string | null }): string | null => {
+    if (h.fileName && h.fileName.startsWith("ghc-imports/")) return `/api/ghc/download?run=${h.id}`;
+    return GHC_STATIC_FILES[h.label?.toLowerCase()] ?? null;
+  };
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
 
   const automations: {
@@ -225,7 +245,7 @@ export default async function AutomatisationsPage() {
     {
       n: 8,
       nom: "Agent de nettoyage de la data & remontée des cas étranges",
-      etat: "encours",
+      etat: "deploye",
       description: [
         "Agent de nettoyage de la donnée — un seul des composants de l'automatisation finale. Trois volets sont en ligne ci-dessous : « clean prime », « clean avis d'échéance (données périmées) » et « correction GetHumanCall ».",
         "Volet 1 — « clean prime » : beaucoup de dossiers n'ont pas de prime renseignée, ce qui fausse les montants (historique ODR, dashboards Tracking). Sur chaque fiche copro sans prime : mention rouge « aucune prime renseignée » + bouton « Vérifier la prime » (cherche dans Front un avis d'échéance / relance impayé). Trouvé clairement → prime écrite ; incertain → prime écrite + « à vérifier » ; rien → inchangé. Aucun changement d'étape.",
@@ -556,10 +576,10 @@ export default async function AutomatisationsPage() {
                         nouvel import (ligne d&apos;historique ci-dessous).
                       </p>
                       <p style={{ fontSize: 12.5, color: "#656576", margin: "0 0 12px" }}>
-                        Source : <a href="/ghc/GHC-cleaning-contrats-assurance-v2.xlsx" download style={{ color: "#4E49FC", fontWeight: 600 }}>excel GHC v2 ({ghcState.sourceRows} contrats)</a>
+                        Source courante : <strong>{ghcState.sourceRows}</strong> contrats en base
                         {" · "}<strong>{ghcState.dossiersAvecGhc}</strong> dossier{ghcState.dossiersAvecGhc > 1 ? "s" : ""} portent une donnée GHC.
                       </p>
-                      <GhcApplyButton sourceRows={ghcState.sourceRows} />
+                      <GhcImportControls sourceRows={ghcState.sourceRows} currentVersionHref="/ghc/GHC-cleaning-contrats-assurance-v2.xlsx" />
 
                       {/* Historique des imports GHC */}
                       {ghcHistory.length > 0 && (
@@ -577,7 +597,13 @@ export default async function AutomatisationsPage() {
                               <tbody>
                                 {ghcHistory.map((h) => (
                                   <tr key={h.id} style={{ borderTop: "1px solid #F1F1F4" }}>
-                                    <td style={{ padding: "6px 10px", color: "#26262C", fontWeight: 600 }}>{h.label}</td>
+                                    <td style={{ padding: "6px 10px", color: "#26262C", fontWeight: 600 }}>
+                                      {ghcHistoryHref(h) ? (
+                                        <a href={ghcHistoryHref(h)!} download title="Télécharger cet excel" style={{ color: "#4E49FC", textDecoration: "none" }}>{h.label} ↓</a>
+                                      ) : (
+                                        h.label
+                                      )}
+                                    </td>
                                     <td style={{ padding: "6px 10px", color: "#4E4E58", whiteSpace: "nowrap" }}>{new Date(h.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
                                     <td style={{ padding: "6px 10px", color: "#26262C", textAlign: "right" }}>{h.dossiersClean}</td>
                                     <td style={{ padding: "6px 10px", textAlign: "right" }}>{h.assureursMaj}</td>
@@ -648,7 +674,7 @@ export default async function AutomatisationsPage() {
                         <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 5</span>
                         <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Agent de détection d&apos;anomalies</span>
                       </div>
-                      <p style={{ fontSize: 13, color: "#8A8A99", margin: 0, fontStyle: "italic" }}>Contenu à venir.</p>
+                      <p style={{ fontSize: 13, color: "#8A8A99", margin: 0, fontStyle: "italic" }}>À venir au fur et à mesure des automatisations finales.</p>
                     </div>
                   </details>
                 )}

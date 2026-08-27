@@ -10,9 +10,12 @@ const TONE: Record<PiscineTone, { bg: string; fg: string }> = {
   info: { bg: "#EEF0FF", fg: "#4E49FC" },
 };
 
+const VISIBLE = 5;
+
 export function PiscinePanel({ state }: { state: PiscineState }) {
   const [auto, setAuto] = useState<number | null>(null);
   const [q, setQ] = useState("");
+  const [showAll, setShowAll] = useState(false);
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -81,7 +84,7 @@ export function PiscinePanel({ state }: { state: PiscineState }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((c) => (
+            {(showAll ? rows : rows.slice(0, VISIBLE)).map((c) => (
               <tr key={c.id} style={{ borderTop: "1px solid #F1F1F4" }}>
                 <td style={{ padding: "6px 12px", whiteSpace: "nowrap", color: "#8A8A99", fontWeight: 600 }}>{c.autoLabel.replace(/ —.*$/, "")}</td>
                 <td style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
@@ -111,6 +114,15 @@ export function PiscinePanel({ state }: { state: PiscineState }) {
           </tbody>
         </table>
       </div>
+
+      {rows.length > VISIBLE && (
+        <button
+          onClick={() => setShowAll((v) => !v)}
+          style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}
+        >
+          {showAll ? "▴ Réduire" : `▾ Voir les ${rows.length - VISIBLE} autres cas`}
+        </button>
+      )}
     </div>
   );
 }

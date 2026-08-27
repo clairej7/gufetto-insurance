@@ -9,6 +9,7 @@
 //  - provenance par champ (ghcFields) → check vert « GHC » sur la fiche ;
 //  - rapport de divergences (prime > 15 %) + cas particuliers (ODR/RS incohérents).
 
+import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 import { matchPartner } from "@/lib/front-insurance";
 import { isEcheancePerimee } from "@/lib/perime";
@@ -255,4 +256,129 @@ export async function computeGhcState(): Promise<{ sourceRows: number; dossiersA
     prisma.copro.count({ where: { archivedAt: null, ghcFields: { not: null } } }),
   ]);
   return { sourceRows, dossiersAvecGhc };
+}
+
+// --- Import d'un nouvel excel GHC en self-service (bouton « Importer ») ----------
+//
+// ⚠️ Même mapping de colonnes que scripts/import-ghc.ts (matcher les EN-TÊTES par nom
+// EXACT). L'assureur vient de « Nom fournisseur » (données NETTOYÉES), JAMAIS de
+// « Nom fournisseur produit » (colonne brute Omni — bug v2). Cf. le script pour le
+// détail. On parse ici directement le .xlsx avec exceljs (dispo en Node).
+
+export type GhcParsedRow = {
+  buildingId: string; buildingName: string | null; assureur: string | null; courtier: string | null;
+  numeroContrat: string | null; montant: number | null; echeance: Date | null; aVerifier: boolean;
+};
+
+// Valeurs poubelle repérées dans la colonne assureur GHC → jamais écrites (null).
+const GHC_GARBAGE_ASSUREUR = /\bsuez\b|eau\s*france|ne\s*plus\s*utiliser/i;
+const ghcClean = (v: string | null | undefined): string | null => { const s = (v ?? "").trim(); return !s || s === "-" ? null : s; };
+const ghcCleanAssureur = (v: string | null | undefined): string | null => { const s = ghcClean(v); return s && GHC_GARBAGE_ASSUREUR.test(s) ? null : s; };
+
+// Extraction robuste d'une cellule exceljs (primitive, formule {result}, richText, lien).
+function cellText(v: ExcelJS.CellValue): string | null {
+  if (v == null) return null;
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (v instanceof Date) return v.toISOString();
+  const o = v as { result?: unknown; text?: unknown; richText?: { text?: string }[]; hyperlink?: string };
+  if (o.richText) return o.richText.map((t) => t.text ?? "").join("");
+  if (o.text != null) return String(o.text);
+  if (o.result != null) return String(o.result);
+  return null;
+}
+function cellNum(v: ExcelJS.CellValue): number | null {
+  if (typeof v === "number") return v;
+  const t = cellText(v);
+  if (!t) return null;
+  const n = Number(t.replace(/[^\d.,-]/g, "").replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+function cellDate(v: ExcelJS.CellValue): Date | null {
+  if (v instanceof Date) return v;
+  const t = cellText(v);
+  if (!t) return null;
+  const d = new Date(t);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+const truthy = (v: ExcelJS.CellValue): boolean => {
+  if (v === true) return true;
+  const t = (cellText(v) ?? "").trim().toLowerCase();
+  return ["oui", "x", "vrai", "true", "1", "o", "y", "yes"].includes(t);
+};
+
+// En-têtes attendus (nom exact, comparaison trim + insensible à la casse).
+const GHC_HEADERS = {
+  buildingId: "building id", assureur: "nom fournisseur", courtier: "nom courtier",
+  numeroContrat: "n° contrat", montant: "montant", echeance: "date d'échéance 2",
+  aVerifier: "a vérifier", buildingName: "building name",
+} as const;
+
+// Parse un buffer .xlsx GHC → lignes typées (dédupliquées par buildingId). Throw si les
+// colonnes clés (Building ID, Nom fournisseur) sont introuvables → aucun écrit en base.
+export async function parseGhcXlsx(buffer: Buffer): Promise<GhcParsedRow[]> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+  const ws = wb.worksheets[0];
+  if (!ws) throw new Error("Fichier .xlsx vide (aucune feuille).");
+
+  // Repère la ligne d'en-têtes (celle qui contient « Building ID ») dans les 10 premières.
+  let headerRow = -1;
+  const colOf: Record<string, number> = {};
+  for (let ri = 1; ri <= Math.min(10, ws.rowCount); ri++) {
+    const row = ws.getRow(ri);
+    const map: Record<string, number> = {};
+    row.eachCell((cell, col) => { const t = (cellText(cell.value) ?? "").trim().toLowerCase(); if (t) map[t] = col; });
+    if (map[GHC_HEADERS.buildingId] != null) { headerRow = ri; Object.assign(colOf, map); break; }
+  }
+  if (headerRow < 0 || colOf[GHC_HEADERS.buildingId] == null) throw new Error("Colonne « Building ID » introuvable — vérifie que c'est bien l'excel GHC.");
+  if (colOf[GHC_HEADERS.assureur] == null) throw new Error("Colonne « Nom fournisseur » introuvable — mauvais fichier ?");
+
+  const c = colOf;
+  const seen = new Set<string>();
+  const out: GhcParsedRow[] = [];
+  for (let ri = headerRow + 1; ri <= ws.rowCount; ri++) {
+    const row = ws.getRow(ri);
+    const id = (cellText(row.getCell(c[GHC_HEADERS.buildingId]).value) ?? "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      buildingId: id,
+      buildingName: c[GHC_HEADERS.buildingName] ? ghcClean(cellText(row.getCell(c[GHC_HEADERS.buildingName]).value)) : null,
+      assureur: ghcCleanAssureur(cellText(row.getCell(c[GHC_HEADERS.assureur]).value)),
+      courtier: c[GHC_HEADERS.courtier] ? ghcClean(cellText(row.getCell(c[GHC_HEADERS.courtier]).value)) : null,
+      numeroContrat: c[GHC_HEADERS.numeroContrat] ? ghcClean(cellText(row.getCell(c[GHC_HEADERS.numeroContrat]).value)) : null,
+      montant: c[GHC_HEADERS.montant] ? cellNum(row.getCell(c[GHC_HEADERS.montant]).value) : null,
+      echeance: c[GHC_HEADERS.echeance] ? cellDate(row.getCell(c[GHC_HEADERS.echeance]).value) : null,
+      aVerifier: c[GHC_HEADERS.aVerifier] ? truthy(row.getCell(c[GHC_HEADERS.aVerifier]).value) : false,
+    });
+  }
+  return out;
+}
+
+// Prochaine étiquette de version : max des « vN » existants + 1 (défaut v1).
+async function nextGhcVersionLabel(): Promise<string> {
+  const runs = await prisma.ghcImportRun.findMany({ select: { label: true } });
+  let max = 0;
+  for (const r of runs) { const m = /v(\d+)/i.exec(r.label ?? ""); if (m) max = Math.max(max, Number(m[1])); }
+  return `v${max + 1}`;
+}
+
+// Remplace intégralement GhcContract par les lignes parsées + enregistre le run
+// d'import (fileName = chemin de stockage Supabase → lien de téléchargement en historique).
+// GARDE-FOU : refuse un fichier qui viderait la base (< 100 lignes) — protège les ~2000
+// contrats existants contre un mauvais fichier.
+export async function replaceGhcContracts(rows: GhcParsedRow[], storagePath: string, actorEmail: string): Promise<{ count: number; label: string; runId: string }> {
+  if (rows.length < 100) throw new Error(`Seulement ${rows.length} lignes valides — fichier suspect, import annulé (aucune donnée remplacée).`);
+  const label = await nextGhcVersionLabel();
+  const data = rows.map((r) => ({
+    buildingId: r.buildingId, buildingName: r.buildingName, assureur: r.assureur, courtier: r.courtier,
+    numeroContrat: r.numeroContrat, montant: r.montant, echeance: r.echeance, aVerifier: r.aVerifier,
+  }));
+  const [, , run] = await prisma.$transaction([
+    prisma.ghcContract.deleteMany({}),
+    prisma.ghcContract.createMany({ data }),
+    prisma.ghcImportRun.create({ data: { label, fileName: storagePath, createdBy: actorEmail } }),
+  ]);
+  return { count: data.length, label, runId: run.id };
 }

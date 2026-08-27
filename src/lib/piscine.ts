@@ -54,7 +54,7 @@ type CsRow = {
   snippet: string | null;
   convUrl: string | null;
 };
-type GhcReview = { id: string; coproNom: string; kind: string; message: string };
+type GhcReview = { id: string; buildingId: string; coproNom: string; kind: string; message: string };
 
 export type PiscineInput = {
   odrFlagged: OdrFlagged[];
@@ -63,6 +63,8 @@ export type PiscineInput = {
   csReplies: CsRow[];
   ghcReviews: GhcReview[];
   ghcReviewLabel: Record<string, string>;
+  // Résout le building_id d'une revue GHC vers un pipelineId (pour lier le nom au dossier).
+  ghcPipelineByBuilding: Record<string, string>;
 };
 
 const pipelineUrl = (id: string) => `/pipeline/${id}`;
@@ -158,6 +160,7 @@ export function buildPiscine(input: PiscineInput): PiscineState {
 
   // 5) Auto 8 (V3) — divergences & cas particuliers GHC à contrôler.
   for (const rv of input.ghcReviews) {
+    const pid = input.ghcPipelineByBuilding[rv.buildingId];
     cases.push({
       id: `8:ghc:${rv.id}`,
       auto: 8,
@@ -166,7 +169,7 @@ export function buildPiscine(input: PiscineInput): PiscineState {
       kindLabel: input.ghcReviewLabel[rv.kind] ?? rv.kind,
       tone: "warn",
       coproNom: rv.coproNom,
-      pipelineUrl: null, // le rapport GHC porte le building_id, pas le pipelineId
+      pipelineUrl: pid ? pipelineUrl(pid) : null,
       frontUrl: null,
       detail: rv.message,
     });
