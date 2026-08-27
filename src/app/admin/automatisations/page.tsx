@@ -34,6 +34,7 @@ import { ExclusionsPanel } from "@/components/admin/exclusions-panel";
 import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 import { buildPiscine } from "@/lib/piscine";
 import { PiscinePanel } from "@/components/admin/piscine-panel";
+import { AutomationModeTabs } from "@/components/admin/automation-mode-tabs";
 
 type Etat = "deploye" | "encours" | "attente";
 const ETATS: Record<Etat, { label: string; bg: string; fg: string; dot: string }> = {
@@ -269,6 +270,8 @@ export default async function AutomatisationsPage() {
           </p>
         </div>
 
+        <AutomationModeTabs semiAuto={
+        <>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {automations.map((a) => {
             const etat = ETATS[a.etat];
@@ -683,6 +686,8 @@ export default async function AutomatisationsPage() {
           })}
         </div>
         <ExclusionsPanel state={{ ...exclusionState, rows: exclusionState.rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })) }} />
+        </>
+        } />
       </main>
     </div>
   );
