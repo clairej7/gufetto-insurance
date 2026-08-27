@@ -127,6 +127,9 @@ export function Devis7Controls({ table, volet2, csHistory }: { table: Table; vol
         <button onClick={fetchCsMembers} disabled={fetchingCs} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 8, padding: "7px 12px", cursor: fetchingCs ? "default" : "pointer" }}>
           {fetchingCs ? <Loader2 size={14} className="animate-spin" /> : <Users size={14} />} Retrouver les membres du CS
         </button>
+        <span title="La récupération Matera nécessite une requête manuelle (pas de token côté app pour l'instant)" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700, color: "#B4690E", background: "#FDF0D5", border: "1px solid #F3D9A6", borderRadius: 999, padding: "4px 10px", whiteSpace: "nowrap" }}>
+          <AlertTriangle size={13} /> Requête manuelle à faire
+        </span>
         <span style={{ fontSize: 11.5, color: "#A2A1AF", marginLeft: "auto" }}>{rows.length}/{table.total} dossier{table.total > 1 ? "s" : ""}</span>
       </div>
 
