@@ -17,12 +17,21 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
-// DELETE /api/exclusions { id } — retire une exclusion.
+// DELETE /api/exclusions { id } OU { kind, value } — retire une exclusion.
+// La variante kind+value sert au bouton « Remettre dans les automatisations »
+// des fiches (on ne connaît que le coproId, pas l'id de la ligne d'exclusion).
 export async function DELETE(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.isAdmin) return NextResponse.json({ error: "Réservé aux admins" }, { status: 403 });
-  const { id } = await req.json().catch(() => ({}));
-  if (!id) return NextResponse.json({ error: "id requis" }, { status: 400 });
-  await prisma.automationExclusion.delete({ where: { id } });
-  return NextResponse.json({ ok: true });
+  const { id, kind, value } = await req.json().catch(() => ({}));
+  if (id) {
+    await prisma.automationExclusion.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  }
+  if (["gestionnaire", "copro"].includes(kind) && value?.trim()) {
+    const v = kind === "gestionnaire" ? String(value).toLowerCase().trim() : String(value).trim();
+    await prisma.automationExclusion.deleteMany({ where: { kind, value: v } });
+    return NextResponse.json({ ok: true });
+  }
+  return NextResponse.json({ error: "id, ou (kind + value), requis" }, { status: 400 });
 }
