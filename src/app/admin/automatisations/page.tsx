@@ -186,7 +186,7 @@ export default async function AutomatisationsPage() {
     {
       n: 6,
       nom: "Comparer les devis et prévenir le gestionnaire",
-      etat: "encours",
+      etat: "deploye",
       description: [
         "À l'étape « Comparaison des devis », la base de comparaison retient désormais la DERNIÈRE PRIME RÉELLEMENT PAYÉE (récupérée dans le mail de demande de devis envoyé à l'assureur, via le marqueur gufetto-ref) plutôt que la prime du contrat, souvent périmée. Sans ça, les devis paraissaient plus chers que la réalité.",
         "Sur chaque dossier, le bouton « Vérifier le montant » récupère cette prime, la propage partout (carte « Contrat actuel », comparatif détaillé) et régénère automatiquement la recommandation au Conseil Syndical — aucune analyse ne peut plus partir avec l'ancien chiffre erroné. Une règle de cohérence protège les cas étranges (écart anormal contrat/prime → vérification manuelle).",
