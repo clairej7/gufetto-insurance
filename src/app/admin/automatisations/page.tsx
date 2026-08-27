@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { AutofillBatchButton } from "@/components/admin/autofill-batch-button";
+import { IdentifyScanControls } from "@/components/admin/identify-scan-controls";
+import { countIdentifyDossiers, getIdentifyHistory } from "@/lib/autofill-identify";
 import { VerifyPrimesBatchButton } from "@/components/admin/verify-primes-batch-button";
 import { OdrControls } from "@/components/admin/odr-controls";
 import { PrimeBatchButton } from "@/components/admin/prime-batch-button";
@@ -55,6 +57,10 @@ export default async function AutomatisationsPage() {
       },
     },
   });
+
+  // Auto 1 Volet 2 « Identification des dossiers » : périmètre exact du scan + historique.
+  const identifyTotal = await countIdentifyDossiers();
+  const identifyHistory = (await getIdentifyHistory()).map((h) => ({ ...h, date: h.date.toISOString() }));
 
   // Dossiers en « Comparaison des devis » (devis_recus) dont on peut vérifier la prime.
   const eligibleAuto6 = await prisma.insurancePipeline.count({
@@ -291,15 +297,24 @@ export default async function AutomatisationsPage() {
                       Contrôles admin
                     </summary>
                     <div style={{ marginTop: 10 }}>
+                      {/* VOLET 1 — remplissage des informations manquantes (autofill Front) */}
+                      <div style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 1</span>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Remplissage des informations manquantes</span>
+                      </div>
                       <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
                         {eligibleAuto1} dossier{eligibleAuto1 > 1 ? "s" : ""} en « Identification » encore à pré-remplir
-                        (hors dossiers déjà clients / gagnés).
+                        (hors dossiers déjà clients / gagnés). Un dossier tenté n'est pas repassé tant que tout
+                        l'échantillon n'a pas été parcouru (curseur persistant).
                       </p>
-                      <AutofillBatchButton defaultTarget={Math.min(100, eligibleAuto1)} stock={eligibleAuto1} />
-                      <p style={{ fontSize: 12, color: "#8A8A99", margin: "12px 0 0", display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: 999, background: "#13762C" }} />
-                        Scan nocturne actif — le stock est drainé automatiquement chaque nuit (par lots, curseur persistant). Le bouton ci-dessus sert à traiter à la demande.
-                      </p>
+                      <AutofillBatchButton defaultTarget={Math.min(5, eligibleAuto1) || 5} stock={eligibleAuto1} />
+
+                      {/* VOLET 2 — identification des dossiers (routage validé à la main) */}
+                      <div style={{ marginTop: 26, paddingTop: 18, borderTop: "1px dashed #E8E8EC", marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 2</span>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Identification des dossiers</span>
+                      </div>
+                      <IdentifyScanControls total={identifyTotal} history={identifyHistory} />
                     </div>
                   </details>
                 )}
