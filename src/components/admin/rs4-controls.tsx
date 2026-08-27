@@ -17,7 +17,7 @@ type Row = { pipelineId: string; nom: string; assureur: string | null; numeroCon
 type Sample = { total: number; complete: number; incomplete: number; completeRows: Row[]; incompleteRows: Row[] };
 type Volet2Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; courtier: string | null; mail: string | null; sendMail: string | null; hold: boolean; holdReason: string; gestionnaire: string | null };
 type Volet2 = { total: number; nouveaux: number; dejaEnvoyes: number; sent: number; rows: Volet2Row[] };
-type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null; commentText: string | null; commentBy: string | null; commentAt: string | null; devisMixup: boolean; relanceTried: boolean; joursOuvresDepuisDerniereRelance: number };
+type Volet3Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; relances: number; replyKind: string | null; replyAt: string | null; replySnippet: string | null; replyConvUrl: string | null; commentText: string | null; commentBy: string | null; commentAt: string | null; devisMixup: boolean; relanceTried: boolean; joursOuvresDepuisDerniereRelance: number; relancePaused: boolean };
 type Volet3 = { total: number; rows: Volet3Row[]; stages: { num: number; day: number; eligibles: number }[]; replyCounts: Record<string, number>; lastScanAt: string | null; commentedCount: number; devisMixupCount: number };
 type Detector = { total: number; scanned: number; nonScanne: number; sansReponse: number; replyCounts: Record<string, number>; lastScanAt: string | null; rows: Volet3Row[] };
 type Volet4Row = { pipelineId: string; nom: string; adresse: string | null; courtier: string | null; mail: string | null; joursDepuisEnvoi: number; replyKind: string | null; replySnippet: string | null; replyConvUrl: string | null };
@@ -174,6 +174,8 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
   const [showMixups, setShowMixups] = useState(true);
   const guardsOk = check1Done && check2Done && check3Done;
   const [selectedStage, setSelectedStage] = useState<number | null>(null);
+  const [relanceSearch, setRelanceSearch] = useState("");
+  const [pausingId, setPausingId] = useState<string | null>(null);
 
   async function checkAbsenceReponse() {
     await scanReplies();
@@ -283,6 +285,17 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
       toast.success(`${data.moved} dossier(s) basculé(s) au suivi (volet 3).`);
       router.refresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setSending(false); }
+  }
+
+  async function toggleRelancePause(pipelineId: string, paused: boolean) {
+    setPausingId(pipelineId);
+    try {
+      const res = await fetch("/api/rs4/relance-pause", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId, paused }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || "Erreur");
+      toast.success(paused ? "Dossier exclu de la boucle (mis de côté)" : "Dossier remis dans la boucle");
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setPausingId(null); }
   }
 
   async function sendRelance(num: number, eligibles: number, limit?: number) {
@@ -803,43 +816,58 @@ export function Rs4Controls({ volet1Count, volet2, detector, volet3, volet4, sen
               const stage = volet3.stages.find((s) => s.num === selectedStage);
               if (!stage) return null;
               const isNoReal = (k: string | null) => !k || k === "sans_reponse" || k === "non_scanne";
-              const eligRows = volet3.rows.filter((r) => !r.relanceTried && r.joursDepuisEnvoi >= stage.day && r.joursOuvresDepuisDerniereRelance >= 4 && r.relances === selectedStage - 1 && isNoReal(r.replyKind));
+              const baseRows = volet3.rows.filter((r) => !r.relanceTried && r.joursDepuisEnvoi >= stage.day && r.joursOuvresDepuisDerniereRelance >= 4 && r.relances === selectedStage - 1 && isNoReal(r.replyKind));
+              const q = relanceSearch.trim().toLowerCase();
+              const eligRows = q ? baseRows.filter((r) => `${r.adresse ?? ""} ${r.nom} ${r.courtier ?? ""} ${r.mail ?? ""}`.toLowerCase().includes(q)) : baseRows;
+              const sendable = baseRows.filter((r) => !r.relancePaused).length; // les mis de côté ne partent pas
               const ton = selectedStage === 1 ? "amical" : selectedStage === 2 ? "pressant" : "juridique";
               return (
                 <div style={{ marginTop: 12, border: "1px solid #D9D9F5", background: "#F7F7FF", borderRadius: 10, padding: 14 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C" }}>Relance {selectedStage} — {eligRows.length} dossier(s) éligible(s) · J+{stage.day} · ton {ton}</div>
-                  <div style={{ fontSize: 11.5, color: "#656576", margin: "4px 0 10px" }}>Envoi <strong>en réponse au fil d&apos;origine</strong>. Re-vérification anti-réponse juste avant chaque envoi : un dossier qui a répondu est sauté et renvoyé au détecteur.</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C" }}>Relance {selectedStage} — {sendable} dossier(s) à envoyer · J+{stage.day} · ton {ton}</div>
+                  <div style={{ fontSize: 11.5, color: "#656576", margin: "4px 0 10px" }}>Envoi <strong>en réponse au fil d&apos;origine</strong>. Re-vérification anti-réponse juste avant chaque envoi : un dossier qui a répondu est sauté et renvoyé au détecteur. Les dossiers « exclus de la boucle » ne partent pas.</div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-                    <Button onClick={() => sendRelance(selectedStage, eligRows.length)} disabled={relancing !== null || eligRows.length === 0} size="sm">
-                      {relancing === selectedStage ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />} Envoyer les {eligRows.length} relances
+                    <Button onClick={() => sendRelance(selectedStage, sendable)} disabled={relancing !== null || sendable === 0} size="sm">
+                      {relancing === selectedStage ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />} Envoyer les {sendable} relances
                     </Button>
-                    <Button onClick={() => sendRelance(selectedStage, eligRows.length, 5)} disabled={relancing !== null || eligRows.length === 0} variant="outline" size="sm">
+                    <Button onClick={() => sendRelance(selectedStage, sendable, 5)} disabled={relancing !== null || sendable === 0} variant="outline" size="sm">
                       Envoyer 5 relances
                     </Button>
-                    <Button onClick={() => sendRelance(selectedStage, eligRows.length, 50)} disabled={relancing !== null || eligRows.length === 0} variant="outline" size="sm">
+                    <Button onClick={() => sendRelance(selectedStage, sendable, 50)} disabled={relancing !== null || sendable === 0} variant="outline" size="sm">
                       Envoyer 50 relances
                     </Button>
                     <button onClick={() => setSelectedStage(null)} style={{ fontSize: 12, fontWeight: 600, color: "#656576", background: "none", border: "none", cursor: "pointer" }}>fermer</button>
+                  </div>
+                  <div style={{ position: "relative", marginBottom: 8, maxWidth: 380 }}>
+                    <Search size={14} style={{ position: "absolute", left: 10, top: 9, color: "#A2A1AF" }} />
+                    <input value={relanceSearch} onChange={(e) => setRelanceSearch(e.target.value)} placeholder="Rechercher une copro / courtier / mail…" style={{ width: "100%", fontSize: 12, padding: "7px 10px 7px 30px", border: "1px solid #E8E8EC", borderRadius: 8 }} />
                   </div>
                   <div style={{ maxHeight: 300, overflowY: "auto", overflowX: "auto", border: "1px solid #E8E8EC", borderRadius: 8, background: "#fff" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                       <thead>
                         <tr style={{ color: "#A2A1AF", textAlign: "left", background: "#FAFAFC" }}>
-                          {["Copropriété", "J+", "Mail courtier", "Conv Front"].map((h) => (
-                            <th key={h} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
+                          {["Copropriété", "J+", "Mail courtier", "Conv Front", ""].map((h, i) => (
+                            <th key={i} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC" }}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {eligRows.map((r) => (
-                          <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4" }}>
-                            <td style={{ padding: "6px 10px" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a></td>
+                        {eligRows.map((r) => {
+                          const busy = pausingId === r.pipelineId;
+                          return (
+                          <tr key={r.pipelineId} style={{ borderTop: "1px solid #F1F1F4", background: r.relancePaused ? "#FBFBFD" : undefined, opacity: r.relancePaused ? 0.6 : 1 }}>
+                            <td style={{ padding: "6px 10px" }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none" }}>{r.adresse || r.nom}</a>{r.relancePaused && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: "#8A8A99" }}>· mis de côté</span>}</td>
                             <td style={{ padding: "6px 10px", fontWeight: 600, color: r.joursDepuisEnvoi >= 8 ? "#CA1E12" : "#B4690E" }}>J+{r.joursDepuisEnvoi}</td>
                             <td style={{ padding: "6px 10px", color: r.mail ? "#13762C" : "#CA1E12" }}>{r.mail || "manquant"}</td>
                             <td style={{ padding: "6px 10px" }}>{r.replyConvUrl ? <a href={r.replyConvUrl} target="_blank" rel="noreferrer" title="Ouvrir la conversation dans Front" style={{ color: "#4E49FC", textDecoration: "none" }}>Front ↗</a> : <span style={{ color: "#C7C7D1" }}>—</span>}</td>
+                            <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>
+                              <button disabled={busy} onClick={() => toggleRelancePause(r.pipelineId, !r.relancePaused)} style={r.relancePaused ? btn("#13762C", "#EAF7EE", "#B7E4C4") : btn("#B4690E", "#FDF0D5", "#F3D9A6")}>
+                                {busy ? <Loader2 size={12} className="animate-spin" /> : null} {r.relancePaused ? "Remettre dans la boucle" : "Exclure de la boucle"}
+                              </button>
+                            </td>
                           </tr>
-                        ))}
-                        {eligRows.length === 0 && <tr><td colSpan={4} style={{ padding: 10, color: "#A2A1AF", textAlign: "center" }}>Aucun dossier éligible.</td></tr>}
+                          );
+                        })}
+                        {eligRows.length === 0 && <tr><td colSpan={5} style={{ padding: 10, color: "#A2A1AF", textAlign: "center" }}>Aucun dossier{q ? " pour cette recherche" : " éligible"}.</td></tr>}
                       </tbody>
                     </table>
                   </div>
