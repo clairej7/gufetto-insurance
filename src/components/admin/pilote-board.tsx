@@ -23,7 +23,12 @@ const FUNNEL: CardData[] = [
     { key: "remplissage_infos", name: "Remplissage des informations manquantes", automated: false },
     { key: "identification_dossiers", name: "Identification des dossiers", automated: false },
   ] },
-  { key: "rs", title: "Récupération du RS", deployed: false, tasks: [] },
+  { key: "rs", title: "Récupération du RS", deployed: false, tasks: [
+    { key: "completion_mail_courtier", name: "Complétion du mail courtier", automated: false },
+    { key: "envoi_demandes_courtiers", name: "Envoi des demandes aux courtiers", automated: false },
+    { key: "detecteur_reponses", name: "Détecteur de réponse des courtiers", automated: false },
+    { key: "boucles_relances", name: "Boucles de relances RS", automated: false },
+  ] },
   { key: "devis_demandes", title: "Demandes de devis", deployed: false, tasks: [] },
   { key: "devis_compare", title: "Comparaison des devis", deployed: false, tasks: [] },
   { key: "validation_cs", title: "Validation du CS", deployed: false, tasks: [] },
