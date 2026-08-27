@@ -24,6 +24,9 @@ type Row = {
   csStatut: CsStatut; resiliation: Resiliation; statutPipeline: string;
 };
 type Table = { total: number; rows: Row[] };
+type CsReplyRow = { pipelineId: string; nom: string; adresse: string | null; replyKind: "accepte" | "refus" | "autre" | null; snippet: string | null; from: string | null; at: string | null; convUrl: string | null; proposedStatut: "accepte" | "refus" | null };
+type Volet2 = { total: number; awaiting: number; withReply: number; rows: CsReplyRow[]; lastScanAt: string | null };
+type CsHistoryEntry = { pipelineId: string; nom: string; adresse: string | null; value: string; at: string; by: string };
 
 const th: React.CSSProperties = { padding: "8px 10px", fontWeight: 600, fontSize: 11, color: "#A2A1AF", position: "sticky", top: 0, background: "#FAFAFC", whiteSpace: "nowrap", textAlign: "left", borderBottom: "1px solid #E8E8EC" };
 const td: React.CSSProperties = { padding: "8px 10px", fontSize: 12.5, borderTop: "1px solid #F1F1F4", verticalAlign: "middle" };
@@ -40,12 +43,42 @@ const ETAPE: Record<string, { label: string; color: string; bg: string; border: 
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
 
-export function Devis7Controls({ table }: { table: Table }) {
+export function Devis7Controls({ table, volet2, csHistory }: { table: Table; volet2: Volet2; csHistory: CsHistoryEntry[] }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [previewRow, setPreviewRow] = useState<Row | null>(null);
   const [fetchingCs, setFetchingCs] = useState(false);
+  const [scanningCs, setScanningCs] = useState(false);
+  const [csHistOpen, setCsHistOpen] = useState(false);
+
+  async function scanCs() {
+    setScanningCs(true);
+    try {
+      let offset = 0; let found = 0;
+      for (let i = 0; i < 30; i++) {
+        const res = await fetch("/api/devis7/scan-cs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offset, limit: 15 }) });
+        const j = (await res.json().catch(() => ({}))) as { done?: boolean; nextOffset?: number; found?: number; error?: string };
+        if (!res.ok) throw new Error(j.error ?? "Échec");
+        found += j.found ?? 0;
+        if (j.done) break;
+        offset = j.nextOffset ?? offset + 15;
+      }
+      toast.success(`Scan terminé : ${found} réponse(s) CS détectée(s).`);
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setScanningCs(false); }
+  }
+
+  async function validerCsStatut(pipelineId: string, value: "accepte" | "refus") {
+    setBusy(pipelineId + "v2");
+    try {
+      const res = await fetch("/api/devis7/statut", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId, field: "cs_statut", value }) });
+      const j = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string };
+      if (!res.ok || !j.success) throw new Error(j.error ?? "Échec");
+      toast.success(`Statut CS validé : ${value === "accepte" ? "accepté" : "refus"}.`);
+      router.refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setBusy(null); }
+  }
 
   async function fetchCsMembers() {
     setFetchingCs(true);
@@ -197,6 +230,76 @@ export function Devis7Controls({ table }: { table: Table }) {
       <p style={{ fontSize: 11, color: "#A2A1AF", margin: "8px 2px 0" }}>
         Statut CS « refus » → dossier passé en <strong>Perdu</strong> (résiliation forcée à «-»). Statut CS « accepté » + résiliation « oui » → dossier passé en <strong>Clos</strong>. La ligne reste affichée ici.
       </p>
+
+      {/* VOLET 2 — Suivi des réponses du CS */}
+      <div style={{ marginTop: 26, paddingTop: 18, borderTop: "1px dashed #E8E8EC", marginBottom: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 2</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Suivi des réponses du CS</span>
+        <button onClick={scanCs} disabled={scanningCs} style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#fff", background: "#4E49FC", border: "none", borderRadius: 8, padding: "7px 12px", cursor: scanningCs ? "default" : "pointer" }}>
+          {scanningCs ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Détecter les réponses (Front)
+        </button>
+      </div>
+      <p style={{ fontSize: 12, color: "#656576", margin: "0 0 10px" }}>
+        {volet2.awaiting} dossier{volet2.awaiting > 1 ? "s" : ""} en attente de réponse du CS · <strong>{volet2.withReply}</strong> avec une réponse détectée{volet2.lastScanAt ? ` · dernier scan ${fmtDate(volet2.lastScanAt)}` : ""}. Une réponse = message entrant d'un membre du CS. Le statut proposé est à <strong>valider</strong>.
+      </p>
+      {volet2.rows.length === 0 ? (
+        <p style={{ fontSize: 12.5, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun dossier en attente de réponse du CS.</p>
+      ) : (
+      <div style={{ maxHeight: 420, overflow: "auto", border: "1px solid #E8E8EC", borderRadius: 10 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
+          <thead><tr>
+            {["Dossier", "Dernière réponse CS", "Verdict proposé", "Valider le Statut CS"].map((h) => <th key={h} style={th}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {volet2.rows.map((r) => {
+              const b = r.replyKind === "accepte" ? { l: "Accepté", c: "#13762C", bg: "#EAF7EE", bd: "#B7E4C4" } : r.replyKind === "refus" ? { l: "Refus", c: "#CA1E12", bg: "#FDECEA", bd: "#F4A9A0" } : r.replyKind === "autre" ? { l: "À lire", c: "#B4690E", bg: "#FDF0D5", bd: "#F3D9A6" } : null;
+              const vbusy = busy === r.pipelineId + "v2";
+              return (
+                <tr key={r.pipelineId}>
+                  <td style={td}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none", fontWeight: 600 }}>{r.adresse || r.nom}</a></td>
+                  <td style={{ ...td, maxWidth: 360 }}>
+                    {r.replyKind ? (
+                      <>
+                        <div style={{ color: "#656576" }}>{r.snippet || "(voir conversation)"}</div>
+                        <div style={{ fontSize: 10.5, color: "#A2A1AF", marginTop: 2 }}>{r.from ?? ""}{r.at ? ` · ${fmtDate(r.at)}` : ""} {r.convUrl && <a href={r.convUrl} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none", marginLeft: 6 }}>Front ↗</a>}</div>
+                      </>
+                    ) : <span style={{ color: "#C7C7D1" }}>—</span>}
+                  </td>
+                  <td style={td}>{b ? <span style={{ fontSize: 11, fontWeight: 700, color: b.c, background: b.bg, border: `1px solid ${b.bd}`, borderRadius: 999, padding: "3px 10px", whiteSpace: "nowrap" }}>{b.l}</span> : <span style={{ color: "#C7C7D1" }}>—</span>}</td>
+                  <td style={td}>
+                    {r.proposedStatut ? (
+                      <button disabled={vbusy} onClick={() => validerCsStatut(r.pipelineId, r.proposedStatut!)} style={{ ...blueBtn, background: r.proposedStatut === "refus" ? "#CA1E12" : "#13762C", borderColor: r.proposedStatut === "refus" ? "#CA1E12" : "#13762C" }}>
+                        {vbusy ? "…" : `Valider : ${r.proposedStatut === "accepte" ? "Accepté" : "Refus"}`}
+                      </button>
+                    ) : <span style={{ fontSize: 11, color: "#A2A1AF" }}>à qualifier à la main</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      )}
+
+      {/* Historique des Statut CS validés (trace conservée) */}
+      <div style={{ marginTop: 12, borderTop: "1px solid #F1F1F4", paddingTop: 10 }}>
+        <button onClick={() => setCsHistOpen((o) => !o)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
+          {csHistOpen ? "▾" : "▸"} Historique des statuts CS validés ({csHistory.length})
+        </button>
+        {csHistOpen && (
+          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+            {csHistory.length === 0 && <p style={{ fontSize: 12, color: "#A2A1AF" }}>Aucun statut CS validé pour l&apos;instant.</p>}
+            {csHistory.map((h, i) => (
+              <div key={i} style={{ fontSize: 12, color: "#656576", display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ color: "#26262C" }}>{fmtDate(h.at)}</span>
+                <a href={`/pipeline/${h.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none", fontWeight: 600 }}>{h.adresse || h.nom}</a>
+                <span style={{ fontWeight: 700, color: h.value === "refus" ? "#CA1E12" : "#13762C" }}>{h.value === "accepte" ? "Accepté" : h.value === "refus" ? "Refus" : h.value}</span>
+                <span style={{ color: "#A2A1AF" }}>{h.by}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {previewRow && <PreviewModal row={previewRow} onClose={() => setPreviewRow(null)} onSent={() => { setPreviewRow(null); router.refresh(); }} />}
     </div>
