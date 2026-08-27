@@ -83,9 +83,9 @@ function TaskStatus({ automated, big }: { automated: boolean; big?: boolean }) {
 
 function ManualBadge({ big }: { big?: boolean }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: big ? "5px 12px" : "3px 9px", borderRadius: 999, fontSize: big ? 13 : 11, fontWeight: 600, background: "#F1F1F4", color: "#656576", whiteSpace: "nowrap" }}>
-      <span style={{ width: big ? 7 : 6, height: big ? 7 : 6, borderRadius: "50%", background: "#A2A1AF" }} />
-      Manuel (pas d&apos;automatisation)
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: big ? "5px 12px" : "3px 9px", borderRadius: 999, fontSize: big ? 13 : 11, fontWeight: 600, background: "#EEF0FF", border: "1px solid #E0E0FB", color: "#4E49FC", whiteSpace: "nowrap", maxWidth: "100%" }}>
+      <span style={{ width: big ? 7 : 6, height: big ? 7 : 6, borderRadius: "50%", background: "#4E49FC", flexShrink: 0 }} />
+      {big ? "Manuel — pas d'automatisation" : "Manuel"}
     </span>
   );
 }
