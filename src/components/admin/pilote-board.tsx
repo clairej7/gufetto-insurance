@@ -13,7 +13,9 @@ import { ChevronRight, CircleDot, X } from "lucide-react";
 // bascule une tâche en « automatisé ». Les tâches se renseignent carte par carte ;
 // pour l'instant toutes les listes sont vides → 0 %.
 type Task = { key: string; name: string; automated: boolean };
-type CardData = { key: string; title: string; deployed: boolean; tasks: Task[] };
+// manualOnly = étape 100% manuelle par nature (jamais automatisée) → badge « Manuel »
+// dédié au lieu du couple statut/%.
+type CardData = { key: string; title: string; deployed: boolean; tasks: Task[]; manualOnly?: boolean };
 
 // % automatisé d'une carte = part des tâches automatisées (0 si aucune tâche).
 const pctOf = (c: CardData): number => (c.tasks.length ? Math.round((c.tasks.filter((t) => t.automated).length / c.tasks.length) * 100) : 0);
@@ -40,8 +42,8 @@ const FUNNEL: CardData[] = [
     { key: "generation_comparaisons", name: "Génération des comparaisons", automated: false },
     { key: "transmission_gestionnaires", name: "Transmission aux gestionnaires", automated: false },
   ] },
-  { key: "validation_cs", title: "Validation du CS", deployed: false, tasks: [] },
-  { key: "signe", title: "Signé", deployed: false, tasks: [] },
+  { key: "validation_cs", title: "Validation du CS", deployed: false, tasks: [], manualOnly: true },
+  { key: "signe", title: "Signé", deployed: false, tasks: [], manualOnly: true },
 ];
 
 const ODR: CardData[] = [
@@ -79,6 +81,15 @@ function TaskStatus({ automated, big }: { automated: boolean; big?: boolean }) {
   );
 }
 
+function ManualBadge({ big }: { big?: boolean }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: big ? "5px 12px" : "3px 9px", borderRadius: 999, fontSize: big ? 13 : 11, fontWeight: 600, background: "#F1F1F4", color: "#656576", whiteSpace: "nowrap" }}>
+      <span style={{ width: big ? 7 : 6, height: big ? 7 : 6, borderRadius: "50%", background: "#A2A1AF" }} />
+      Manuel (pas d&apos;automatisation)
+    </span>
+  );
+}
+
 function PctBadge({ pct, big }: { pct: number; big?: boolean }) {
   return (
     <span style={{ fontSize: big ? 13 : 11, fontWeight: 700, color: "#4E49FC", background: "#F4F4FF", border: "1px solid #E4E4FB", borderRadius: 999, padding: big ? "5px 12px" : "3px 9px", whiteSpace: "nowrap" }}>
@@ -103,8 +114,14 @@ function FlowCard({ data, onClick }: { data: CardData; onClick: () => void }) {
       </div>
       {/* Méta poussée en bas → alignement + taille identiques pour toutes les cartes. */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6, marginTop: "auto" }}>
-        <StatusPill deployed={data.deployed} />
-        <PctBadge pct={pctOf(data)} />
+        {data.manualOnly ? (
+          <ManualBadge />
+        ) : (
+          <>
+            <StatusPill deployed={data.deployed} />
+            <PctBadge pct={pctOf(data)} />
+          </>
+        )}
       </div>
     </div>
   );
@@ -295,15 +312,23 @@ export function PiloteBoard() {
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
-                  <StatusPill deployed={selected.deployed} big />
-                  <PctBadge pct={pctOf(selected)} big />
+                  {selected.manualOnly ? (
+                    <ManualBadge big />
+                  ) : (
+                    <>
+                      <StatusPill deployed={selected.deployed} big />
+                      <PctBadge pct={pctOf(selected)} big />
+                    </>
+                  )}
                 </div>
 
                 <div style={{ borderTop: "1px dashed #E8E8EC", paddingTop: 18 }}>
                   <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#8A8A99", textTransform: "uppercase", marginBottom: 12 }}>
-                    Tâches{selected.tasks.length ? ` (${selected.tasks.filter((t) => t.automated).length}/${selected.tasks.length} automatisées)` : ""}
+                    Tâches{!selected.manualOnly && selected.tasks.length ? ` (${selected.tasks.filter((t) => t.automated).length}/${selected.tasks.length} automatisées)` : ""}
                   </div>
-                  {selected.tasks.length === 0 ? (
+                  {selected.manualOnly ? (
+                    <p style={{ fontSize: 14, color: "#8A8A99", fontStyle: "italic", margin: 0 }}>Étape 100% manuelle — pas d&apos;automatisation prévue.</p>
+                  ) : selected.tasks.length === 0 ? (
                     <p style={{ fontSize: 14, color: "#8A8A99", fontStyle: "italic", margin: 0 }}>Aucune tâche renseignée pour l&apos;instant.</p>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
