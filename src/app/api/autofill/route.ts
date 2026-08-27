@@ -22,10 +22,11 @@ export async function POST(req: NextRequest) {
   }
   const actor = session?.user?.email || "cron@gufetto";
 
-  const body = await req.json().catch(() => ({} as { limit?: number }));
+  const body = await req.json().catch(() => ({} as { limit?: number; runId?: string }));
   const limit = Math.min(Number(body.limit) || 25, 100); // borne de sécurité
+  const runId = body.runId?.toString() || undefined;
 
-  const r = await runAutofillChunk(actor, limit);
+  const r = await runAutofillChunk(actor, limit, runId);
 
   // `count` = dossiers pris dans ce lot. `restants_potentiels` : le lot était plein
   // → il reste probablement des dossiers éligibles (l'appelant peut ré-appeler).

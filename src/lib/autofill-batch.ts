@@ -36,7 +36,7 @@ export type AutofillChunkResult = {
 // tenté dans le cooldown via le curseur autofillTenteLe), les marque « tentés
 // maintenant » AVANT traitement (garantit qu'un non-fiable / une erreur ne
 // repasse pas au lot suivant → le curseur avance), puis aiguille chacun.
-export async function runAutofillChunk(actor: string, limit: number): Promise<AutofillChunkResult> {
+export async function runAutofillChunk(actor: string, limit: number, batchId?: string): Promise<AutofillChunkResult> {
   const cooldown = new Date(Date.now() - RETRY_APRES_JOURS * 24 * 60 * 60 * 1000);
   const excludedIds = await getExcludedCoproIds();
   const pipelines = await prisma.insurancePipeline.findMany({
@@ -76,7 +76,7 @@ export async function runAutofillChunk(actor: string, limit: number): Promise<Au
       // route=false : Volet 1 COMPLÈTE seulement (pas d'aiguillage — Volet 2).
       // "action_manuelle" → event non-sync_auto = pipeline "touché" → la synchro
       // Omni nocturne ne réécrase pas les champs figés (cliquet contratVerrouilleLe).
-      const r = await applyAutofill(p.id, actor, "action_manuelle", false);
+      const r = await applyAutofill(p.id, actor, "action_manuelle", false, batchId);
       stats.traites++;
       if (r.wroteFields) stats.completes++;
       else stats.sansInfo++;
@@ -86,7 +86,7 @@ export async function runAutofillChunk(actor: string, limit: number): Promise<Au
         adresse: p.copro.adresse,
         assureur: r.assureur ?? null,
         numero: r.numeroContrat ?? null,
-        mail: r.mailCourtier ?? null,
+        mail: r.contactMailStored, // mail RÉELLEMENT sur la fiche (pas un candidat Front)
         wroteFields: r.wroteFields,
         champs: r.writtenFields,
       });
@@ -102,4 +102,32 @@ export async function runAutofillChunk(actor: string, limit: number): Promise<Au
     stats,
     details,
   };
+}
+
+export type AutofillHistoryEntry = { runId: string; date: Date; completes: number; by: string };
+
+// Historique des runs de remplissage, reconstruit depuis les events (chaque
+// champ complété crée un event autofill portant metadata.autofillRun = runId).
+export async function getAutofillHistory(limit = 20): Promise<AutofillHistoryEntry[]> {
+  const evs = await prisma.pipelineEvent.findMany({
+    where: {
+      OR: [
+        { metadata: { path: ["source"], equals: "front_autofill" } },
+        { metadata: { path: ["source"], equals: "front+omni_autofill" } },
+      ],
+    },
+    select: { createdAt: true, createdBy: true, metadata: true },
+    orderBy: { createdAt: "desc" },
+    take: 3000,
+  });
+  const byRun = new Map<string, AutofillHistoryEntry>();
+  for (const e of evs) {
+    const runId = (e.metadata as { autofillRun?: string } | null)?.autofillRun;
+    if (!runId) continue;
+    const cur = byRun.get(runId) ?? { runId, date: e.createdAt, completes: 0, by: e.createdBy ?? "?" };
+    cur.completes++;
+    if (e.createdAt > cur.date) cur.date = e.createdAt;
+    byRun.set(runId, cur);
+  }
+  return [...byRun.values()].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, limit);
 }

@@ -10,17 +10,19 @@
 import { useRef, useState } from "react";
 import { Zap, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 type Stats = { traites: number; completes: number; sansInfo: number; erreurs: number };
 const EMPTY: Stats = { traites: 0, completes: 0, sansInfo: 0, erreurs: 0 };
 
 type Detail = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numero: string | null; mail: string | null; wroteFields: boolean; champs: string[] };
+type HistoryEntry = { runId: string; date: string; completes: number; by: string };
 
 // Taille d'un lot serveur (≤ 100, borne du back). 50 = requêtes courtes + progression fréquente.
 const CHUNK = 50;
 
-export function AutofillBatchButton({ defaultTarget = 5, stock }: { defaultTarget?: number; stock?: number }) {
+export function AutofillBatchButton({ defaultTarget = 5, stock, history = [] }: { defaultTarget?: number; stock?: number; history?: HistoryEntry[] }) {
   const [target, setTarget] = useState(defaultTarget);
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(false);
@@ -28,7 +30,9 @@ export function AutofillBatchButton({ defaultTarget = 5, stock }: { defaultTarge
   const [agg, setAgg] = useState<Stats>(EMPTY);
   const [details, setDetails] = useState<Detail[]>([]);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [histOpen, setHistOpen] = useState(false);
   const cancelRef = useRef(false);
+  const router = useRouter();
 
   async function run() {
     const goal = Math.max(1, Math.floor(target));
@@ -43,6 +47,7 @@ export function AutofillBatchButton({ defaultTarget = 5, stock }: { defaultTarge
     let processed = 0;
     const total: Stats = { ...EMPTY };
     const allDetails: Detail[] = [];
+    const runId = `${Date.now()}`; // un seul id pour tout ce run → historique groupé
 
     try {
       while (processed < goal && !cancelRef.current) {
@@ -50,7 +55,7 @@ export function AutofillBatchButton({ defaultTarget = 5, stock }: { defaultTarge
         const res = await fetch("/api/autofill", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ limit: take }),
+          body: JSON.stringify({ limit: take, runId }),
         });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || `Erreur ${res.status}`);
@@ -78,6 +83,7 @@ export function AutofillBatchButton({ defaultTarget = 5, stock }: { defaultTarge
     } finally {
       setRunning(false);
       setDone(true);
+      router.refresh(); // rafraîchit l'historique + les compteurs côté serveur
     }
   }
 
@@ -168,6 +174,26 @@ export function AutofillBatchButton({ defaultTarget = 5, stock }: { defaultTarge
           )}
         </div>
       )}
+
+      {/* Historique des remplissages */}
+      <div style={{ borderTop: "1px solid #F1F1F4", paddingTop: 10 }}>
+        <button onClick={() => setHistOpen((o) => !o)} className="text-xs font-semibold flex items-center gap-1" style={{ color: "#4E49FC" }}>
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${histOpen ? "rotate-180" : ""}`} />
+          Historique des remplissages ({history.length})
+        </button>
+        {histOpen && (
+          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+            {history.length === 0 && <p className="text-xs" style={{ color: "#A2A1AF" }}>Aucun remplissage pour l'instant.</p>}
+            {history.map((h) => (
+              <div key={h.runId} className="text-xs" style={{ color: "#656576", display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ color: "#26262C", fontWeight: 600 }}>{new Date(h.date).toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                <span style={{ color: "#13762C" }}>{h.completes} complétés</span>
+                <span style={{ color: "#A2A1AF" }}>{h.by}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
