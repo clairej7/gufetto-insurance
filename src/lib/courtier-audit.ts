@@ -181,6 +181,17 @@ export type CourtierAuditRow = {
 
 const GENERIC_DOM = new Set(["gmail.com", "orange.fr", "wanadoo.fr", "free.fr", "hotmail.fr", "hotmail.com", "outlook.fr", "outlook.com", "yahoo.fr", "yahoo.com", "laposte.net", "sfr.fr", "live.fr"]);
 
+// BLACKLIST : adresses NON DÉLIVRABLES constatées (bounces réels : rejet, user
+// unknown, boucle). On ne les écrit plus (autofill) et on ne les envoie plus
+// (prepareSendMails). Le dossier passe alors en « hold » → à corriger avec un mail
+// valide + reset (repart à zéro). Étendre cette liste au fil des bounces constatés.
+export const BLACKLISTED_CONTACT_MAILS = new Set<string>([
+  "mri_pj@lamy-assurances.fr",       // rejet 550 5.4.1 « Access denied » (mauvais domaine — Bélier)
+  "laura.fouilteh@galian-smabtp.fr", // 550 5.1.1 User Unknown
+  "odealim@odealim.fr",              // 554 5.4.14 Hop count exceeded (boucle)
+]);
+export const isBlacklistedMail = (email: string) => BLACKLISTED_CONTACT_MAILS.has(email.toLowerCase().trim());
+
 // Adresse INTERDITE comme contact courtier/assureur d'une automatisation :
 //  - interne Matera / relais CS (`cs.xxx@mail.matera.eu`, `x@matera.eu`) ;
 //  - fournisseur d'email grand public (gmail, orange…) → probable copropriétaire ;
@@ -192,6 +203,7 @@ export const isForbiddenInsuranceContact = (email: string) => {
   const e = email.toLowerCase().trim();
   if (!e.includes("@")) return false;
   if (isMateraInternal(e)) return true;
+  if (BLACKLISTED_CONTACT_MAILS.has(e)) return true; // bounce constaté → jamais réutilisé
   if (GENERIC_DOM.has(domainOf(e))) return true;
   const local = e.split("@")[0];
   if (/^cs[._-]/.test(local) || /conseil.?syndical/.test(e)) return true;
@@ -333,6 +345,10 @@ export function prepareSendMails(courtierName: string | null, mailField: string 
   // bonjour@, canal Gufetto) — jamais un courtier. On la retire systématiquement.
   let mails = all.filter((m) => !isMateraInternal(m) && !isDevisContact(m));
   if (all.length && !mails.length) return { mails: [], hold: true, reason: "adresse interne Matera ou contact devis (Achille AXA / Mila) — pas un courtier RS" };
+  // BLACKLIST : adresses non délivrables (bounces) → jamais envoyées.
+  const preBl = mails.length;
+  mails = mails.filter((m) => !isBlacklistedMail(m));
+  if (preBl && !mails.length) return { mails: [], hold: true, reason: "mail blacklisté (bounce constaté) — à corriger + reset" };
   if (!mails.length) return { mails: [], hold: true, reason: "pas de mail exploitable" };
   const dom = (m: string) => domainOf(m.toLowerCase());
   const courTokens = tokensOf(normNom(courtierName ?? ""));
