@@ -19,7 +19,10 @@ type CardData = { key: string; title: string; deployed: boolean; tasks: Task[] }
 const pctOf = (c: CardData): number => (c.tasks.length ? Math.round((c.tasks.filter((t) => t.automated).length / c.tasks.length) * 100) : 0);
 
 const FUNNEL: CardData[] = [
-  { key: "identification", title: "Identification", deployed: false, tasks: [] },
+  { key: "identification", title: "Identification", deployed: false, tasks: [
+    { key: "remplissage_infos", name: "Remplissage des informations manquantes", automated: false },
+    { key: "identification_dossiers", name: "Identification des dossiers", automated: false },
+  ] },
   { key: "rs", title: "Récupération du RS", deployed: false, tasks: [] },
   { key: "devis_demandes", title: "Demandes de devis", deployed: false, tasks: [] },
   { key: "devis_compare", title: "Comparaison des devis", deployed: false, tasks: [] },
