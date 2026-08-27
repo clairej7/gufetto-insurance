@@ -251,7 +251,7 @@ export function Devis7Controls({ table, volet2, csHistory }: { table: Table; vol
       <div style={{ maxHeight: 420, overflow: "auto", border: "1px solid #E8E8EC", borderRadius: 10 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
           <thead><tr>
-            {["Dossier", "Dernière réponse CS", "Verdict proposé", "Valider le Statut CS"].map((h) => <th key={h} style={th}>{h}</th>)}
+            {["Dossier", "Front", "Dernière réponse CS", "Verdict proposé", "Valider le Statut CS"].map((h) => <th key={h} style={th}>{h}</th>)}
           </tr></thead>
           <tbody>
             {volet2.rows.map((r) => {
@@ -260,11 +260,12 @@ export function Devis7Controls({ table, volet2, csHistory }: { table: Table; vol
               return (
                 <tr key={r.pipelineId}>
                   <td style={td}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#26262C", textDecoration: "none", fontWeight: 600 }}>{r.adresse || r.nom}</a></td>
+                  <td style={td}>{r.convUrl ? <a href={r.convUrl} target="_blank" rel="noreferrer" title="Ouvrir la conversation dans Front" style={{ color: "#4E49FC", textDecoration: "none", fontWeight: 600 }}>Front ↗</a> : <span style={{ color: "#C7C7D1" }}>—</span>}</td>
                   <td style={{ ...td, maxWidth: 360 }}>
                     {r.replyKind ? (
                       <>
                         <div style={{ color: "#656576" }}>{r.snippet || "(voir conversation)"}</div>
-                        <div style={{ fontSize: 10.5, color: "#A2A1AF", marginTop: 2 }}>{r.from ?? ""}{r.at ? ` · ${fmtDate(r.at)}` : ""} {r.convUrl && <a href={r.convUrl} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none", marginLeft: 6 }}>Front ↗</a>}</div>
+                        <div style={{ fontSize: 10.5, color: "#A2A1AF", marginTop: 2 }}>{r.from ?? ""}{r.at ? ` · ${fmtDate(r.at)}` : ""}</div>
                       </>
                     ) : <span style={{ color: "#C7C7D1" }}>—</span>}
                   </td>
