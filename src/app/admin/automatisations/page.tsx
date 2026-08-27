@@ -203,7 +203,7 @@ export default async function AutomatisationsPage() {
     {
       n: 7,
       nom: "Envois et suivi des propositions au CS",
-      etat: "encours",
+      etat: "deploye",
       description: [
         "Les dossiers arrivent ici dès que le gestionnaire valide la proposition (auto 6) → passage à l'étape « Validation CS ». On y prépare/envoie le mail au Conseil Syndical et on suit sa réponse.",
         "Statut CS « refus » → dossier passé automatiquement en « Perdu ». Statut CS « accepté » + résiliation envoyée « oui » → dossier passé en « Clos ». La ligne reste affichée pour le suivi.",
