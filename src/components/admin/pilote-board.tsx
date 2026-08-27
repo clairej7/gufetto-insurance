@@ -35,7 +35,11 @@ const FUNNEL: CardData[] = [
     { key: "envoi_demandes_assureurs", name: "Envoi des demandes aux assureurs", automated: false },
     { key: "detecteur_reponses_assureurs", name: "Détecteur de réponse des assureurs", automated: false },
   ] },
-  { key: "devis_compare", title: "Comparaison des devis", deployed: false, tasks: [] },
+  { key: "devis_compare", title: "Comparaison des devis", deployed: false, tasks: [
+    { key: "verif_primes", name: "Vérification des primes", automated: false },
+    { key: "generation_comparaisons", name: "Génération des comparaisons", automated: false },
+    { key: "transmission_gestionnaires", name: "Transmission aux gestionnaires", automated: false },
+  ] },
   { key: "validation_cs", title: "Validation du CS", deployed: false, tasks: [] },
   { key: "signe", title: "Signé", deployed: false, tasks: [] },
 ];
