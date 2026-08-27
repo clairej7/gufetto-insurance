@@ -596,11 +596,19 @@ function classifyReply(body: string, hasDoc: boolean, bounce: boolean): string {
   if (RRE.info.test(s)) return "info";
   return "autre";
 }
+// Renvoie null en cas d'ÉCHEC de lecture (token absent, statut non-OK type 429
+// rate-limit, exception réseau). Les appelants DOIVENT distinguer null (échec)
+// d'une réponse valide vide — sinon un rate-limit transitoire est pris pour
+// « aucune donnée » (cf. bug scan qui rétrogradait des RS reçus en sans réponse).
 async function frontGet(path: string): Promise<Record<string, unknown> | null> {
   if (!FRONT_TOKEN) return null;
-  const res = await fetch(`${FRONT_API_URL}${path}`, { headers: { Authorization: `Bearer ${FRONT_TOKEN}` } });
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    const res = await fetch(`${FRONT_API_URL}${path}`, { headers: { Authorization: `Bearer ${FRONT_TOKEN}` } });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 // Rouvre une conversation (statut open) SANS toucher l'assigné → elle réapparaît
 // dans l'inbox Gufetto (affichée « assigned » au gestionnaire déjà en place),
@@ -643,8 +651,10 @@ export async function scanReplies(offset: number, limit: number): Promise<{ tota
     const resultsByCid: Record<string, FMsg[]> = {};
     const inboundAll: { m: FMsg; cid: string }[] = [];
     let bounce = false;
+    let readFailed = false; // au moins une lecture Front a échoué (rate-limit/réseau)
     for (const cid of scanCids) {
       const list = await frontGet(`/conversations/${cid}/messages?limit=20`);
+      if (list === null) { readFailed = true; resultsByCid[cid] = []; continue; }
       const results = ((list?._results as unknown[]) ?? []) as FMsg[];
       resultsByCid[cid] = results;
       const isSendConv = sendSet.has(cid);
@@ -654,7 +664,13 @@ export async function scanReplies(offset: number, limit: number): Promise<{ tota
       // ne la filtre pas sur la date (rs4SentAt a pu avancer avec les relances).
       for (const m of results.filter((m) => m.is_inbound && !isFromMatera(m) && (!isSendConv || m.created_at * 1000 > sentMs))) inboundAll.push({ m, cid });
     }
-    if (!inboundAll.length && !bounce) { await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: "sans_reponse", rs4ReplyAt: null, rs4ReplySnippet: null, rs4ReplyMsgId: null } }); counts["sans_reponse"] = (counts["sans_reponse"] ?? 0) + 1; continue; }
+    if (!inboundAll.length && !bounce) {
+      // GARDE-FOU : ne JAMAIS rétrograder en « sans réponse » si une lecture Front a
+      // échoué (rate-limit/réseau) — sinon un RS reçu réel est écrasé (incident 27/08).
+      // On laisse le verdict actuel intact et on ne stampe pas scanAt → re-scan plus tard.
+      if (readFailed) { counts["erreur_lecture"] = (counts["erreur_lecture"] ?? 0) + 1; continue; }
+      await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: "sans_reponse", rs4ReplyAt: null, rs4ReplySnippet: null, rs4ReplyMsgId: null } }); counts["sans_reponse"] = (counts["sans_reponse"] ?? 0) + 1; continue;
+    }
     inboundAll.sort((a, b) => b.m.created_at - a.m.created_at); // plus récente en tête, tous fils confondus
     const last = inboundAll[0] ?? null;
     let body = "", snippet = "", hasDoc = inboundAll.some((x) => realDoc(x.m.attachments ?? []));
