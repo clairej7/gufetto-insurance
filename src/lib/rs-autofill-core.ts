@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import type { PipelineStatut } from "@/generated/prisma/client";
 import { extractInsuranceInfoFromFront, matchPartner, looksLikeCourtierValue, type InsuranceInfo } from "@/lib/front-insurance";
+import { isForbiddenInsuranceContact } from "@/lib/courtier-audit";
 
 // Champs contrat lus/écrits par l'autofill (sous-ensemble de Copro).
 type CoproContractFields = {
@@ -48,7 +49,12 @@ export function planContractWrite(
   }
 
   if (info.numeroContrat && !copro.numeroContrat) data.numeroContrat = info.numeroContrat;
-  if (info.mailCourtier && !copro.contactCourtierEmail) data.contactCourtierEmail = info.mailCourtier;
+  // Garde-fou : ne JAMAIS écrire un mail de CS / copropriétaire (perso) comme
+  // contact courtier/assureur. Si le mail trouvé est interdit, on laisse vide
+  // (Auto 3 « complétion du mail courtier » le retrouvera proprement).
+  if (info.mailCourtier && !copro.contactCourtierEmail && !isForbiddenInsuranceContact(info.mailCourtier)) {
+    data.contactCourtierEmail = info.mailCourtier;
+  }
 
   return { data, auditNotes };
 }
@@ -68,6 +74,8 @@ export type AutofillResult = {
   assureur: string | null;
   numeroContrat: string | null;
   mailCourtier: string | null;
+  // Mail réellement présent sur la copro après l'opération (≠ candidat Front).
+  contactMailStored: string | null;
   usedOmni: boolean;
   skippedReason?: string;
 };
@@ -77,13 +85,14 @@ export async function applyAutofill(
   actorEmail: string,
   eventType: "action_manuelle" | "sync_auto" = "action_manuelle",
   route = true, // false = complète les champs SANS aiguiller (Volet 1 : le routage est le rôle du Volet 2)
+  batchId?: string, // identifiant de run (Volet 1) → historique groupé par run
 ): Promise<AutofillResult> {
   const pipeline = await prisma.insurancePipeline.findUnique({
     where: { id: pipelineId },
     include: { copro: true },
   });
   if (!pipeline) {
-    return { pipelineId, buildingId: null, info: null, targetStatut: "identifie", moved: false, wroteFields: false, writtenFields: [], reliable: false, assureur: null, numeroContrat: null, mailCourtier: null, usedOmni: false, skippedReason: "pipeline introuvable" };
+    return { pipelineId, buildingId: null, info: null, targetStatut: "identifie", moved: false, wroteFields: false, writtenFields: [], reliable: false, assureur: null, numeroContrat: null, mailCourtier: null, contactMailStored: null, usedOmni: false, skippedReason: "pipeline introuvable" };
   }
 
   const copro = pipeline.copro;
@@ -130,7 +139,8 @@ export async function applyAutofill(
   //    quand même aiguiller → couverture accrue au-delà du Front seul.
   const usableMail = (m: string | null | undefined): string | null =>
     m && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m) &&
-    !/^(?:no-?reply|noreply|donotreply)@|(?:^|[._-])(?:infocnil|cnil|reclamations?)@/i.test(m)
+    !/^(?:no-?reply|noreply|donotreply)@|(?:^|[._-])(?:infocnil|cnil|reclamations?)@/i.test(m) &&
+    !isForbiddenInsuranceContact(m)
       ? m : null;
 
   const effAssureur = info.assureur ?? copro.assureurActuel ?? null;
@@ -151,7 +161,11 @@ export async function applyAutofill(
     partnerKey: info.partnerKey ?? matchPartner(effAssureur),
     reliable: effReliable,
     confidence: info.confidence,
+    ...(batchId ? { autofillRun: batchId } : {}),
   };
+  // Mail réellement stocké sur la copro APRÈS écriture (pour l'affichage du
+  // détail : on montre ce qui est sur la fiche, pas un candidat Front non retenu).
+  const contactMailStored = (typeof data.contactCourtierEmail === "string" ? data.contactCourtierEmail : copro.contactCourtierEmail) ?? null;
 
   let moved = false;
   if (route && pipeline.statut === "identifie" && targetStatut !== "identifie") {
@@ -221,6 +235,6 @@ export async function applyAutofill(
   revalidatePath(`/pipeline/${pipelineId}`);
   return {
     pipelineId, buildingId: copro.buildingId, info, targetStatut, moved, wroteFields, writtenFields,
-    reliable: effReliable, assureur: effAssureur, numeroContrat: effNumero, mailCourtier: effMail, usedOmni,
+    reliable: effReliable, assureur: effAssureur, numeroContrat: effNumero, mailCourtier: effMail, contactMailStored, usedOmni,
   };
 }

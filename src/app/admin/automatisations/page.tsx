@@ -7,6 +7,7 @@ import { Navbar } from "@/components/navbar";
 import { AutofillBatchButton } from "@/components/admin/autofill-batch-button";
 import { IdentifyScanControls } from "@/components/admin/identify-scan-controls";
 import { countIdentifyDossiers, getIdentifyHistory } from "@/lib/autofill-identify";
+import { getAutofillHistory } from "@/lib/autofill-batch";
 import { VerifyPrimesBatchButton } from "@/components/admin/verify-primes-batch-button";
 import { OdrControls } from "@/components/admin/odr-controls";
 import { PrimeBatchButton } from "@/components/admin/prime-batch-button";
@@ -57,6 +58,9 @@ export default async function AutomatisationsPage() {
       },
     },
   });
+
+  // Auto 1 Volet 1 « Remplissage » : historique des runs.
+  const autofillHistory = (await getAutofillHistory()).map((h) => ({ ...h, date: h.date.toISOString() }));
 
   // Auto 1 Volet 2 « Identification des dossiers » : périmètre exact du scan + historique.
   const identifyTotal = await countIdentifyDossiers();
@@ -307,7 +311,7 @@ export default async function AutomatisationsPage() {
                         (hors dossiers déjà clients / gagnés). Un dossier tenté n'est pas repassé tant que tout
                         l'échantillon n'a pas été parcouru (curseur persistant).
                       </p>
-                      <AutofillBatchButton defaultTarget={Math.min(5, eligibleAuto1) || 5} stock={eligibleAuto1} />
+                      <AutofillBatchButton defaultTarget={Math.min(5, eligibleAuto1) || 5} stock={eligibleAuto1} history={autofillHistory} />
 
                       {/* VOLET 2 — identification des dossiers (routage validé à la main) */}
                       <div style={{ marginTop: 26, paddingTop: 18, borderTop: "1px dashed #E8E8EC", marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>

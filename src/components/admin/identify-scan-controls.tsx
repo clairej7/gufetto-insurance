@@ -37,6 +37,7 @@ export function IdentifyScanControls({ total, history }: { total: number; histor
   const [applying, setApplying] = useState(false);
   const [histOpen, setHistOpen] = useState(false);
   const [filter, setFilter] = useState<"tous" | "odr" | "rs" | "manquant">("tous");
+  const [search, setSearch] = useState("");
 
   async function scan() {
     setScanning(true);
@@ -131,6 +132,18 @@ export function IdentifyScanControls({ total, history }: { total: number; histor
             Valider {nChecked} dossier{nChecked > 1 ? "s" : ""}
           </Button>
         )}
+        {done && rows.length > 0 && (
+          <div style={{ marginLeft: "auto", position: "relative" }}>
+            <Search className="h-3.5 w-3.5" style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: "#A2A1AF" }} />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher une copro / assureur / courtier…"
+              className="rounded-md border text-sm"
+              style={{ borderColor: "#E2E2EA", padding: "6px 10px 6px 28px", width: 280 }}
+            />
+          </div>
+        )}
       </div>
 
       {(scanning || done) && (
@@ -154,7 +167,10 @@ export function IdentifyScanControls({ total, history }: { total: number; histor
           { key: "rs", label: "→ RS", n: nRs },
           { key: "manquant", label: "Reste", n: nReste },
         ];
-        const visible = filter === "tous" ? rows : rows.filter((r) => r.verdict === filter);
+        const q = search.trim().toLowerCase();
+        const visible = rows
+          .filter((r) => filter === "tous" || r.verdict === filter)
+          .filter((r) => !q || [r.nom, r.adresse, r.assureur, r.courtier, r.numeroContrat].some((v) => v?.toLowerCase().includes(q)));
         return (
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-1.5 flex-wrap">

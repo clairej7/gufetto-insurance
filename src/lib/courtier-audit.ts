@@ -181,6 +181,23 @@ export type CourtierAuditRow = {
 
 const GENERIC_DOM = new Set(["gmail.com", "orange.fr", "wanadoo.fr", "free.fr", "hotmail.fr", "hotmail.com", "outlook.fr", "outlook.com", "yahoo.fr", "yahoo.com", "laposte.net", "sfr.fr", "live.fr"]);
 
+// Adresse INTERDITE comme contact courtier/assureur d'une automatisation :
+//  - interne Matera / relais CS (`cs.xxx@mail.matera.eu`, `x@matera.eu`) ;
+//  - fournisseur d'email grand public (gmail, orange…) → probable copropriétaire ;
+//  - local part de type conseil syndical (`cs.` / « conseil syndical »).
+// Règle Quentin : JAMAIS de mail de CS ni de copropriétaire dans les autos.
+// Sert au REMPLISSAGE (ne pas écrire une telle adresse) — au moment de l'ENVOI,
+// prepareSendMails/isMateraInternal appliquent déjà leurs propres filtres vérifiés.
+export const isForbiddenInsuranceContact = (email: string) => {
+  const e = email.toLowerCase().trim();
+  if (!e.includes("@")) return false;
+  if (isMateraInternal(e)) return true;
+  if (GENERIC_DOM.has(domainOf(e))) return true;
+  const local = e.split("@")[0];
+  if (/^cs[._-]/.test(local) || /conseil.?syndical/.test(e)) return true;
+  return false;
+};
+
 // Groupes de courtiers : domaines interchangeables (même maison). Ex. Odealim
 // rachète Assurcopro/Assurgérance → un mail @odealim pour Assurcopro = cohérent.
 const DOMAIN_GROUPS: string[][] = [
