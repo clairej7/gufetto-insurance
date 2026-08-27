@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from "react";
 import { Wrench, Rocket } from "lucide-react";
+import { PiloteBoard } from "@/components/admin/pilote-board";
 
 type Mode = "semi" | "pilote";
 const STORAGE_KEY = "gufetto:automations:mode";
@@ -73,17 +74,7 @@ export function AutomationModeTabs({ semiAuto }: { semiAuto: React.ReactNode }) 
           en mode Pilote, pour ne pas le re-fetcher au retour. Avant hydratation → Semi-Auto. */}
       <div style={{ display: !ready || mode === "semi" ? "block" : "none" }}>{semiAuto}</div>
 
-      {ready && mode === "pilote" && (
-        <div style={{ padding: "80px 24px", textAlign: "center", border: "1.5px dashed #E8E8EC", borderRadius: 14, background: "#FAFAFC" }}>
-          <Rocket size={34} style={{ color: "#C4C4CE", marginBottom: 14 }} />
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#26262C", marginBottom: 6 }}>Mode Pilote — à venir</div>
-          <p style={{ fontSize: 13.5, color: "#656576", maxWidth: 520, margin: "0 auto", lineHeight: "20px" }}>
-            L&apos;objectif : faire tourner Gufetto en autonomie au maximum de ce qui est automatisable
-            (certaines étapes resteront manuelles). On le construira progressivement à partir des
-            briques du mode Semi-Auto.
-          </p>
-        </div>
-      )}
+      {ready && mode === "pilote" && <PiloteBoard />}
     </div>
   );
 }
