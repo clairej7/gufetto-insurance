@@ -716,54 +716,6 @@ export async function updateEcheance(pipelineId: string, dateISO: string | null)
   return { success: true };
 }
 
-// Édition manuelle de l'adresse de la copropriété. Pose le cliquet
-// adresseVerrouilleLe : l'adresse est un fait immeuble normalement réécrit à
-// chaque synchro Omni, or la valeur incomplète vient de Matera — sans le cliquet
-// la correction serait perdue la nuit suivante. Sert aux adresses que les
-// assureurs demandent de compléter (n° de rue manquant, faute de frappe).
-// Passer null retire le cliquet et rend la main à Omni.
-export async function updateAdresse(pipelineId: string, adresse: string | null) {
-  const session = await getSession();
-  const p = await prisma.insurancePipeline.findUnique({
-    where: { id: pipelineId },
-    select: { coproId: true, copro: { select: { adresse: true } } },
-  });
-  if (!p) return { success: false, error: "Dossier introuvable" };
-
-  const nouvelle = adresse?.trim() || null;
-  const ancienne = p.copro.adresse;
-
-  if (nouvelle === null) {
-    // Retour à la source : Omni reprend la main dès la prochaine synchro.
-    await prisma.copro.update({
-      where: { id: p.coproId },
-      data: { adresseVerrouilleLe: null },
-    });
-  } else {
-    await prisma.copro.update({
-      where: { id: p.coproId },
-      data: { adresse: nouvelle, adresseVerrouilleLe: new Date() },
-    });
-  }
-
-  if (nouvelle !== ancienne) {
-    await prisma.pipelineEvent.create({
-      data: {
-        pipelineId,
-        type: "action_manuelle",
-        description:
-          nouvelle === null
-            ? `Cliquet adresse retiré — l'adresse repassera sous contrôle Omni`
-            : `Adresse corrigée : "${ancienne ?? "(vide)"}" → "${nouvelle}"`,
-        createdBy: session.user.email!,
-      },
-    });
-  }
-
-  revalidatePath(`/pipeline/${pipelineId}`);
-  return { success: true };
-}
-
 // Marqueur ODR persistant : partenaire chez qui l'ordre de remplacement est engagé
 // ("AXA"/"GENERALI"/"SADA"/"MILA"), ou null pour retirer. Indépendant du statut →
 // permet d'extraire tous les ODR d'un partenaire (ex. "pas encore envoyés à AXA").
