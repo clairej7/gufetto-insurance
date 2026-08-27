@@ -502,15 +502,32 @@ export async function updateCoproCaracteristiques(
   }
 ) {
   await getSession();
+  const cleanPrime = typeof data.primeActuelle === "number" && isNaN(data.primeActuelle) ? null : data.primeActuelle;
+
+  // Badges GHC : ne retirer QUE le badge du/des champ(s) réellement modifié(s).
+  // Les autres champs GHC non touchés conservent leur check vert « GHC ».
+  const current = await prisma.copro.findUnique({
+    where: { id: coproId },
+    select: { assureurActuel: true, numeroContrat: true, courtierActuel: true, primeActuelle: true, ghcFields: true, ghcImportedAt: true },
+  });
+  const normV = (v: unknown) => (v == null ? "" : String(v).trim().toLowerCase());
+  const prevGhc: string[] = (() => { try { return current?.ghcFields ? (JSON.parse(current.ghcFields) as string[]) : []; } catch { return []; } })();
+  const changed = new Set<string>();
+  if (data.assureurActuel !== undefined && normV(data.assureurActuel) !== normV(current?.assureurActuel)) changed.add("assureur");
+  if (data.numeroContrat !== undefined && normV(data.numeroContrat) !== normV(current?.numeroContrat)) changed.add("numero");
+  if (data.courtierActuel !== undefined && normV(data.courtierActuel) !== normV(current?.courtierActuel)) changed.add("courtier");
+  if (data.primeActuelle !== undefined && (cleanPrime ?? null) !== (current?.primeActuelle ?? null)) changed.add("prime");
+  const remainingGhc = prevGhc.filter((f) => !changed.has(f));
+
   const sanitized = {
     ...data,
     surfaceDeveloppee: typeof data.surfaceDeveloppee === "number" && isNaN(data.surfaceDeveloppee) ? null : data.surfaceDeveloppee,
-    primeActuelle: typeof data.primeActuelle === "number" && isNaN(data.primeActuelle) ? null : data.primeActuelle,
+    primeActuelle: cleanPrime,
     // Édition humaine du bloc contrat → la prime n'est plus « à vérifier » (auto 8).
     primeAVerifier: false,
-    // Édition humaine → on ne revendique plus la source GHC (check vert retiré, volet 3).
-    ghcFields: null,
-    ghcImportedAt: null,
+    // Ne vider les badges GHC que pour les champs modifiés (les autres restent GHC).
+    ghcFields: remainingGhc.length ? JSON.stringify(remainingGhc) : null,
+    ghcImportedAt: remainingGhc.length ? current?.ghcImportedAt ?? null : null,
     // Cliquet : édition humaine → les syncs Omni ne toucheront plus aux champs contrat.
     contratVerrouilleLe: new Date(),
   };
@@ -683,10 +700,66 @@ export async function updateEcheance(pipelineId: string, dateISO: string | null)
   await getSession();
   const d = dateISO ? new Date(dateISO) : null;
   if (dateISO && (!d || isNaN(d.getTime()))) return { success: false, error: "Date invalide" };
-  const p = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, select: { coproId: true } });
+  const p = await prisma.insurancePipeline.findUnique({ where: { id: pipelineId }, select: { coproId: true, copro: { select: { dateEcheance: true, ghcFields: true } } } });
   if (!p) return { success: false, error: "Dossier introuvable" };
-  await prisma.copro.update({ where: { id: p.coproId }, data: { dateEcheance: d, echeanceVerrouilleLe: new Date() } });
+  // Si l'échéance change vraiment → seul le badge GHC « echeance » saute (les autres restent).
+  const prevMs = p.copro.dateEcheance ? p.copro.dateEcheance.getTime() : null;
+  const echeanceChange = (d ? d.getTime() : null) !== prevMs;
+  const ghcData: { ghcFields?: string | null } = {};
+  if (echeanceChange && p.copro.ghcFields) {
+    let prev: string[] = []; try { prev = JSON.parse(p.copro.ghcFields) as string[]; } catch { prev = []; }
+    if (prev.includes("echeance")) { const rest = prev.filter((f) => f !== "echeance"); ghcData.ghcFields = rest.length ? JSON.stringify(rest) : null; }
+  }
+  await prisma.copro.update({ where: { id: p.coproId }, data: { dateEcheance: d, echeanceVerrouilleLe: new Date(), ...ghcData } });
   if (d) await prisma.insurancePipeline.update({ where: { id: pipelineId }, data: { anneeEcheance: d.getFullYear() } });
+  revalidatePath(`/pipeline/${pipelineId}`);
+  return { success: true };
+}
+
+// Édition manuelle de l'adresse de la copropriété. Pose le cliquet
+// adresseVerrouilleLe : l'adresse est un fait immeuble normalement réécrit à
+// chaque synchro Omni, or la valeur incomplète vient de Matera — sans le cliquet
+// la correction serait perdue la nuit suivante. Sert aux adresses que les
+// assureurs demandent de compléter (n° de rue manquant, faute de frappe).
+// Passer null retire le cliquet et rend la main à Omni.
+export async function updateAdresse(pipelineId: string, adresse: string | null) {
+  const session = await getSession();
+  const p = await prisma.insurancePipeline.findUnique({
+    where: { id: pipelineId },
+    select: { coproId: true, copro: { select: { adresse: true } } },
+  });
+  if (!p) return { success: false, error: "Dossier introuvable" };
+
+  const nouvelle = adresse?.trim() || null;
+  const ancienne = p.copro.adresse;
+
+  if (nouvelle === null) {
+    // Retour à la source : Omni reprend la main dès la prochaine synchro.
+    await prisma.copro.update({
+      where: { id: p.coproId },
+      data: { adresseVerrouilleLe: null },
+    });
+  } else {
+    await prisma.copro.update({
+      where: { id: p.coproId },
+      data: { adresse: nouvelle, adresseVerrouilleLe: new Date() },
+    });
+  }
+
+  if (nouvelle !== ancienne) {
+    await prisma.pipelineEvent.create({
+      data: {
+        pipelineId,
+        type: "action_manuelle",
+        description:
+          nouvelle === null
+            ? `Cliquet adresse retiré — l'adresse repassera sous contrôle Omni`
+            : `Adresse corrigée : "${ancienne ?? "(vide)"}" → "${nouvelle}"`,
+        createdBy: session.user.email!,
+      },
+    });
+  }
+
   revalidatePath(`/pipeline/${pipelineId}`);
   return { success: true };
 }
