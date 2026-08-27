@@ -29,7 +29,12 @@ const FUNNEL: CardData[] = [
     { key: "detecteur_reponses", name: "Détecteur de réponse des courtiers", automated: false },
     { key: "boucles_relances", name: "Boucles de relances RS", automated: false },
   ] },
-  { key: "devis_demandes", title: "Demandes de devis", deployed: false, tasks: [] },
+  { key: "devis_demandes", title: "Demandes de devis", deployed: false, tasks: [
+    { key: "recup_docs_infos", name: "Récupération des documents & informations", automated: false },
+    { key: "generation_excel_zip", name: "Génération de l'excel et du dossier zip", automated: false },
+    { key: "envoi_demandes_assureurs", name: "Envoi des demandes aux assureurs", automated: false },
+    { key: "detecteur_reponses_assureurs", name: "Détecteur de réponse des assureurs", automated: false },
+  ] },
   { key: "devis_compare", title: "Comparaison des devis", deployed: false, tasks: [] },
   { key: "validation_cs", title: "Validation du CS", deployed: false, tasks: [] },
   { key: "signe", title: "Signé", deployed: false, tasks: [] },
