@@ -45,6 +45,22 @@ export function Devis7Controls({ table }: { table: Table }) {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [previewRow, setPreviewRow] = useState<Row | null>(null);
+  const [fetchingCs, setFetchingCs] = useState(false);
+
+  async function fetchCsMembers() {
+    setFetchingCs(true);
+    try {
+      const res = await fetch("/api/devis7/fetch-cs-members", { method: "POST" });
+      const j = (await res.json().catch(() => ({}))) as { withMembers?: number; processed?: number; totalMembers?: number; materaConfigure?: boolean; error?: string };
+      if (!res.ok || j.materaConfigure === false) throw new Error(j.error ?? "Échec");
+      toast.success(`Membres du CS récupérés : ${j.withMembers ?? 0} dossier(s) renseigné(s) (${j.totalMembers ?? 0} membres) sur ${j.processed ?? 0} sans données.`);
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Échec");
+    } finally {
+      setFetchingCs(false);
+    }
+  }
 
   async function setStatut(pipelineId: string, field: "cs_statut" | "resiliation", value: string) {
     setBusy(pipelineId + field);
@@ -65,11 +81,19 @@ export function Devis7Controls({ table }: { table: Table }) {
 
   return (
     <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+      {/* VOLET 1 — Transmission des propositions au CS */}
+      <div style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 1</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Transmission des propositions au CS</span>
+      </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
         <div style={{ position: "relative", flex: "1 1 260px", maxWidth: 340 }}>
           <Search size={14} style={{ position: "absolute", left: 10, top: 9, color: "#A2A1AF" }} />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un dossier…" style={{ width: "100%", fontSize: 12, padding: "7px 10px 7px 30px", border: "1px solid #E8E8EC", borderRadius: 8 }} />
         </div>
+        <button onClick={fetchCsMembers} disabled={fetchingCs} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 8, padding: "7px 12px", cursor: fetchingCs ? "default" : "pointer" }}>
+          {fetchingCs ? <Loader2 size={14} className="animate-spin" /> : <Users size={14} />} Retrouver les membres du CS
+        </button>
         <span style={{ fontSize: 11.5, color: "#A2A1AF", marginLeft: "auto" }}>{rows.length}/{table.total} dossier{table.total > 1 ? "s" : ""}</span>
       </div>
 
