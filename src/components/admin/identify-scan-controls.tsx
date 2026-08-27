@@ -36,6 +36,7 @@ export function IdentifyScanControls({ total, history }: { total: number; histor
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState(false);
   const [histOpen, setHistOpen] = useState(false);
+  const [filter, setFilter] = useState<"tous" | "odr" | "rs" | "manquant">("tous");
 
   async function scan() {
     setScanning(true);
@@ -146,19 +147,42 @@ export function IdentifyScanControls({ total, history }: { total: number; histor
         </div>
       )}
 
-      {done && rows.length > 0 && (
-        <div className="rounded-lg border overflow-hidden" style={{ borderColor: "#EBEBF0" }}>
-          <div className="max-h-[420px] overflow-auto">
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-              <thead>
-                <tr style={{ textAlign: "left", color: "#8A8A99" }}>
-                  {["", "Copropriété", "Assureur", "Courtier", "N° contrat", "Verdict", "Raison"].map((h, i) => (
-                    <th key={i} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC", whiteSpace: "nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => {
+      {done && rows.length > 0 && (() => {
+        const FILTERS: Array<{ key: typeof filter; label: string; n: number }> = [
+          { key: "tous", label: "Tous", n: rows.length },
+          { key: "odr", label: "→ ODR", n: nOdr },
+          { key: "rs", label: "→ RS", n: nRs },
+          { key: "manquant", label: "Reste", n: nReste },
+        ];
+        const visible = filter === "tous" ? rows : rows.filter((r) => r.verdict === filter);
+        return (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key)}
+                className="text-xs font-semibold rounded-full px-3 py-1 border transition-colors"
+                style={filter === f.key
+                  ? { background: "#4E49FC", borderColor: "#4E49FC", color: "#fff" }
+                  : { background: "#fff", borderColor: "#E2E2EA", color: "#656576" }}
+              >
+                {f.label} ({f.n})
+              </button>
+            ))}
+          </div>
+          <div className="rounded-lg border overflow-hidden" style={{ borderColor: "#EBEBF0" }}>
+            <div className="max-h-[220px] overflow-auto">
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "#8A8A99" }}>
+                    {["", "Copropriété", "Assureur", "Courtier", "N° contrat", "Verdict", "Raison"].map((h, i) => (
+                      <th key={i} style={{ padding: "7px 10px", fontWeight: 600, position: "sticky", top: 0, background: "#FAFAFC", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((r) => {
                   const b = BADGE[r.verdict];
                   const routable = r.verdict !== "manquant";
                   return (
@@ -180,12 +204,17 @@ export function IdentifyScanControls({ total, history }: { total: number; histor
                       <td style={{ padding: "6px 10px", color: "#8A8A99" }}>{r.raison}</td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
+                  })}
+                  {visible.length === 0 && (
+                    <tr><td colSpan={7} style={{ padding: "10px", color: "#A2A1AF", textAlign: "center" }}>Aucun dossier dans ce filtre.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Historique des validations */}
       <div style={{ borderTop: "1px solid #F1F1F4", paddingTop: 10 }}>
