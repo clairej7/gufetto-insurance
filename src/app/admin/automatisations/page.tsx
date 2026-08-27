@@ -32,6 +32,8 @@ import { Devis5Controls } from "@/components/admin/devis5-controls";
 import { getExclusionState } from "@/lib/exclusions";
 import { ExclusionsPanel } from "@/components/admin/exclusions-panel";
 import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
+import { buildPiscine } from "@/lib/piscine";
+import { PiscinePanel } from "@/components/admin/piscine-panel";
 
 type Etat = "deploye" | "encours" | "attente";
 const ETATS: Record<Etat, { label: string; bg: string; fg: string; dot: string }> = {
@@ -132,6 +134,17 @@ export default async function AutomatisationsPage() {
   const docsStats = await getDocsStats();
   const exclusionState = await getExclusionState();
   const ghcReviewLabel: Record<string, string> = { assureur_divergent: "Assureur divergent", courtier_divergent: "Courtier divergent", numero_divergent: "N° divergent", echeance_divergente: "Échéance divergente", prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
+
+  // Volet 4 « Piscine » : read-model dérivé en direct des sources déjà chargées
+  // ci-dessus (aucune requête en plus) → synchro automatique avec les autos.
+  const piscineState = buildPiscine({
+    odrFlagged: odrBuckets.flatMap((b) => b.flagged.map((d) => ({ pipelineId: d.pipelineId, nom: d.nom, adresse: d.adresse, numeroContrat: d.numeroContrat }))),
+    rs4Holds: rs4Volet2.rows.map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, hold: r.hold, holdReason: r.holdReason })),
+    rs4Relances: rs4Volet3.rows.map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, relancePaused: r.relancePaused, devisMixup: r.devisMixup, replyConvUrl: r.replyConvUrl })),
+    csReplies: devis7Volet2.rows.map((r) => ({ pipelineId: r.pipelineId, nom: r.nom, adresse: r.adresse, replyKind: r.replyKind, proposedStatut: r.proposedStatut, snippet: r.snippet, convUrl: r.convUrl })),
+    ghcReviews: ghcReviews.map((rv) => ({ id: rv.id, coproNom: rv.coproNom, kind: rv.kind, message: rv.message })),
+    ghcReviewLabel,
+  });
   const eur0 = (n: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
 
   const automations: {
@@ -428,7 +441,10 @@ export default async function AutomatisationsPage() {
                     <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content", marginBottom: 10 }}>
                       Contrôles admin
                     </summary>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C", marginBottom: 4 }}>Volet 1 — Clean prime</div>
+                    <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 1</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Clean prime</span>
+                    </div>
                     <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
                       {eligibleAuto8} dossier{eligibleAuto8 > 1 ? "s" : ""} sans prime renseignée (copro active) — dont{" "}
                       <strong>{eligibleAuto8Untried}</strong> jamais tenté{eligibleAuto8Untried > 1 ? "s" : ""} (les runs ne traitent que ceux-là).
@@ -437,8 +453,8 @@ export default async function AutomatisationsPage() {
 
                     {/* Historique clean prime */}
                     {primeHistory.length > 0 && (
-                      <div style={{ marginTop: 16 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6 }}>Historique</div>
+                      <details style={{ marginTop: 16 }}>
+                        <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6, userSelect: "none", width: "fit-content" }}>Historique ({primeHistory.length})</summary>
                         <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 190, border: "1px solid #E8E8EC", borderRadius: 8 }}>
                           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                             <thead>
@@ -468,12 +484,15 @@ export default async function AutomatisationsPage() {
                             </tbody>
                           </table>
                         </div>
-                      </div>
+                      </details>
                     )}
 
                     {/* Volet 2 — Clean avis d'échéance (données périmées) */}
                     <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C", marginBottom: 4 }}>Volet 2 — Clean avis d'échéance (données périmées)</div>
+                      <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 2</span>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Clean avis d&apos;échéance (données périmées)</span>
+                      </div>
                       <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
                         Dossiers actifs dont l'échéance est dépassée depuis plus de 6 mois → donnée jugée périmée. La fiche affiche
                         « Donnée périmée » + « Vérifier la donnée » (recherche Front d'une info plus récente ; si trouvée → remplit,
@@ -493,8 +512,8 @@ export default async function AutomatisationsPage() {
 
                       {/* Historique clean avis d'échéance */}
                       {perimeHistory.length > 0 && (
-                        <div style={{ marginTop: 16 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6 }}>Historique</div>
+                        <details style={{ marginTop: 16 }}>
+                          <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6, userSelect: "none", width: "fit-content" }}>Historique ({perimeHistory.length})</summary>
                           <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 190, border: "1px solid #E8E8EC", borderRadius: 8 }}>
                             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                               <thead>
@@ -520,13 +539,16 @@ export default async function AutomatisationsPage() {
                               </tbody>
                             </table>
                           </div>
-                        </div>
+                        </details>
                       )}
                     </div>
 
                     {/* Volet 3 — Correction GetHumanCall (GHC) */}
                     <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#26262C", marginBottom: 4 }}>Volet 3 — Correction GetHumanCall (GHC)</div>
+                      <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 3</span>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Correction GetHumanCall (GHC)</span>
+                      </div>
                       <p style={{ fontSize: 13, color: "#656576", margin: "0 0 10px" }}>
                         Import des données nettoyées par les agents Get Human Call (appels aux assureurs). GHC = source prioritaire :
                         assureur / courtier / n° / prime / échéance sont écrasés (fill + correction), les dossiers en « Identification »
@@ -541,8 +563,8 @@ export default async function AutomatisationsPage() {
 
                       {/* Historique des imports GHC */}
                       {ghcHistory.length > 0 && (
-                        <div style={{ marginTop: 16 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6 }}>Historique des imports</div>
+                        <details style={{ marginTop: 16 }}>
+                          <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6, userSelect: "none", width: "fit-content" }}>Historique des imports ({ghcHistory.length})</summary>
                           <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 190, border: "1px solid #E8E8EC", borderRadius: 8 }}>
                             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                               <thead>
@@ -571,13 +593,13 @@ export default async function AutomatisationsPage() {
                               </tbody>
                             </table>
                           </div>
-                        </div>
+                        </details>
                       )}
 
                       {/* Rapport : divergences + cas particuliers à contrôler */}
                       {ghcReviews.length > 0 && (
-                        <div style={{ marginTop: 16 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6 }}>À contrôler — divergences & cas particuliers ({ghcReviews.length})</div>
+                        <details style={{ marginTop: 16 }}>
+                          <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#26262C", marginBottom: 6, userSelect: "none", width: "fit-content" }}>À contrôler — divergences &amp; cas particuliers ({ghcReviews.length})</summary>
                           <div style={{ overflowY: "auto", maxHeight: 220, border: "1px solid #E8E8EC", borderRadius: 8 }}>
                             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                               <thead>
@@ -602,8 +624,31 @@ export default async function AutomatisationsPage() {
                               </tbody>
                             </table>
                           </div>
-                        </div>
+                        </details>
                       )}
+                    </div>
+
+                    {/* Volet 4 — Piscine (cas nécessitant une intervention manuelle) */}
+                    <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                      <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 4</span>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Piscine — cas à traiter à la main</span>
+                      </div>
+                      <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
+                        Vue centralisée de tous les dossiers bloqués par une automatisation (digressions, retenues, incohérences).
+                        C&apos;est une vue <strong>doublon</strong> : les cas restent dans leur automatisation d&apos;origine. Traiter un cas
+                        ici (ou dans l&apos;auto d&apos;origine) le retire des deux vues automatiquement.
+                      </p>
+                      <PiscinePanel state={piscineState} />
+                    </div>
+
+                    {/* Volet 5 — Agent détection d'anomalies */}
+                    <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                      <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 5</span>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Agent de détection d&apos;anomalies</span>
+                      </div>
+                      <p style={{ fontSize: 13, color: "#8A8A99", margin: 0, fontStyle: "italic" }}>Contenu à venir.</p>
                     </div>
                   </details>
                 )}
