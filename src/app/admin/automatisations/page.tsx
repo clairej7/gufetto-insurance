@@ -25,6 +25,7 @@ import { getDevis5Lots } from "@/lib/devis5-excel";
 import { getDevis6TableData } from "@/lib/devis6";
 import { Devis6Controls } from "@/components/admin/devis6-controls";
 import { getDevis7TableData } from "@/lib/devis7";
+import { getDevis7Volet2, getDevis7CsHistory } from "@/lib/devis7-cs";
 import { Devis7Controls } from "@/components/admin/devis7-controls";
 import { getDocsStats } from "@/lib/rs-docs";
 import { Devis5Controls } from "@/components/admin/devis5-controls";
@@ -126,6 +127,8 @@ export default async function AutomatisationsPage() {
   const devis5Lots = await getDevis5Lots();
   const devis6Table = await getDevis6TableData();
   const devis7Table = await getDevis7TableData();
+  const devis7Volet2 = await getDevis7Volet2();
+  const devis7CsHistory = await getDevis7CsHistory();
   const docsStats = await getDocsStats();
   const exclusionState = await getExclusionState();
   const ghcReviewLabel: Record<string, string> = { assureur_divergent: "Assureur divergent", courtier_divergent: "Courtier divergent", numero_divergent: "N° divergent", echeance_divergente: "Échéance divergente", prime_divergente: "Prime divergente", prime_suspecte: "Prime suspecte", odr_conflit: "Conflit ODR", rs_vers_odr: "Devrait être ODR" };
@@ -415,7 +418,7 @@ export default async function AutomatisationsPage() {
                     <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace", color: "#A2A1AF", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0", userSelect: "none", width: "fit-content" }}>
                       Contrôles admin
                     </summary>
-                    <Devis7Controls table={devis7Table} />
+                    <Devis7Controls table={devis7Table} volet2={devis7Volet2} csHistory={devis7CsHistory} />
                   </details>
                 )}
 
