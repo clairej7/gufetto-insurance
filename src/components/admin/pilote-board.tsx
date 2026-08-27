@@ -1,17 +1,15 @@
 "use client";
 
 // Mode « Pilote » — MAQUETTE esthétique uniquement (à remplir/coder ensuite).
-// Vue façon n8n : enchaînement des grandes étapes du funnel + parcours ODR + Piscine.
+// Vue façon n8n : funnel principal + parcours ODR + Piscine (+ bouton de déploiement).
 // Chaque carte : titre / état (déployé = vert, non déployé = rouge) / % d'automatisation.
-// Placeholder : toutes les cartes en « Non déployé » + « 0% automatisé ».
-// Clic sur une carte → vue agrandie (recouvre le board) avec les infos + « à venir ».
+// Placeholder : tout en « Non déployé » + « 0% automatisé ». Clic → vue agrandie.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronRight, CircleDot, X } from "lucide-react";
 
 type CardData = { key: string; title: string; deployed: boolean; pct: number };
 
-// Ligne 1 — grandes étapes du funnel (6 cartes chaînées).
 const FUNNEL: CardData[] = [
   { key: "identification", title: "Identification", deployed: false, pct: 0 },
   { key: "rs", title: "Récupération du RS", deployed: false, pct: 0 },
@@ -21,17 +19,16 @@ const FUNNEL: CardData[] = [
   { key: "signe", title: "Signé", deployed: false, pct: 0 },
 ];
 
-// Ligne 2 — parcours ODR (3 cartes centrées, chaînées, branche depuis Identification).
 const ODR: CardData[] = [
   { key: "odr_en_cours", title: "ODR en cours", deployed: false, pct: 0 },
   { key: "odr_envoye", title: "ODR envoyé", deployed: false, pct: 0 },
   { key: "odr_accepte", title: "ODR accepté", deployed: false, pct: 0 },
 ];
 
-// Ligne 3 — Piscine (grande carte, flèche descendante autonome au-dessus).
 const PISCINE: CardData = { key: "piscine", title: "Piscine", deployed: false, pct: 0 };
 
 const GUTTER = 40;
+const CARD_H = 120;
 
 function StatusPill({ deployed, big }: { deployed: boolean; big?: boolean }) {
   const c = deployed
@@ -57,7 +54,7 @@ function FlowCard({ data, onClick }: { data: CardData; onClick: () => void }) {
   return (
     <div
       onClick={onClick}
-      style={{ background: "#fff", border: "1px solid #E4E4EA", borderRadius: 12, padding: "13px 14px", boxShadow: "0 1px 3px rgba(16,16,24,0.05)", display: "flex", flexDirection: "column", gap: 10, minHeight: 94, cursor: "pointer", transition: "box-shadow 0.15s ease, transform 0.15s ease" }}
+      style={{ background: "#fff", border: "1px solid #E4E4EA", borderRadius: 12, padding: "13px 14px", boxShadow: "0 1px 3px rgba(16,16,24,0.05)", display: "flex", flexDirection: "column", gap: 10, height: CARD_H, boxSizing: "border-box", cursor: "pointer", transition: "box-shadow 0.15s ease, transform 0.15s ease" }}
       onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 4px 14px rgba(78,73,252,0.16)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
       onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "0 1px 3px rgba(16,16,24,0.05)"; e.currentTarget.style.transform = "none"; }}
     >
@@ -67,8 +64,8 @@ function FlowCard({ data, onClick }: { data: CardData; onClick: () => void }) {
         </span>
         <span style={{ fontSize: 13.5, fontWeight: 700, color: "#26262C", lineHeight: 1.2 }}>{data.title}</span>
       </div>
-      {/* Méta empilée → alignement identique pour toutes les cartes quelle que soit la largeur. */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
+      {/* Méta poussée en bas → alignement + taille identiques pour toutes les cartes. */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6, marginTop: "auto" }}>
         <StatusPill deployed={data.deployed} />
         <PctBadge pct={data.pct} />
       </div>
@@ -76,7 +73,7 @@ function FlowCard({ data, onClick }: { data: CardData; onClick: () => void }) {
   );
 }
 
-// Petit chevron horizontal dans la gouttière à droite d'une carte (chaînage).
+// Chevron horizontal dans la gouttière à droite d'une carte (chaînage inter-cartes).
 function RightArrow() {
   return (
     <div style={{ position: "absolute", right: -(GUTTER - 6), top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", zIndex: 2 }}>
@@ -86,18 +83,53 @@ function RightArrow() {
   );
 }
 
-// Flèche verticale descendante autonome (au-dessus d'une carte).
-function DownArrow({ height = 30 }: { height?: number }) {
+// Entonnoir : les dossiers à traiter à la main se déversent dans la Piscine.
+function Funnel() {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-      <div style={{ width: 2, height, background: "#C7C7D2" }} />
-      <div style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: "8px solid #C7C7D2" }} />
+      <svg width="70" height="58" viewBox="0 0 70 58" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* petits « dossiers » qui tombent */}
+        <rect x="20" y="0" width="9" height="7" rx="1.5" fill="#C7C7D2" />
+        <rect x="41" y="0" width="9" height="7" rx="1.5" fill="#DADAE3" />
+        <rect x="31" y="3" width="9" height="7" rx="1.5" fill="#B9B9C6" />
+        {/* corps de l'entonnoir */}
+        <path d="M6 14 H64 L41 38 V50 H29 V38 Z" fill="#EEF0FF" stroke="#B9B9C6" strokeWidth="1.5" strokeLinejoin="round" />
+        {/* pointe vers la carte */}
+        <path d="M29 50 H41 L35 57 Z" fill="#B9B9C6" />
+      </svg>
     </div>
   );
 }
 
 export function PiloteBoard() {
   const [selected, setSelected] = useState<CardData | null>(null);
+
+  // Mesure des coins pour tracer la flèche diagonale Identification → ODR en cours.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const idRef = useRef<HTMLDivElement>(null);
+  const odrRef = useRef<HTMLDivElement>(null);
+  const [line, setLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+
+  useEffect(() => {
+    function measure() {
+      const w = wrapRef.current, a = idRef.current, b = odrRef.current;
+      if (!w || !a || !b) return;
+      const wr = w.getBoundingClientRect(), ar = a.getBoundingClientRect(), br = b.getBoundingClientRect();
+      setLine({
+        x1: ar.right - wr.left, // coin bas-droit d'Identification
+        y1: ar.bottom - wr.top,
+        x2: br.left - wr.left, // coin haut-gauche d'ODR en cours
+        y2: br.top - wr.top,
+      });
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  const diag = line
+    ? { dist: Math.hypot(line.x2 - line.x1, line.y2 - line.y1), ang: (Math.atan2(line.y2 - line.y1, line.x2 - line.x1) * 180) / Math.PI }
+    : null;
 
   const sectionLabel: React.CSSProperties = { fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#8A8A99", textTransform: "uppercase", marginBottom: 10 };
 
@@ -115,41 +147,46 @@ export function PiloteBoard() {
       }}
     >
       <div style={{ minWidth: 940 }}>
-        {/* Ligne 1 — funnel */}
-        <div style={sectionLabel}>Funnel principal</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", columnGap: GUTTER, alignItems: "stretch" }}>
-          {FUNNEL.map((c, i) => (
-            <div key={c.key} style={{ position: "relative", gridColumn: i + 1, gridRow: 1 }}>
-              <FlowCard data={c} onClick={() => setSelected(c)} />
-              {i < FUNNEL.length - 1 && <RightArrow />}
-            </div>
-          ))}
-        </div>
+        {/* Funnel + ODR dans un même conteneur relatif → la flèche diagonale les relie. */}
+        <div ref={wrapRef} style={{ position: "relative" }}>
+          {/* Ligne 1 — funnel */}
+          <div style={sectionLabel}>Funnel principal</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", columnGap: GUTTER, alignItems: "stretch" }}>
+            {FUNNEL.map((c, i) => (
+              <div key={c.key} ref={i === 0 ? idRef : undefined} style={{ position: "relative", gridColumn: i + 1, gridRow: 1 }}>
+                <FlowCard data={c} onClick={() => setSelected(c)} />
+                {i < FUNNEL.length - 1 && <RightArrow />}
+              </div>
+            ))}
+          </div>
 
-        {/* Ligne 2 — parcours ODR : branche en L depuis Identification (≈col 1) vers le centre */}
-        <div style={{ ...sectionLabel, marginTop: 30 }}>Parcours ODR</div>
-        <div style={{ position: "relative", paddingTop: 30 }}>
-          {/* Connecteur en L : descend sous Identification puis rejoint le centre du groupe ODR. */}
-          <div style={{ position: "absolute", top: 0, left: "6%", width: "44%", height: 22, borderLeft: "2px solid #C7C7D2", borderBottom: "2px solid #C7C7D2", borderBottomLeftRadius: 8 }} />
-          <div style={{ position: "absolute", top: 20, left: "50%", transform: "translateX(-50%)" }}><DownArrow height={8} /></div>
-          {/* Les 3 cartes ODR centrées, chaînées entre elles. */}
+          {/* Ligne 2 — parcours ODR (cartes centrées) */}
+          <div style={{ ...sectionLabel, marginTop: 34 }}>Parcours ODR</div>
           <div style={{ display: "flex", justifyContent: "center", gap: GUTTER + 8 }}>
             {ODR.map((c, i) => (
-              <div key={c.key} style={{ position: "relative", width: 190 }}>
+              <div key={c.key} ref={i === 0 ? odrRef : undefined} style={{ position: "relative", width: 190 }}>
                 <FlowCard data={c} onClick={() => setSelected(c)} />
                 {i < ODR.length - 1 && <RightArrow />}
               </div>
             ))}
           </div>
+
+          {/* Flèche diagonale Identification → ODR en cours (même style que les inter-cartes). */}
+          {diag && line && (
+            <div style={{ position: "absolute", left: line.x1, top: line.y1, width: diag.dist, height: 0, transform: `rotate(${diag.ang}deg)`, transformOrigin: "0 50%", display: "flex", alignItems: "center", pointerEvents: "none", zIndex: 3 }}>
+              <div style={{ flex: 1, height: 2, background: "#C7C7D2" }} />
+              <ChevronRight size={16} style={{ color: "#C7C7D2", marginLeft: -4 }} />
+            </div>
+          )}
         </div>
 
-        {/* Ligne 3 — Piscine : grande carte + flèche descendante autonome au-dessus */}
-        <div style={{ ...sectionLabel, marginTop: 30 }}>Piscine</div>
+        {/* Ligne 3 — Piscine : entonnoir + grande carte */}
+        <div style={{ ...sectionLabel, marginTop: 34 }}>Piscine</div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <DownArrow height={26} />
+          <Funnel />
           <div
             onClick={() => setSelected(PISCINE)}
-            style={{ width: "100%", maxWidth: 640, marginTop: 6, background: "#fff", border: "1px solid #E4E4EA", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 3px rgba(16,16,24,0.05)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, transition: "box-shadow 0.15s ease, transform 0.15s ease" }}
+            style={{ width: "100%", maxWidth: 640, marginTop: 4, background: "#fff", border: "1px solid #E4E4EA", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 3px rgba(16,16,24,0.05)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, transition: "box-shadow 0.15s ease, transform 0.15s ease" }}
             onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 4px 14px rgba(78,73,252,0.16)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "0 1px 3px rgba(16,16,24,0.05)"; e.currentTarget.style.transform = "none"; }}
           >
@@ -166,8 +203,24 @@ export function PiloteBoard() {
           </div>
         </div>
 
-        {/* Ligne 4 — encart dossiers exclus (sous la ligne de flottaison, vide pour l'instant) */}
-        <div style={{ ...sectionLabel, marginTop: 40 }}>Hors automatisation</div>
+        {/* Ligne 4 — bouton de déploiement (inactif pour l'instant) */}
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 40 }}>
+          <button
+            type="button"
+            onClick={() => { /* inactif — le mode Pilote n'est pas encore déployable */ }}
+            title="Bientôt"
+            style={{ display: "inline-flex", alignItems: "center", gap: 10, fontSize: 15, fontWeight: 700, color: "#fff", background: "#4E49FC", border: "none", borderRadius: 12, padding: "14px 30px", cursor: "pointer", boxShadow: "0 4px 14px rgba(78,73,252,0.22)", opacity: 0.55 }}
+          >
+            <CircleDot size={17} />
+            Déployer le mode Pilote
+          </button>
+        </div>
+
+        {/* Séparateur pointillé + distance avant l'encart Hors automatisation */}
+        <div style={{ borderTop: "2px dashed #D7D7DF", margin: "44px 0 28px" }} />
+
+        {/* Ligne 5 — encart dossiers exclus (vide pour l'instant) */}
+        <div style={sectionLabel}>Hors automatisation</div>
         <div style={{ background: "#fff", border: "1px dashed #D7D7DF", borderRadius: 12, padding: "20px 18px" }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: "#26262C", marginBottom: 4 }}>Dossiers exclus des automatisations</div>
           <p style={{ fontSize: 12.5, color: "#8A8A99", margin: 0 }}>À remplir — reprendra les mêmes infos que l&apos;encart de fin du mode Semi-Auto.</p>
