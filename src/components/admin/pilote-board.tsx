@@ -8,24 +8,32 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronRight, CircleDot, X } from "lucide-react";
 
-type CardData = { key: string; title: string; deployed: boolean; pct: number };
+// 1 tâche = 1 ligne dans la vue agrandie d'une carte. Le % d'automatisation de la carte
+// est DÉRIVÉ des tâches (automatisées / total) → il s'actualise tout seul dès qu'on
+// bascule une tâche en « automatisé ». Les tâches se renseignent carte par carte ;
+// pour l'instant toutes les listes sont vides → 0 %.
+type Task = { key: string; name: string; automated: boolean };
+type CardData = { key: string; title: string; deployed: boolean; tasks: Task[] };
+
+// % automatisé d'une carte = part des tâches automatisées (0 si aucune tâche).
+const pctOf = (c: CardData): number => (c.tasks.length ? Math.round((c.tasks.filter((t) => t.automated).length / c.tasks.length) * 100) : 0);
 
 const FUNNEL: CardData[] = [
-  { key: "identification", title: "Identification", deployed: false, pct: 0 },
-  { key: "rs", title: "Récupération du RS", deployed: false, pct: 0 },
-  { key: "devis_demandes", title: "Demandes de devis", deployed: false, pct: 0 },
-  { key: "devis_compare", title: "Comparaison des devis", deployed: false, pct: 0 },
-  { key: "validation_cs", title: "Validation du CS", deployed: false, pct: 0 },
-  { key: "signe", title: "Signé", deployed: false, pct: 0 },
+  { key: "identification", title: "Identification", deployed: false, tasks: [] },
+  { key: "rs", title: "Récupération du RS", deployed: false, tasks: [] },
+  { key: "devis_demandes", title: "Demandes de devis", deployed: false, tasks: [] },
+  { key: "devis_compare", title: "Comparaison des devis", deployed: false, tasks: [] },
+  { key: "validation_cs", title: "Validation du CS", deployed: false, tasks: [] },
+  { key: "signe", title: "Signé", deployed: false, tasks: [] },
 ];
 
 const ODR: CardData[] = [
-  { key: "odr_en_cours", title: "ODR en cours", deployed: false, pct: 0 },
-  { key: "odr_envoye", title: "ODR envoyé", deployed: false, pct: 0 },
-  { key: "odr_accepte", title: "ODR accepté", deployed: false, pct: 0 },
+  { key: "odr_en_cours", title: "ODR en cours", deployed: false, tasks: [] },
+  { key: "odr_envoye", title: "ODR envoyé", deployed: false, tasks: [] },
+  { key: "odr_accepte", title: "ODR accepté", deployed: false, tasks: [] },
 ];
 
-const PISCINE: CardData = { key: "piscine", title: "Piscine", deployed: false, pct: 0 };
+const PISCINE: CardData = { key: "piscine", title: "Piscine", deployed: false, tasks: [] };
 
 const GUTTER = 40;
 const CARD_H = 120;
@@ -37,6 +45,18 @@ function StatusPill({ deployed, big }: { deployed: boolean; big?: boolean }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: big ? "5px 12px" : "3px 9px", borderRadius: 999, fontSize: big ? 13 : 11, fontWeight: 600, background: c.bg, color: c.fg }}>
       <span style={{ width: big ? 7 : 6, height: big ? 7 : 6, borderRadius: "50%", background: c.dot }} />
+      {c.label}
+    </span>
+  );
+}
+
+function TaskStatus({ automated, big }: { automated: boolean; big?: boolean }) {
+  const c = automated
+    ? { bg: "#EFFBF2", fg: "#13762C", dot: "#34C759", label: "Automatisé" }
+    : { bg: "#FFF5F5", fg: "#CA1E12", dot: "#F26D6D", label: "Non automatisé" };
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: big ? "5px 12px" : "3px 9px", borderRadius: 999, fontSize: big ? 13 : 11.5, fontWeight: 600, background: c.bg, color: c.fg, whiteSpace: "nowrap" }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.dot }} />
       {c.label}
     </span>
   );
@@ -67,7 +87,7 @@ function FlowCard({ data, onClick }: { data: CardData; onClick: () => void }) {
       {/* Méta poussée en bas → alignement + taille identiques pour toutes les cartes. */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6, marginTop: "auto" }}>
         <StatusPill deployed={data.deployed} />
-        <PctBadge pct={data.pct} />
+        <PctBadge pct={pctOf(data)} />
       </div>
     </div>
   );
@@ -103,6 +123,8 @@ function Funnel() {
 
 export function PiloteBoard() {
   const [selected, setSelected] = useState<CardData | null>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const close = () => { setSelected(null); setSelectedTask(null); };
 
   // Mesure des coins pour tracer la flèche diagonale Identification → ODR en cours.
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -198,7 +220,7 @@ export function PiloteBoard() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <StatusPill deployed={PISCINE.deployed} />
-              <PctBadge pct={PISCINE.pct} />
+              <PctBadge pct={pctOf(PISCINE)} />
             </div>
           </div>
         </div>
@@ -230,37 +252,85 @@ export function PiloteBoard() {
       {/* Vue agrandie d'une carte (recouvre le board, pas tout l'écran) */}
       {selected && (
         <div
-          onClick={() => setSelected(null)}
+          onClick={close}
           style={{ position: "absolute", inset: 0, background: "rgba(251,251,253,0.82)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 32, zIndex: 20, borderRadius: 16 }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ position: "relative", width: "100%", maxWidth: 620, background: "#fff", border: "1px solid #E4E4EA", borderRadius: 16, boxShadow: "0 12px 40px rgba(16,16,24,0.16)", padding: "26px 28px" }}
+            style={{ position: "relative", width: "100%", maxWidth: 620, maxHeight: "100%", overflowY: "auto", background: "#fff", border: "1px solid #E4E4EA", borderRadius: 16, boxShadow: "0 12px 40px rgba(16,16,24,0.16)", padding: "26px 28px" }}
           >
             <button
-              onClick={() => setSelected(null)}
+              onClick={close}
               aria-label="Fermer"
-              style={{ position: "absolute", top: 14, right: 14, width: 32, height: 32, borderRadius: 8, border: "1px solid #E8E8EC", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#656576" }}
+              style={{ position: "absolute", top: 14, right: 14, width: 32, height: 32, borderRadius: 8, border: "1px solid #E8E8EC", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#656576", zIndex: 1 }}
             >
               <X size={16} />
             </button>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-              <span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, background: "#EEF0FF", alignItems: "center", justifyContent: "center" }}>
-                <CircleDot size={18} style={{ color: "#4E49FC" }} />
-              </span>
-              <span style={{ fontSize: 21, fontWeight: 700, color: "#26262C", letterSpacing: "-0.01em" }}>{selected.title}</span>
-            </div>
+            {!selectedTask ? (
+              /* Niveau 1 — détail de la carte : infos + liste des tâches */
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                  <span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, background: "#EEF0FF", alignItems: "center", justifyContent: "center" }}>
+                    <CircleDot size={18} style={{ color: "#4E49FC" }} />
+                  </span>
+                  <span style={{ fontSize: 21, fontWeight: 700, color: "#26262C", letterSpacing: "-0.01em" }}>{selected.title}</span>
+                </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
-              <StatusPill deployed={selected.deployed} big />
-              <PctBadge pct={selected.pct} big />
-            </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
+                  <StatusPill deployed={selected.deployed} big />
+                  <PctBadge pct={pctOf(selected)} big />
+                </div>
 
-            <div style={{ borderTop: "1px dashed #E8E8EC", paddingTop: 18 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#8A8A99", textTransform: "uppercase", marginBottom: 10 }}>Détail de l&apos;étape</div>
-              <p style={{ fontSize: 14, color: "#8A8A99", fontStyle: "italic", margin: 0 }}>À venir.</p>
-            </div>
+                <div style={{ borderTop: "1px dashed #E8E8EC", paddingTop: 18 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#8A8A99", textTransform: "uppercase", marginBottom: 12 }}>
+                    Tâches{selected.tasks.length ? ` (${selected.tasks.filter((t) => t.automated).length}/${selected.tasks.length} automatisées)` : ""}
+                  </div>
+                  {selected.tasks.length === 0 ? (
+                    <p style={{ fontSize: 14, color: "#8A8A99", fontStyle: "italic", margin: 0 }}>Aucune tâche renseignée pour l&apos;instant.</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {selected.tasks.map((t) => (
+                        <div
+                          key={t.key}
+                          onClick={() => setSelectedTask(t)}
+                          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "11px 14px", border: "1px solid #E8E8EC", borderRadius: 10, cursor: "pointer", background: "#fff", transition: "background 0.12s ease" }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "#FAFAFC"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; }}
+                        >
+                          <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>{t.name}</span>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                            <TaskStatus automated={t.automated} />
+                            <ChevronRight size={15} style={{ color: "#C7C7D2" }} />
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* Niveau 2 — détail d'une tâche (vide pour l'instant) */
+              <>
+                <button
+                  onClick={() => setSelectedTask(null)}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 16 }}
+                >
+                  <ChevronRight size={15} style={{ transform: "rotate(180deg)" }} /> Retour aux tâches
+                </button>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#8A8A99", textTransform: "uppercase", marginBottom: 8 }}>{selected.title}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22 }}>
+                  <span style={{ fontSize: 20, fontWeight: 700, color: "#26262C", letterSpacing: "-0.01em" }}>{selectedTask.name}</span>
+                  <TaskStatus automated={selectedTask.automated} big />
+                </div>
+                <div style={{ borderTop: "1px dashed #E8E8EC", paddingTop: 18 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#8A8A99", textTransform: "uppercase", marginBottom: 10 }}>Détail de la tâche</div>
+                  <p style={{ fontSize: 14, color: "#8A8A99", fontStyle: "italic", margin: 0 }}>
+                    À venir (ex. : nombre de dossiers qui se traitent automatiquement dans le temps une fois déployé).
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
