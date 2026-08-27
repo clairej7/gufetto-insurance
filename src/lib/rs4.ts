@@ -43,7 +43,7 @@ Bien cordialement,`,
     subject: "2ᵉ relance — Relevé de sinistralité — {adresse}",
     body: `Bonjour,
 
-Sauf erreur de notre part, notre demande de relevé de sinistralité pour la copropriété {adresse} (contrat n° {numeroContrat}) reste sans réponse à ce jour, malgré une première relance (demande initiale il y a {jours} jours).
+Sauf erreur de notre part, notre demande de relevé de sinistralité pour la copropriété {adresse} (contrat n° {numeroContrat}) reste sans réponse à ce jour, malgré une première relance.
 
 Ce document nous est indispensable pour poursuivre le dossier. Nous vous remercions de nous le faire parvenir sous 48 heures.
 
