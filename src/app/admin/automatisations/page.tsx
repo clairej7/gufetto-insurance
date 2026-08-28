@@ -161,6 +161,7 @@ export default async function AutomatisationsPage() {
   const GHC_STATIC_FILES: Record<string, string> = {
     v1: "/ghc/GHC-cleaning-contrats-assurance-v1.xlsx",
     v2: "/ghc/GHC-cleaning-contrats-assurance-v2.xlsx",
+    v7: "/ghc/GHC-cleaning-contrats-assurance-v7.xlsx",
   };
   const ghcHistoryHref = (h: { id: string; label: string; fileName: string | null }): string | null => {
     if (h.fileName && h.fileName.startsWith("ghc-imports/")) return `/api/ghc/download?run=${h.id}`;
@@ -582,7 +583,7 @@ export default async function AutomatisationsPage() {
                         Source courante : <strong>{ghcState.sourceRows}</strong> contrats en base
                         {" · "}<strong>{ghcState.dossiersAvecGhc}</strong> dossier{ghcState.dossiersAvecGhc > 1 ? "s" : ""} portent une donnée GHC.
                       </p>
-                      <GhcImportControls sourceRows={ghcState.sourceRows} currentVersionHref="/ghc/GHC-cleaning-contrats-assurance-v2.xlsx" />
+                      <GhcImportControls sourceRows={ghcState.sourceRows} currentVersionHref="/ghc/GHC-cleaning-contrats-assurance-v7.xlsx" />
 
                       {/* Historique des imports GHC */}
                       {ghcHistory.length > 0 && (

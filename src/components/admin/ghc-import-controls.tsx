@@ -87,6 +87,31 @@ export function GhcImportControls({ sourceRows, currentVersionHref }: { sourceRo
     }
   }
 
+  // Mode ÉCRASEMENT : corrige aussi les divergences (avec garde-fous), par tranches.
+  async function applyOverwrite() {
+    if (!confirm(`ÉCRASEMENT — appliquer GHC en corrigeant AUSSI les divergences ?\n\nRemplit les champs vides ET corrige les valeurs qui diffèrent (assureur/courtier/n°/prime/échéance), avec garde-fous :\n• jamais « Matera » en courtier ; assureur protégé sur les ODR et écrit seulement si partenaire sur les dossiers signés ;\n• jamais d'écrasement d'un Wakam ; échéance uniquement si plus récente ; dossiers clos morts ignorés.\n\nAction puissante — les données récupérées sont verrouillées contre Omni.`)) return;
+    setRunning(true); setDone(false); cancelRef.current = false;
+    setProgress({ processed: 0, total: 0 });
+    let offset = 0;
+    try {
+      while (!cancelRef.current) {
+        const res = await fetch("/api/ghc/apply-overwrite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offset, limit: 120 }) });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || `Erreur ${res.status}`);
+        offset += j.processed;
+        setProgress({ processed: offset, total: j.total });
+        if (j.done || j.processed === 0) break;
+      }
+      toast.success(`GHC écrasement appliqué : ${offset} dossiers corrigés.`);
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur écrasement GHC");
+      router.refresh();
+    } finally {
+      setRunning(false); setDone(true);
+    }
+  }
+
   const pct = progress.total > 0 ? Math.min(100, Math.round((progress.processed / progress.total) * 100)) : 0;
   const applyDisabled = running || !freshImport;
 
@@ -118,6 +143,18 @@ export function GhcImportControls({ sourceRows, currentVersionHref }: { sourceRo
         >
           <Wand2 className="h-4 w-4" />
           {running ? `Application… ${pct}%` : "Appliquer l'excel GHC aux dossiers"}
+        </Button>
+
+        <Button
+          onClick={applyOverwrite}
+          disabled={running}
+          variant="outline"
+          className="gap-1.5 w-fit"
+          style={{ borderColor: "#F0C36D", color: "#955804", background: "#FFFBF2" }}
+          title="Remplit ET corrige les divergences (avec garde-fous)"
+        >
+          <Wand2 className="h-4 w-4" />
+          {running ? `Application… ${pct}%` : "Appliquer avec écrasement (corrections)"}
         </Button>
 
         {running && (
