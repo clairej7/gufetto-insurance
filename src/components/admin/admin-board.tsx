@@ -156,36 +156,66 @@ type KpiFilter = "actifs" | "gagnes" | "perdus" | null;
 
 // Grand en-tête de section « Partie N — Titre » (sépare nettement les 5 parties).
 // Petit graphe (SVG) de l'évolution du taux de pénétration par semaine.
-function PenetrationChart({ series }: { series: { weekStart: string; taux: number; source: string }[] }) {
-  const W = 720, H = 200, PL = 40, PR = 16, PT = 16, PB = 34;
+function PenetrationChart({ series }: { series: { weekStart: string; taux: number; source: string; won?: number }[] }) {
+  const W = 720, H = 220, PL = 38, PR = 22, PT = 26, PB = 36;
   if (series.length < 2) return <div style={{ fontSize: 12.5, color: "#A2A1AF", fontStyle: "italic", padding: "20px 0" }}>Pas encore assez de points — la courbe se remplit chaque semaine.</div>;
+  const last = series[series.length - 1];
+  const prev = series[series.length - 2];
+  const delta = last.taux - prev.taux;
   const maxY = Math.min(100, Math.max(50, Math.ceil((Math.max(...series.map((s) => s.taux)) + 8) / 10) * 10));
   const x = (i: number) => PL + (i / (series.length - 1)) * (W - PL - PR);
   const y = (v: number) => PT + (1 - v / maxY) * (H - PT - PB);
-  const line = series.map((s, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(s.taux).toFixed(1)}`).join(" ");
+  // Courbe légèrement lissée (Catmull-Rom → Bézier) pour un rendu plus doux.
+  const pts = series.map((s, i) => [x(i), y(s.taux)] as const);
+  const line = pts.map((p, i) => {
+    if (i === 0) return `M ${p[0].toFixed(1)} ${p[1].toFixed(1)}`;
+    const p0 = pts[i - 1], p1 = p;
+    const cx = ((p0[0] + p1[0]) / 2).toFixed(1);
+    return `C ${cx} ${p0[1].toFixed(1)} ${cx} ${p1[1].toFixed(1)} ${p1[0].toFixed(1)} ${p1[1].toFixed(1)}`;
+  }).join(" ");
   const area = `${line} L ${x(series.length - 1).toFixed(1)} ${y(0).toFixed(1)} L ${x(0).toFixed(1)} ${y(0).toFixed(1)} Z`;
   const fmt = (iso: string) => { const d = new Date(iso); return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`; };
   const gridVals = [0, maxY / 2, maxY];
+  const step = Math.max(1, Math.ceil(series.length / 8)); // dégraisse les labels de dates
+  const showLabel = (i: number) => i === 0 || i === series.length - 1 || series[i].taux !== series[i - 1].taux;
+  const showDate = (i: number) => i === 0 || i === series.length - 1 || i % step === 0;
   return (
     <div style={{ overflowX: "auto" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
+        <span style={{ fontSize: 30, fontWeight: 800, color: "#4E49FC", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>{last.taux}%</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: delta > 0 ? "#13762C" : delta < 0 ? "#C0392B" : "#A2A1AF", background: delta > 0 ? "#E8F5EC" : delta < 0 ? "#FBEAE8" : "#F3F3F5", borderRadius: 999, padding: "3px 9px" }}>
+          {delta > 0 ? "▲ +" : delta < 0 ? "▼ " : ""}{delta === 0 ? "stable" : `${delta} pt`} cette semaine
+        </span>
+        <span style={{ fontSize: 11, color: "#A2A1AF" }}>· {last.won ? `${last.won} gagnés` : ""}</span>
+      </div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxWidth: W, minWidth: 520 }} role="img" aria-label="Évolution du taux de pénétration">
+        <defs>
+          <linearGradient id="penFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#4E49FC" stopOpacity="0.20" />
+            <stop offset="100%" stopColor="#4E49FC" stopOpacity="0.01" />
+          </linearGradient>
+        </defs>
         {gridVals.map((g) => (
           <g key={g}>
-            <line x1={PL} y1={y(g)} x2={W - PR} y2={y(g)} stroke="#EEE" />
+            <line x1={PL} y1={y(g)} x2={W - PR} y2={y(g)} stroke="#EEE" strokeDasharray={g === 0 ? undefined : "3 4"} />
             <text x={PL - 6} y={y(g) + 3} textAnchor="end" fontSize="10" fill="#A2A1AF">{Math.round(g)}%</text>
           </g>
         ))}
-        <path d={area} fill="#4E49FC" fillOpacity="0.08" />
+        <path d={area} fill="url(#penFill)" />
         <path d={line} fill="none" stroke="#4E49FC" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-        {series.map((s, i) => (
-          <g key={s.weekStart}>
-            <circle cx={x(i)} cy={y(s.taux)} r={i === series.length - 1 ? 5 : 3.5} fill={s.source === "manuel" ? "#8A87E8" : "#4E49FC"} stroke="#fff" strokeWidth="1.5" />
-            <text x={x(i)} y={y(s.taux) - 9} textAnchor="middle" fontSize="10.5" fontWeight={700} fill="#4E49FC">{s.taux}%</text>
-            <text x={x(i)} y={H - 12} textAnchor="middle" fontSize="9.5" fill="#A2A1AF">{fmt(s.weekStart)}</text>
-          </g>
-        ))}
+        {series.map((s, i) => {
+          const isLast = i === series.length - 1;
+          return (
+            <g key={s.weekStart}>
+              {isLast && <circle cx={x(i)} cy={y(s.taux)} r={9} fill="#4E49FC" fillOpacity={0.14} />}
+              <circle cx={x(i)} cy={y(s.taux)} r={isLast ? 5 : 3.2} fill={s.source === "manuel" ? "#8A87E8" : "#4E49FC"} stroke="#fff" strokeWidth="1.5" />
+              {showLabel(i) && <text x={x(i)} y={y(s.taux) - 10} textAnchor="middle" fontSize={isLast ? 12 : 10} fontWeight={700} fill={isLast ? "#4E49FC" : "#8A87E8"}>{s.taux}%</text>}
+              {showDate(i) && <text x={x(i)} y={H - 12} textAnchor="middle" fontSize="9.5" fill="#A2A1AF">{fmt(s.weekStart)}</text>}
+            </g>
+          );
+        })}
       </svg>
-      <div style={{ fontSize: 10.5, color: "#A2A1AF", marginTop: 2 }}>● <span style={{ color: "#8A87E8" }}>violet clair</span> = repère estimé (historique non enregistré) · ● bleu = mesuré</div>
+      <div style={{ fontSize: 10.5, color: "#A2A1AF", marginTop: 2 }}>1 point / semaine · ● <span style={{ color: "#8A87E8" }}>violet</span> = reconstruit (historique) · ● <span style={{ color: "#4E49FC" }}>bleu</span> = mesuré (semaine en cours, auto)</div>
     </div>
   );
 }
@@ -341,7 +371,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
   const mondayNowIso = (() => { const x = new Date(); const day = (x.getUTCDay() + 6) % 7; x.setUTCDate(x.getUTCDate() - day); x.setUTCHours(0, 0, 0, 0); return x.toISOString(); })();
   const penSeries = (() => {
     const map = new Map(penetrationSeries.map((p) => [p.weekStart, { ...p }]));
-    map.set(mondayNowIso, { weekStart: mondayNowIso, taux: tauxSignature, source: "auto" });
+    map.set(mondayNowIso, { weekStart: mondayNowIso, taux: tauxSignature, source: "auto", won: wonPipelines.length });
     return [...map.values()].sort((a, b) => (a.weekStart < b.weekStart ? -1 : 1));
   })();
 
