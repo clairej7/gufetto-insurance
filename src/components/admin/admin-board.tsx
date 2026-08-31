@@ -234,9 +234,9 @@ function Metric({ n, label, c }: { n: number; label: string; c: string }) {
   );
 }
 
-function PartTitle({ n, title, first }: { n: number; title: string; first?: boolean }) {
+function PartTitle({ n, title, first, mt }: { n: number; title: string; first?: boolean; mt?: number }) {
   return (
-    <div id={`partie-${n}`} style={{ marginTop: first ? 0 : 30, scrollMarginTop: 72, display: "flex", alignItems: "center", gap: 12 }}>
+    <div id={`partie-${n}`} style={{ marginTop: first ? 0 : (mt ?? 30), scrollMarginTop: 72, display: "flex", alignItems: "center", gap: 12 }}>
       <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.8, color: "#fff", background: "#4E49FC", borderRadius: 999, padding: "5px 13px", whiteSpace: "nowrap" }}>PARTIE {n}</span>
       <span style={{ fontSize: 16, fontWeight: 800, color: "#26262C", letterSpacing: "-0.01em", whiteSpace: "nowrap" }}>{title}</span>
       <span style={{ flex: 1, height: 2, background: "#ECECF3", borderRadius: 2 }} />
@@ -643,7 +643,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
         </div>
       </div>
 
-      <PartTitle n={2} title="Revenus — montants en jeu" />
+      <PartTitle n={2} title="Revenus — montants en jeu" mt={56} />
 
       {/* ── Revenus — montants en jeu ── */}
       <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
