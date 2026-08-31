@@ -491,3 +491,37 @@ export async function getDevisFlowDaily(): Promise<{ rows: DevisFlowDay[]; deman
   }
   return { rows, demandesTotal: firstSent.size, recusTotal: firstRecu.size };
 }
+
+// ─── Graphe « Flux des propositions au CS — par jour » ───────────────────────
+// Miroir des flux RS/devis, côté conseil syndical (Auto 7). Par jour et PAR DOSSIER :
+//   - sent  = propositions transmises au CS (1er event devis7_cs_sent du dossier) ;
+//   - recus = propositions acceptées par le CS (1er event devis7_cs_statut value=accepte).
+// Taux d'acceptation = acceptées / transmises.
+export async function getPropositionsFlowDaily(): Promise<{ rows: DevisFlowDay[]; demandesTotal: number; recusTotal: number }> {
+  const [sentEv, statutEv] = await Promise.all([
+    prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "devis7_cs_sent" } }, select: { pipelineId: true, createdAt: true } }),
+    prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "devis7_cs_statut" } }, select: { pipelineId: true, createdAt: true, metadata: true }, orderBy: { createdAt: "asc" } }),
+  ]);
+  const firstSent = new Map<string, Date>();
+  for (const e of sentEv) { const cur = firstSent.get(e.pipelineId); if (!cur || e.createdAt < cur) firstSent.set(e.pipelineId, e.createdAt); }
+  const firstAccept = new Map<string, Date>();
+  for (const e of statutEv) {
+    const v = (e.metadata as { value?: string } | null)?.value;
+    if (v !== "accepte") continue;
+    const cur = firstAccept.get(e.pipelineId); if (!cur || e.createdAt < cur) firstAccept.set(e.pipelineId, e.createdAt);
+  }
+  const dayKey = (d: Date) => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris" }).format(d);
+  const sentBy = new Map<string, number>(); const recuBy = new Map<string, number>();
+  for (const d of firstSent.values()) sentBy.set(dayKey(d), (sentBy.get(dayKey(d)) ?? 0) + 1);
+  for (const d of firstAccept.values()) recuBy.set(dayKey(d), (recuBy.get(dayKey(d)) ?? 0) + 1);
+  const all = [...sentBy.keys(), ...recuBy.keys()].sort();
+  if (!all.length) return { rows: [], demandesTotal: 0, recusTotal: 0 };
+  const start = new Date(all[0] + "T12:00:00Z");
+  const end = new Date(dayKey(new Date()) + "T12:00:00Z");
+  const rows: DevisFlowDay[] = [];
+  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    const k = d.toISOString().slice(0, 10);
+    rows.push({ date: k, label: `${k.slice(8, 10)}/${k.slice(5, 7)}`, sent: sentBy.get(k) ?? 0, recus: recuBy.get(k) ?? 0 });
+  }
+  return { rows, demandesTotal: firstSent.size, recusTotal: firstAccept.size };
+}

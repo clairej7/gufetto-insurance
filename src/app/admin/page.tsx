@@ -106,8 +106,9 @@ export default async function AdminPage() {
   const { getRsFlowDaily } = await import("@/lib/rs4");
   const rsFlow = await getRsFlowDaily();
   const penetrationSeries = await getPenetrationSeries();
-  const { getDevisFlowDaily } = await import("@/lib/devis5");
+  const { getDevisFlowDaily, getPropositionsFlowDaily } = await import("@/lib/devis5");
   const devisFlow = await getDevisFlowDaily();
+  const propositionsFlow = await getPropositionsFlowDaily();
   const { getExcludedCoproIds } = await import("@/lib/exclusions");
   const exclCoproIds = await getExcludedCoproIds();
   const excludedCount = await prisma.insurancePipeline.count({ where: { coproId: { in: exclCoproIds }, copro: { archivedAt: null } } });
@@ -161,12 +162,6 @@ export default async function AdminPage() {
     <div className="min-h-screen flex flex-col">
       <Navbar user={user} />
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold" style={{ color: "#26262C", letterSpacing: "-0.02em" }}>Tracking</h1>
-          <p className="text-sm mt-1" style={{ color: "#656576" }}>
-            {pipelines.length + lostPipelines.length} dossiers · {gestionnaires.length} gestionnaires
-          </p>
-        </div>
         <AdminBoard
           pipelines={pipelines as Parameters<typeof AdminBoard>[0]["pipelines"]}
           penetrationSeries={penetrationSeries}
@@ -187,6 +182,7 @@ export default async function AdminPage() {
           cs={{ transmises: csTransmises, aTransmettre: csATransmettre, acceptees: csAcceptees, refusees: csRefusees }}
           rsFlow={rsFlow}
           devisFlow={devisFlow}
+          propositionsFlow={propositionsFlow}
           excludedCount={excludedCount}
         />
       </main>

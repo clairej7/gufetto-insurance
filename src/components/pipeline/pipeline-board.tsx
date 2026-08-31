@@ -422,18 +422,18 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
         value={selectedGestionnaire}
         onChange={setSelectedGestionnaire}
         renderOption={(e) => gestionnaireLabel(e, gestioNomByEmail.get(e))}
-        width={150}
+        width={140}
       />
       <MultiSelectFilter
-        placeholder="Toutes les étapes"
+        placeholder="Étapes"
         options={["identifie", "odr_en_cours", "odr_envoye", "rs_en_cours", "devis_demandes", "devis_recus", "envoye_cs", "odr_accepte", "odr_en_vigueur", "contrat_signe"]}
         value={selectedStatut}
         onChange={setSelectedStatut}
         renderOption={(s) => STATUT_TAG[s]?.label ?? s}
-        width={160}
+        width={140}
       />
-      <select value={selectedEcheance} onChange={(e) => setSelectedEcheance(e.target.value)} style={selectStyle}>
-        <option value="all">Toutes les échéances</option>
+      <select value={selectedEcheance} onChange={(e) => setSelectedEcheance(e.target.value)} style={{ ...selectStyle, width: 140 }}>
+        <option value="all">Échéances</option>
         <option value="lt2">{"< 2 mois"}</option>
         <option value="bt2_6">2 à 6 mois</option>
         <option value="gt6">{"> 6 mois"}</option>
@@ -445,8 +445,8 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
         onChange={setSelectedAssureur}
         width={140}
       />
-      <select value={selectedPrime} onChange={(e) => setSelectedPrime(e.target.value)} style={selectStyle}>
-        <option value="all">Toutes les primes</option>
+      <select value={selectedPrime} onChange={(e) => setSelectedPrime(e.target.value)} style={{ ...selectStyle, width: 140 }}>
+        <option value="all">Primes</option>
         <option value="lt10">{"Prime < 10 k€"}</option>
         <option value="gt10">{"Prime > 10 k€ 👑"}</option>
       </select>

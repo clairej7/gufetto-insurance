@@ -104,7 +104,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
                     )}
                   >
                     <Umbrella className="h-4 w-4" />
-                    Courtage Churn
+                    Churn
                   </Link>
                   <Link
                     href="/admin/activite"

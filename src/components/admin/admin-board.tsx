@@ -70,6 +70,8 @@ interface AdminBoardProps {
   rsFlow: { date: string; label: string; sent: number; relances: number; recus: number }[];
   // Flux devis par jour (demandes vs devis reçus) + totaux pour le taux de réception.
   devisFlow: { rows: { date: string; label: string; sent: number; recus: number }[]; demandesTotal: number; recusTotal: number };
+  // Flux propositions au CS par jour (transmises vs acceptées) + totaux pour le taux d'acceptation.
+  propositionsFlow: { rows: { date: string; label: string; sent: number; recus: number }[]; demandesTotal: number; recusTotal: number };
   // Nb de dossiers exclus des automatisations (à re-traiter plus tard).
   excludedCount: number;
 }
@@ -156,8 +158,8 @@ type KpiFilter = "actifs" | "gagnes" | "perdus" | null;
 
 // Grand en-tête de section « Partie N — Titre » (sépare nettement les 5 parties).
 // Petit graphe (SVG) de l'évolution du taux de pénétration par semaine.
-function PenetrationChart({ series }: { series: { weekStart: string; taux: number; source: string; won?: number }[] }) {
-  const W = 720, H = 220, PL = 38, PR = 22, PT = 26, PB = 36;
+function PenetrationChart({ series, showHeader = true, height = 220 }: { series: { weekStart: string; taux: number; source: string; won?: number }[]; showHeader?: boolean; height?: number }) {
+  const W = 720, H = height, PL = 38, PR = 22, PT = 26, PB = 36;
   if (series.length < 2) return <div style={{ fontSize: 12.5, color: "#A2A1AF", fontStyle: "italic", padding: "20px 0" }}>Pas encore assez de points — la courbe se remplit chaque semaine.</div>;
   const last = series[series.length - 1];
   const prev = series[series.length - 2];
@@ -181,13 +183,15 @@ function PenetrationChart({ series }: { series: { weekStart: string; taux: numbe
   const showDate = (i: number) => i === 0 || i === series.length - 1 || i % step === 0;
   return (
     <div style={{ overflowX: "auto" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
-        <span style={{ fontSize: 30, fontWeight: 800, color: "#4E49FC", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>{last.taux}%</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: delta > 0 ? "#13762C" : delta < 0 ? "#C0392B" : "#A2A1AF", background: delta > 0 ? "#E8F5EC" : delta < 0 ? "#FBEAE8" : "#F3F3F5", borderRadius: 999, padding: "3px 9px" }}>
-          {delta > 0 ? "▲ +" : delta < 0 ? "▼ " : ""}{delta === 0 ? "stable" : `${delta} pt`} cette semaine
-        </span>
-        <span style={{ fontSize: 11, color: "#A2A1AF" }}>· {last.won ? `${last.won} gagnés` : ""}</span>
-      </div>
+      {showHeader && (
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
+          <span style={{ fontSize: 30, fontWeight: 800, color: "#4E49FC", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>{last.taux}%</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: delta > 0 ? "#13762C" : delta < 0 ? "#C0392B" : "#A2A1AF", background: delta > 0 ? "#E8F5EC" : delta < 0 ? "#FBEAE8" : "#F3F3F5", borderRadius: 999, padding: "3px 9px" }}>
+            {delta > 0 ? "▲ +" : delta < 0 ? "▼ " : ""}{delta === 0 ? "stable" : `${delta} pt`} cette semaine
+          </span>
+          <span style={{ fontSize: 11, color: "#A2A1AF" }}>· {last.won ? `${last.won} gagnés` : ""}</span>
+        </div>
+      )}
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxWidth: W, minWidth: 520 }} role="img" aria-label="Évolution du taux de pénétration">
         <defs>
           <linearGradient id="penFill" x1="0" y1="0" x2="0" y2="1">
@@ -230,11 +234,12 @@ function PartTitle({ n, title, first }: { n: number; title: string; first?: bool
   );
 }
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRelances, rsRecus, contratsRecus, devisMailsEnvoyes, devisAReclamer, odrByInsurer, devisRecus, devis6, cs, rsFlow, devisFlow, excludedCount, penetrationSeries = [] }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRelances, rsRecus, contratsRecus, devisMailsEnvoyes, devisAReclamer, odrByInsurer, devisRecus, devis6, cs, rsFlow, devisFlow, propositionsFlow, excludedCount, penetrationSeries = [] }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
   const [penView, setPenView] = useState<"chiffres" | "progression">("chiffres");
+  const [fluxView, setFluxView] = useState<"rs" | "devis" | "propositions">("rs");
 
   // Libellé d'affichage par email (nom Omni si présent, sinon dérivation).
   const gestioNomByEmail = new Map<string, string | null>();
@@ -374,6 +379,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
     map.set(mondayNowIso, { weekStart: mondayNowIso, taux: tauxSignature, source: "auto", won: wonPipelines.length });
     return [...map.values()].sort((a, b) => (a.weekStart < b.weekStart ? -1 : 1));
   })();
+  const penLast = penSeries[penSeries.length - 1];
+  const penDelta = penSeries.length >= 2 ? penLast.taux - penSeries[penSeries.length - 2].taux : 0;
 
   // Totaux de complétude des primes (tous stades confondus).
   const primeTotalDossiers = primeStages.reduce((a, s) => a + s.total, 0);
@@ -450,30 +457,34 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 32, fontFamily: FONT_SANS }}>
 
-      {/* ── Filtres ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <MultiSelectFilter
-          placeholder="Tous les gestionnaires"
-          options={gestionnaires}
-          value={selectedGestionnaires}
-          onChange={setSelectedGestionnaires}
-          renderOption={(e) => gestionnaireLabel(e, gestioNomByEmail.get(e))}
-          width={200}
-        />
-        <select value={selectedEcheance} onChange={(e) => setSelectedEcheance(e.target.value)} style={selectStyle}>
-          <option value="all">Toutes les échéances</option>
-          <option value="lt2">{"< 2 mois"}</option>
-          <option value="bt2_6">2 à 6 mois</option>
-          <option value="gt6">{"> 6 mois"}</option>
-        </select>
-        {selectedGestionnaires.length > 0 && (() => {
-          const totalDossiers = fp.length + lostCount; // actifs + perdus, comme dans Pipeline
-          return (
-            <span style={{ fontSize: 12, color: "#656576" }}>
-              {totalDossiers} dossier{totalDossiers > 1 ? "s" : ""}
-            </span>
-          );
-        })()}
+      {/* ── En-tête « Tracking » + compteurs + filtres (une seule ligne) ── */}
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: "#26262C", letterSpacing: "-0.02em", margin: 0, lineHeight: 1.1 }}>Tracking</h1>
+          <div style={{ fontSize: 13, color: "#656576", marginTop: 3 }}>
+            {pipelines.length + lostPipelines.length} dossiers · {gestionnaires.length} gestionnaires
+            {selectedGestionnaires.length > 0 && (() => {
+              const totalDossiers = fp.length + lostCount;
+              return <> · <strong style={{ color: "#26262C" }}>{totalDossiers}</strong> filtré{totalDossiers > 1 ? "s" : ""}</>;
+            })()}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <MultiSelectFilter
+            placeholder="Gestionnaire"
+            options={gestionnaires}
+            value={selectedGestionnaires}
+            onChange={setSelectedGestionnaires}
+            renderOption={(e) => gestionnaireLabel(e, gestioNomByEmail.get(e))}
+            width={180}
+          />
+          <select value={selectedEcheance} onChange={(e) => setSelectedEcheance(e.target.value)} style={{ ...selectStyle, width: 150 }}>
+            <option value="all">Échéances</option>
+            <option value="lt2">{"< 2 mois"}</option>
+            <option value="bt2_6">2 à 6 mois</option>
+            <option value="gt6">{"> 6 mois"}</option>
+          </select>
+        </div>
       </div>
 
       <PartTitle n={1} title="État des lieux du pipe" first />
@@ -516,28 +527,39 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
       </div>
 
       {/* ── Taux de pénétration (= taux de signature) ── */}
-      <div style={{ background: "#F5F5FF", border: "1.5px solid #4E49FC", borderRadius: 10, padding: "16px 26px 20px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
-        {/* Double bouton Chiffres / Progression */}
-        <div style={{ display: "inline-flex", background: "#E7E7FB", borderRadius: 8, padding: 3, marginBottom: 16 }}>
-          {(["chiffres", "progression"] as const).map((v) => (
-            <button key={v} onClick={() => setPenView(v)}
-              style={{ fontSize: 12.5, fontWeight: 700, padding: "5px 14px", borderRadius: 6, border: "none", cursor: "pointer",
-                background: penView === v ? "#4E49FC" : "transparent", color: penView === v ? "#fff" : "#4E49FC" }}>
-              {v === "chiffres" ? "Chiffres" : "Progression"}
-            </button>
-          ))}
+      <div style={{ background: "#F5F5FF", border: "1.5px solid #4E49FC", borderRadius: 10, padding: "16px 26px 18px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
+        {/* Ligne du haut : toggle Chiffres/Progression + (en Progression) le % + delta à droite */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+          <div style={{ display: "inline-flex", background: "#E7E7FB", borderRadius: 8, padding: 3 }}>
+            {(["chiffres", "progression"] as const).map((v) => (
+              <button key={v} onClick={() => setPenView(v)}
+                style={{ fontSize: 12.5, fontWeight: 700, padding: "5px 14px", borderRadius: 6, border: "none", cursor: "pointer",
+                  background: penView === v ? "#4E49FC" : "transparent", color: penView === v ? "#fff" : "#4E49FC" }}>
+                {v === "chiffres" ? "Chiffres" : "Progression"}
+              </button>
+            ))}
+          </div>
+          {penView === "progression" && (
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+              <span style={{ fontSize: 26, fontWeight: 800, color: "#4E49FC", letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>{penLast.taux}%</span>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: penDelta > 0 ? "#13762C" : penDelta < 0 ? "#C0392B" : "#8E8CA8", background: penDelta > 0 ? "#E8F5EC" : penDelta < 0 ? "#FBEAE8" : "#EDEDF6", borderRadius: 999, padding: "3px 9px" }}>
+                {penDelta > 0 ? "▲ +" : penDelta < 0 ? "▼ " : ""}{penDelta === 0 ? "stable" : `${penDelta} pt`} cette semaine
+              </span>
+              <span style={{ fontSize: 11, color: "#8E8CA8" }}>· {penLast.won ?? wonPipelines.length} gagnés</span>
+            </div>
+          )}
         </div>
 
         {penView === "chiffres" ? (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 32 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-              <span style={{ fontSize: 36, fontWeight: 800, color: "#4E49FC", letterSpacing: "-0.03em", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{tauxSignature}%</span>
+          <div style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: 0, flexWrap: "wrap", minHeight: 120 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 18, justifyContent: "center", flex: "1 1 300px", padding: "0 28px" }}>
+              <span style={{ fontSize: 44, fontWeight: 800, color: "#4E49FC", letterSpacing: "-0.03em", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{tauxSignature}%</span>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Taux de pénétration</div>
                 <div style={{ fontSize: 12.5, color: "#656576", marginTop: 2 }}>{wonPipelines.length} gagnés sur {realTotal} dossiers</div>
               </div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 14, borderLeft: "1px solid #C7C5F5", paddingLeft: 28, maxWidth: 380 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, borderLeft: "1px solid #C7C5F5", paddingLeft: 28, flex: "1 1 300px", maxWidth: 420 }}>
               <span style={{ fontSize: 26, fontWeight: 700, color: "#8A87E8", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{tauxTheorique}%</span>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600, fontStyle: "italic", color: "#8A87E8" }}>Taux de pénétration théorique</div>
@@ -546,10 +568,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
             </div>
           </div>
         ) : (
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#26262C", marginBottom: 6 }}>Évolution du taux de pénétration</div>
-            <PenetrationChart series={penSeries} />
-          </div>
+          <PenetrationChart series={penSeries} showHeader={false} height={150} />
         )}
       </div>
 
@@ -599,8 +618,9 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
 
       {/* ── Revenus — montants en jeu ── */}
       <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Revenus — montants en jeu</span>
+          <span style={{ fontSize: 14, color: "#656576" }}>Montants en jeu = <strong style={{ fontSize: 17, color: "#4E49FC", fontVariantNumeric: "tabular-nums" }}>{fmtEur(primeActifs + primeGagnes + primePerdus)}</strong></span>
         </div>
 
         {/* Sous-partie 1 : montant (somme des primes) par étape, mêmes 4 zones */}
@@ -735,24 +755,33 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
           ))}
         </div>
 
-        {/* Mini-pipeline ODR — présenté en kanban (colonnes à liseré coloré) */}
-        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginBottom: 10 }}>Pipeline ODR — nombre · montant en jeu · ARR potentiel (×0,25)</div>
-        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
-          {odrStages.map(st => {
-            const prime = sumPrime(st.rows);
-            return (
-              <div key={st.key} style={{ flex: "1 1 0", minWidth: 150, border: "1px solid #E8E8EC", borderTop: `3px solid ${st.color}`, borderRadius: 8, padding: "12px 14px", background: "#fff" }}>
-                <div style={{ fontSize: 11, fontWeight: 600, fontFamily: FONT_MONO, textTransform: "uppercase", letterSpacing: "0.04em", color: st.color, marginBottom: 8 }}>{st.label}</div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{st.rows.length}</div>
-                <div style={{ fontSize: 11, color: "#656576", marginBottom: 8 }}>dossiers</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#26262C" }}>{prime > 0 ? fmtEurC(prime) : "—"}</div>
-                <div style={{ fontSize: 10.5, color: "#A2A1AF" }}>en jeu</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: st.color, marginTop: 4 }}>{prime > 0 ? fmtEurC(prime * 0.25) : "—"}</div>
-                <div style={{ fontSize: 10.5, color: "#A2A1AF" }}>ARR potentiel</div>
-              </div>
-            );
-          })}
-        </div>
+        {/* Mini-pipeline ODR — barres proportionnelles au montant en jeu */}
+        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginBottom: 12 }}>Pipeline ODR — barres = montant en jeu · nombre · ARR potentiel (×0,25)</div>
+        {(() => {
+          const primes = odrStages.map((st) => sumPrime(st.rows));
+          const maxP = Math.max(1, ...primes);
+          const BH = 120;
+          return (
+            <div style={{ display: "flex", gap: 16, alignItems: "flex-end" }}>
+              {odrStages.map((st, i) => {
+                const prime = primes[i];
+                const h = prime > 0 ? Math.max(Math.round((prime / maxP) * BH), 6) : 0;
+                return (
+                  <div key={st.key} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#26262C", marginBottom: 5, fontVariantNumeric: "tabular-nums" }}>{prime > 0 ? fmtEurC(prime) : "—"}</span>
+                    <div style={{ width: "100%", maxWidth: 130, height: BH, display: "flex", alignItems: "flex-end" }}>
+                      <div style={{ width: "100%", height: h, background: st.color, borderRadius: "5px 5px 0 0", opacity: prime > 0 ? 1 : 0.3, transition: "height 300ms ease" }} />
+                    </div>
+                    <div style={{ width: "100%", height: 1, background: "#E8E8EC", margin: "0 0 7px" }} />
+                    <span style={{ fontSize: 11.5, fontWeight: 600, fontFamily: FONT_MONO, textTransform: "uppercase", letterSpacing: "0.03em", color: st.color, textAlign: "center", lineHeight: "14px" }}>{st.label}</span>
+                    <span style={{ fontSize: 19, fontWeight: 700, color: "#26262C", lineHeight: 1.1, marginTop: 5, fontVariantNumeric: "tabular-nums" }}>{st.rows.length}<span style={{ fontSize: 10.5, color: "#656576", fontWeight: 500 }}> dossiers</span></span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: st.color, marginTop: 3 }}>{prime > 0 ? `${fmtEurC(prime * 0.25)} ARR` : "—"}</span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
       </div>
 
       <PartTitle n={4} title="Suivi des changements d'assureur" />
@@ -769,12 +798,12 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
         </div>
 
         {/* Pipeline changement d'assureur — kanban, 3 cartes par ligne */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gridAutoRows: "1fr", gap: 12 }}>
           {classicStages.map(st => {
             const prime = sumPrime(st.rows);
             return (
-              <div key={st.key} style={{ border: "1px solid #E8E8EC", borderTop: `3px solid ${st.color}`, borderRadius: 8, padding: "11px 14px", background: "#fff" }}>
-                <div style={{ fontSize: 11.5, fontWeight: 600, fontFamily: FONT_MONO, textTransform: "uppercase", letterSpacing: "0.04em", color: st.color, marginBottom: 8 }}>{st.label}</div>
+              <div key={st.key} style={{ border: "1px solid #E8E8EC", borderTop: `3px solid ${st.color}`, borderRadius: 8, padding: "10px 14px", background: "#fff" }}>
+                <div style={{ fontSize: 11.5, fontWeight: 600, fontFamily: FONT_MONO, textTransform: "uppercase", letterSpacing: "0.04em", color: st.color, marginBottom: 7 }}>{st.label}</div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
                   <div>
                     <div style={{ fontSize: 20, fontWeight: 700, color: "#26262C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{st.rows.length}</div>
@@ -904,32 +933,59 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
         </div>
 
 
-        {/* Flux par jour — RS (gauche) et devis (droite), côte à côte. */}
-        <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #EFEFF3", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 24, alignItems: "start" }}>
-          <FlowChart
-            data={rsFlow}
-            title="Flux des relevés de sinistralité — par jour"
-            subtitle="Demandes de RS envoyées + relances (barres) vs RS reçus « actés » (ligne). Maj automatique."
-            sentLabel="Demandes de RS envoyées"
-            recusLabel="RS reçus (actés)"
-            recusTotal={rsRecus}
-            demandesTotal={rsDemandes}
-            tauxTitle="Taux de récupération du RS"
-            recusUnit="RS reçus"
-            demandesUnit="demandes"
-          />
-          <FlowChart
-            data={devisFlow.rows}
-            title="Flux des demandes de devis — par jour"
-            subtitle="Demandes de devis envoyées (barres) vs devis reçus « actés » (ligne, date d'enregistrement Gufetto). Maj automatique."
-            sentLabel="Demandes de devis envoyées"
-            recusLabel="Devis reçus (actés)"
-            recusTotal={devisFlow.recusTotal}
-            demandesTotal={devisFlow.demandesTotal}
-            tauxTitle="Taux de réception des devis"
-            recusUnit="devis reçus"
-            demandesUnit="demandes envoyées"
-          />
+        {/* Flux par jour — sélecteur RS / devis / propositions (un seul graphe affiché) */}
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #EFEFF3" }}>
+          <div style={{ display: "inline-flex", background: "#F0F0F6", borderRadius: 8, padding: 3, marginBottom: 16 }}>
+            {(([["rs", "Flux RS"], ["devis", "Flux devis"], ["propositions", "Flux propositions"]] as const)).map(([v, label]) => (
+              <button key={v} onClick={() => setFluxView(v)}
+                style={{ fontSize: 12.5, fontWeight: 700, padding: "5px 14px", borderRadius: 6, border: "none", cursor: "pointer",
+                  background: fluxView === v ? "#4E49FC" : "transparent", color: fluxView === v ? "#fff" : "#656576" }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {fluxView === "rs" && (
+            <FlowChart
+              data={rsFlow}
+              title="Flux des relevés de sinistralité — par jour"
+              subtitle="Demandes de RS envoyées + relances (barres) vs RS reçus « actés » (ligne). Maj automatique."
+              sentLabel="Demandes de RS envoyées"
+              recusLabel="RS reçus (actés)"
+              recusTotal={rsRecus}
+              demandesTotal={rsDemandes}
+              tauxTitle="Taux de récupération du RS"
+              recusUnit="RS reçus"
+              demandesUnit="demandes"
+            />
+          )}
+          {fluxView === "devis" && (
+            <FlowChart
+              data={devisFlow.rows}
+              title="Flux des demandes de devis — par jour"
+              subtitle="Demandes de devis envoyées (barres) vs devis reçus « actés » (ligne, date d'enregistrement Gufetto). Maj automatique."
+              sentLabel="Demandes de devis envoyées"
+              recusLabel="Devis reçus (actés)"
+              recusTotal={devisFlow.recusTotal}
+              demandesTotal={devisFlow.demandesTotal}
+              tauxTitle="Taux de réception des devis"
+              recusUnit="devis reçus"
+              demandesUnit="demandes envoyées"
+            />
+          )}
+          {fluxView === "propositions" && (
+            <FlowChart
+              data={propositionsFlow.rows}
+              title="Flux des propositions au CS — par jour"
+              subtitle="Propositions transmises au conseil syndical (barres) vs propositions acceptées (ligne). Maj automatique."
+              sentLabel="Propositions transmises"
+              recusLabel="Propositions acceptées"
+              recusTotal={propositionsFlow.recusTotal}
+              demandesTotal={propositionsFlow.demandesTotal}
+              tauxTitle="Taux d'acceptation des propositions"
+              recusUnit="acceptées"
+              demandesUnit="transmises"
+            />
+          )}
         </div>
       </div>
 
