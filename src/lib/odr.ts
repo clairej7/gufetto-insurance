@@ -123,12 +123,16 @@ export async function getOdrByInsurerBoard(): Promise<OdrInsurerBoard[]> {
     // Même ordre que categoriseDossier : odr_envoye/accepte (ODR réels en cours/gagnés)
     // AVANT la clôture-client, puis client-MRI → clos AVANT odr_en_cours (un ODR encore
     // à envoyer pour une copro déjà cliente MRI n'existe pas → clos, jamais « en cours »).
+    // « accepté » et « clos » = UNIQUEMENT de vrais ODR → on exige le marqueur
+    // odrPartenaire (dossier passé par les tables ODR envoyés/acceptés), sinon on
+    // récupérait tous les clos assurés AXA hors ODR (clients classiques) → gonflait AXA.
+    const hasOdrMarker = !!r.odrPartenaire;
     let stage: string | null = null;
     if (r.statut === "odr_envoye") stage = "envoye";
-    else if (r.statut === "odr_accepte") stage = "accepte";
-    else if (isCloturePourClient(r.copro.clientMriStatut, r.copro.assureurActuel)) stage = "clos";
+    else if (r.statut === "odr_accepte") stage = hasOdrMarker ? "accepte" : null;
+    else if (hasOdrMarker && isCloturePourClient(r.copro.clientMriStatut, r.copro.assureurActuel)) stage = "clos";
     else if (r.statut === "odr_en_cours") stage = "enCours";
-    else if (categoriseDossier({ statut: r.statut, dateEcheance: r.copro.dateEcheance, clientMriStatut: r.copro.clientMriStatut, assureurActuel: r.copro.assureurActuel }) === "clos") stage = "clos";
+    else if (hasOdrMarker && categoriseDossier({ statut: r.statut, dateEcheance: r.copro.dateEcheance, clientMriStatut: r.copro.clientMriStatut, assureurActuel: r.copro.assureurActuel }) === "clos") stage = "clos";
     if (!stage) continue;
     const a = acc.get(key)![stage]; a.n++; a.mt += r.copro.primeActuelle ?? 0;
   }

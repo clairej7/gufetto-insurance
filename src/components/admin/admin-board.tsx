@@ -226,9 +226,9 @@ function PenetrationChart({ series, showHeader = true, height = 220 }: { series:
 
 function PartTitle({ n, title, first }: { n: number; title: string; first?: boolean }) {
   return (
-    <div style={{ marginTop: first ? 0 : 44, display: "flex", alignItems: "center", gap: 12 }}>
+    <div id={`partie-${n}`} style={{ marginTop: first ? 0 : 30, scrollMarginTop: 72, display: "flex", alignItems: "center", gap: 12 }}>
       <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.8, color: "#fff", background: "#4E49FC", borderRadius: 999, padding: "5px 13px", whiteSpace: "nowrap" }}>PARTIE {n}</span>
-      <span style={{ fontSize: 20, fontWeight: 800, color: "#26262C", letterSpacing: "-0.01em", whiteSpace: "nowrap" }}>{title}</span>
+      <span style={{ fontSize: 16, fontWeight: 800, color: "#26262C", letterSpacing: "-0.01em", whiteSpace: "nowrap" }}>{title}</span>
       <span style={{ flex: 1, height: 2, background: "#ECECF3", borderRadius: 2 }} />
     </div>
   );
@@ -324,7 +324,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
   });
   const maxBar = Math.max(...barData.map(b => b.count), 1);
   const maxPrime = Math.max(...barData.map(b => b.prime), 1);
-  const CHART_H = 140;
+  const CHART_H = 118;
 
   // Montants (primes) et ARR potentiel (25% de la prime) par catégorie.
   const primeActifs = sumPrime(activePipelines);
@@ -455,7 +455,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
   const barsRow: React.CSSProperties = { display: "flex", alignItems: "flex-end", gap: 8, height: CHART_H + 40 };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 32, fontFamily: FONT_SANS }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 22, fontFamily: FONT_SANS }}>
 
       {/* ── En-tête « Tracking » + compteurs + filtres (une seule ligne) ── */}
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
@@ -470,6 +470,22 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <select
+            value=""
+            onChange={(e) => {
+              const n = e.target.value;
+              if (n) document.getElementById(`partie-${n}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+              e.target.value = "";
+            }}
+            style={{ ...selectStyle, width: 150, fontWeight: 600, color: "#4E49FC", borderColor: "#C7C5F5" }}
+          >
+            <option value="">Aller à… ▾</option>
+            <option value="1">Partie 1 — Pipe</option>
+            <option value="2">Partie 2 — Revenus</option>
+            <option value="3">Partie 3 — ODR</option>
+            <option value="4">Partie 4 — Commercial</option>
+            <option value="5">Partie 5 — Autres</option>
+          </select>
           <MultiSelectFilter
             placeholder="Gestionnaire"
             options={gestionnaires}
@@ -505,7 +521,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
               style={{
                 background: isActive ? "#FAFAFF" : "#fff",
                 border: `1.5px solid ${isActive ? "#4E49FC" : "#E8E8EC"}`,
-                borderRadius: 8, padding: "16px 20px",
+                borderRadius: 8, padding: "13px 18px",
                 boxShadow: isActive ? "0 0 0 3px rgba(78,73,252,.08)" : "0 1px 2px rgba(13,22,63,.05)",
                 cursor: clickable ? "pointer" : "default", transition: "all 120ms",
               }}
@@ -550,8 +566,10 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
           )}
         </div>
 
+        {/* Hauteur fixe : la carte ne change plus de taille entre Chiffres et Progression. */}
+        <div style={{ height: 150, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         {penView === "chiffres" ? (
-          <div style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: 0, flexWrap: "wrap", minHeight: 120 }}>
+          <div style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: 0, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 18, justifyContent: "center", flex: "1 1 300px", padding: "0 28px" }}>
               <span style={{ fontSize: 44, fontWeight: 800, color: "#4E49FC", letterSpacing: "-0.03em", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{tauxSignature}%</span>
               <div>
@@ -568,8 +586,9 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
             </div>
           </div>
         ) : (
-          <PenetrationChart series={penSeries} showHeader={false} height={150} />
+          <PenetrationChart series={penSeries} showHeader={false} height={118} />
         )}
+        </div>
       </div>
 
       {/* ── Bar chart : répartition par étape ── */}
@@ -618,9 +637,10 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
 
       {/* ── Revenus — montants en jeu ── */}
       <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "baseline", gap: 12, marginBottom: 32 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Revenus — montants en jeu</span>
-          <span style={{ fontSize: 14, color: "#656576" }}>Montants en jeu = <strong style={{ fontSize: 17, color: "#4E49FC", fontVariantNumeric: "tabular-nums" }}>{fmtEur(primeActifs + primeGagnes + primePerdus)}</strong></span>
+          <span style={{ fontSize: 14, color: "#656576", textAlign: "center", whiteSpace: "nowrap" }}>Montants en jeu = <strong style={{ fontSize: 17, color: "#4E49FC", fontVariantNumeric: "tabular-nums" }}>{fmtEur(primeActifs + primeGagnes + primePerdus)}</strong></span>
+          <span />
         </div>
 
         {/* Sous-partie 1 : montant (somme des primes) par étape, mêmes 4 zones */}
@@ -696,10 +716,8 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Suivi des ODR</span>
         </div>
-        <div style={{ fontSize: 12, color: "#656576", marginBottom: 18 }}>
-          Avancement des ordres de remplacement chez nos 4 partenaires.
-          <br />
-          <span style={{ color: "#A2A1AF" }}>ℹ️ Le <b>pipeline ODR</b> (en bas) compte tous les dossiers par étape (aligné sur la Répartition). La vue <b>par assureur</b> suit la <b>même logique que l&apos;automatisation ODR</b> (marqueur ODR, sinon assureur du contrat ; hors dossiers exclus) → les chiffres sont alignés. La somme des 4 assureurs peut rester inférieure au total (dossiers sans partenaire identifiable). « ODR clos » = ODR accepté et en vigueur (récupération passée) ou devenu client. Refusés / perdus jamais comptés.</span>
+        <div style={{ fontSize: 12, color: "#656576", marginBottom: 16 }}>
+          Avancement des ordres de remplacement chez nos 4 partenaires. <span style={{ color: "#A2A1AF" }}>« Accepté » et « clos » = uniquement de vrais ODR (marqueur ODR).</span>
         </div>
 
         {/* Par assureur : nb dossiers + montant en jeu + ARR, puis répartition par stade */}
@@ -719,7 +737,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                   <div style={{ fontSize: 11, color: "#656576", marginTop: 2 }}>Montant en jeu</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: "#13762C", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{ins.arr > 0 ? fmtEurC(ins.arr) : "—"}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#13762C", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>{ins.arr > 0 ? fmtEurC(ins.arr) : "—"}</div>
                   <div style={{ fontSize: 11, color: "#656576", marginTop: 2 }}>ARR associé</div>
                 </div>
               </div>
@@ -790,7 +808,6 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
       <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#26262C" }}>Suivi des changements d&apos;assureur</span>
-          <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>Partie en cours de configuration</span>
         </div>
         <div style={{ fontSize: 12, color: "#656576", marginBottom: 18 }}>
           Dossiers classiques (RS → devis → conseil syndical → signature), hors ODR.{" "}
@@ -820,20 +837,20 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                 </div>
 
                 {st.key === "rs_en_cours" && (
-                  <div style={{ marginTop: 9, paddingTop: 9, borderTop: "1px dashed #E8E8EC" }}>
+                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #E8E8EC" }}>
                     <div style={{ display: "flex", gap: 16, alignItems: "baseline", flexWrap: "wrap" }}>
                       <div>
-                        <div style={{ fontSize: 20, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsDemandes}</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsDemandes}</div>
                         <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>demandes envoyées</div>
                         <div style={{ fontSize: 14, fontWeight: 700, color: "#4E49FC", lineHeight: 1, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{rsRelances}</div>
                         <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>relances envoyées</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsRecus}</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsRecus}</div>
                         <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>RS reçus</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{contratsRecus}</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{contratsRecus}</div>
                         <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>contrats récupérés</div>
                       </div>
                     </div>
@@ -841,11 +858,11 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                 )}
 
                 {st.key === "devis_demandes" && (
-                  <div style={{ marginTop: 9, paddingTop: 9, borderTop: "1px dashed #E8E8EC" }}>
+                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #E8E8EC" }}>
                     <div style={{ display: "flex", gap: 18, alignItems: "baseline", flexWrap: "wrap" }}>
                       {/* Gros : demandes envoyées (cumul) + à envoyer. Petits : devis reçus + en attente. */}
                       <div>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisFlow.demandesTotal}</div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisFlow.demandesTotal}</div>
                         <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>demandes envoyées</div>
                       </div>
                       <div>
@@ -861,7 +878,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                         <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>en attente</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: "#B4690E", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisAReclamer}</div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#B4690E", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisAReclamer}</div>
                         <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>à envoyer</div>
                       </div>
                     </div>
@@ -869,13 +886,13 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                 )}
 
                 {st.key === "devis_recus" && (
-                  <div style={{ marginTop: 9, paddingTop: 9, borderTop: "1px dashed #E8E8EC", display: "flex", gap: 24, alignItems: "baseline", flexWrap: "wrap" }}>
+                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #E8E8EC", display: "flex", gap: 24, alignItems: "baseline", flexWrap: "wrap" }}>
                     <div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devis6.faites}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devis6.faites}</div>
                       <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>comparaisons effectuées</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devis6.transmis}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devis6.transmis}</div>
                       <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>transmissions aux gestionnaires</div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: devis6.aTransmettre > 0 ? "#B4690E" : "#C0C0C9", lineHeight: 1, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{devis6.aTransmettre}</div>
                       <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>comparaisons à transmettre</div>
@@ -884,26 +901,26 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                 )}
 
                 {st.key === "envoye_cs" && (
-                  <div style={{ marginTop: 9, paddingTop: 9, borderTop: "1px dashed #E8E8EC", display: "flex", gap: 24, alignItems: "baseline", flexWrap: "wrap" }}>
+                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #E8E8EC", display: "flex", gap: 24, alignItems: "baseline", flexWrap: "wrap" }}>
                     <div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: cs.transmises > 0 ? "#13762C" : "#C0C0C9", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{cs.transmises}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: cs.transmises > 0 ? "#13762C" : "#C0C0C9", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{cs.transmises}</div>
                       <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>propositions transmises</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: cs.aTransmettre > 0 ? "#B4690E" : "#C0C0C9", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{cs.aTransmettre}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: cs.aTransmettre > 0 ? "#B4690E" : "#C0C0C9", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{cs.aTransmettre}</div>
                       <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>propositions à transmettre</div>
                     </div>
                   </div>
                 )}
 
                 {st.key === "signe" && (
-                  <div style={{ marginTop: 9, paddingTop: 9, borderTop: "1px dashed #E8E8EC", display: "flex", gap: 24, alignItems: "baseline", flexWrap: "wrap" }}>
+                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #E8E8EC", display: "flex", gap: 24, alignItems: "baseline", flexWrap: "wrap" }}>
                     <div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: cs.acceptees > 0 ? "#13762C" : "#C0C0C9", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{cs.acceptees}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: cs.acceptees > 0 ? "#13762C" : "#C0C0C9", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{cs.acceptees}</div>
                       <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>propositions acceptées</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: cs.refusees > 0 ? "#CA1E12" : "#C0C0C9", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{cs.refusees}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: cs.refusees > 0 ? "#CA1E12" : "#C0C0C9", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{cs.refusees}</div>
                       <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>propositions refusées</div>
                     </div>
                   </div>
@@ -915,7 +932,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                   const autres = wonClassic.length - axa - sada - mila;
                   const rows: [string, number][] = [["AXA", axa], ["Mila", mila], ["SADA", sada], ["Autres", autres]];
                   return (
-                    <div style={{ marginTop: 9, paddingTop: 9, borderTop: "1px dashed #E8E8EC" }}>
+                    <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #E8E8EC" }}>
                       <div style={{ fontSize: 10.5, color: "#A2A1AF", marginBottom: 6 }}>Assureurs des {wonClassic.length} gagnés</div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
                         {rows.map(([label, n]) => (

@@ -30,12 +30,22 @@ export default async function CourtageChurnPage() {
     <div style={{ minHeight: "100vh", background: "#FAFAFC" }}>
       <Navbar user={session.user} />
       <main className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
-        <div className="flex items-center gap-3 mb-1">
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#26262C" }}>Courtage Churn</h1>
-          <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>À traiter plus tard</span>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: "#26262C", marginBottom: 16 }}>Churn</h1>
+
+        {/* Gros encart rouge : partie en cours de configuration */}
+        <div style={{ background: "#FDECEA", border: "1.5px solid #F0A9A0", borderRadius: 12, padding: "20px 24px", marginBottom: 20, display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={{ fontSize: 26 }}>🚧</span>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#B4231A" }}>Partie en cours de configuration</div>
+            <div style={{ fontSize: 13, color: "#9A3A33", marginTop: 3 }}>Le suivi courtage / churn n&apos;est pas encore branché — tout ce qui suit est du vrac à trier et à câbler.</div>
+          </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#FEF6E7", border: "1px solid #F5D78A", borderRadius: 10, padding: "12px 16px", margin: "12px 0 20px", maxWidth: 780 }}>
+        {/* Tout le reste replié sous un dépliant */}
+        <details style={{ border: "1px solid #E8E8EC", borderRadius: 12, background: "#fff", padding: "0 20px", maxWidth: 900 }}>
+          <summary style={{ cursor: "pointer", listStyle: "revert", padding: "14px 0", fontSize: 14, fontWeight: 700, color: "#4E49FC" }}>Vrac à configurer</summary>
+          <div style={{ paddingBottom: 20 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#FEF6E7", border: "1px solid #F5D78A", borderRadius: 10, padding: "12px 16px", margin: "8px 0 20px", maxWidth: 780 }}>
           <span style={{ fontSize: 18, lineHeight: "20px" }}>📊</span>
           <div>
             <div style={{ fontSize: 13.5, fontWeight: 700, color: "#7A4E02" }}>À faire : créer un dashboard dans Tracking pour le suivi de ces dossiers</div>
@@ -120,6 +130,8 @@ export default async function CourtageChurnPage() {
         </div>
 
         <p style={{ fontSize: 12, color: "#A2A1AF", marginTop: 24 }}>Source : {CHURN.source}. Snapshot — sera réactualisé quand on traitera le sujet courtage/churn.</p>
+          </div>
+        </details>
       </main>
     </div>
   );
