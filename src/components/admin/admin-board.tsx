@@ -224,6 +224,16 @@ function PenetrationChart({ series, showHeader = true, height = 220 }: { series:
   );
 }
 
+// Sous-ligne compacte des cartes Partie 4 : une seule ligne de « N label ».
+const subLine: React.CSSProperties = { marginTop: 6, paddingTop: 6, borderTop: "1px dashed #E8E8EC", display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "4px 14px" };
+function Metric({ n, label, c }: { n: number; label: string; c: string }) {
+  return (
+    <span style={{ fontSize: 11, color: "#656576", whiteSpace: "nowrap" }}>
+      <strong style={{ fontSize: 13.5, fontWeight: 700, color: c, fontVariantNumeric: "tabular-nums" }}>{n}</strong> {label}
+    </span>
+  );
+}
+
 function PartTitle({ n, title, first }: { n: number; title: string; first?: boolean }) {
   return (
     <div id={`partie-${n}`} style={{ marginTop: first ? 0 : 30, scrollMarginTop: 72, display: "flex", alignItems: "center", gap: 12 }}>
@@ -567,7 +577,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
         </div>
 
         {/* Hauteur fixe : la carte ne change plus de taille entre Chiffres et Progression. */}
-        <div style={{ height: 150, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <div style={{ height: 126, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         {penView === "chiffres" ? (
           <div style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: 0, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 18, justifyContent: "center", flex: "1 1 300px", padding: "0 28px" }}>
@@ -586,7 +596,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
             </div>
           </div>
         ) : (
-          <PenetrationChart series={penSeries} showHeader={false} height={118} />
+          <PenetrationChart series={penSeries} showHeader={false} height={104} />
         )}
         </div>
       </div>
@@ -666,7 +676,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
         </div>
 
         {/* Sous-partie 2 : synthèse montant + ARR potentiel (×0,25) */}
-        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginTop: 8, marginBottom: 12 }}>Synthèse & ARR potentiel</div>
+        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginTop: 30, marginBottom: 14 }}>Synthèse & ARR potentiel</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
           {[
             { label: "Actifs", prime: primeActifs, color: "#26262C" },
@@ -690,7 +700,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
         </div>
 
         {/* Complétude des primes par étape (part de montants connus/inconnus) */}
-        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginTop: 20, marginBottom: 12 }}>Complétude des primes par étape</div>
+        <div style={{ fontSize: 12, fontFamily: FONT_MONO, color: "#A2A1AF", marginTop: 34, marginBottom: 14 }}>Complétude des primes par étape</div>
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
           {primeStages.map((s) => {
             const c = `hsl(${Math.round((1 - s.tauxInconnu) * 125)}, 62%, 42%)`;
@@ -778,7 +788,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
         {(() => {
           const primes = odrStages.map((st) => sumPrime(st.rows));
           const maxP = Math.max(1, ...primes);
-          const BH = 120;
+          const BH = 168;
           return (
             <div style={{ display: "flex", gap: 16, alignItems: "flex-end" }}>
               {odrStages.map((st, i) => {
@@ -837,92 +847,42 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                 </div>
 
                 {st.key === "rs_en_cours" && (
-                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #E8E8EC" }}>
-                    <div style={{ display: "flex", gap: 16, alignItems: "baseline", flexWrap: "wrap" }}>
-                      <div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsDemandes}</div>
-                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>demandes envoyées</div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: "#4E49FC", lineHeight: 1, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{rsRelances}</div>
-                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>relances envoyées</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{rsRecus}</div>
-                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>RS reçus</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{contratsRecus}</div>
-                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>contrats récupérés</div>
-                      </div>
-                    </div>
+                  <div style={subLine}>
+                    <Metric n={rsDemandes} label="demandes" c="#4E49FC" />
+                    <Metric n={rsRelances} label="relances" c="#4E49FC" />
+                    <Metric n={rsRecus} label="RS reçus" c="#13762C" />
+                    <Metric n={contratsRecus} label="contrats" c="#13762C" />
                   </div>
                 )}
 
                 {st.key === "devis_demandes" && (
-                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #E8E8EC" }}>
-                    <div style={{ display: "flex", gap: 18, alignItems: "baseline", flexWrap: "wrap" }}>
-                      {/* Gros : demandes envoyées (cumul) + à envoyer. Petits : devis reçus + en attente. */}
-                      <div>
-                        <div style={{ fontSize: 16, fontWeight: 800, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisFlow.demandesTotal}</div>
-                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>demandes envoyées</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisFlow.recusTotal}</div>
-                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>devis reçus</div>
-                        <div style={{ marginTop: 4, fontSize: 10, color: "#A2A1AF", display: "flex", gap: 8 }}>
-                          <span><strong style={{ color: "#0A6BB8" }}>{devisRecus.axa}</strong> AXA</span>
-                          <span><strong style={{ color: "#8A4FC7" }}>{devisRecus.mila}</strong> Mila</span>
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: "#656576", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisMailsEnvoyes}</div>
-                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>en attente</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 16, fontWeight: 800, color: "#B4690E", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devisAReclamer}</div>
-                        <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>à envoyer</div>
-                      </div>
-                    </div>
+                  <div style={subLine}>
+                    <Metric n={devisFlow.demandesTotal} label="demandes" c="#4E49FC" />
+                    <Metric n={devisFlow.recusTotal} label={`reçus (${devisRecus.axa} AXA · ${devisRecus.mila} Mila)`} c="#13762C" />
+                    <Metric n={devisMailsEnvoyes} label="en attente" c="#656576" />
+                    <Metric n={devisAReclamer} label="à envoyer" c="#B4690E" />
                   </div>
                 )}
 
                 {st.key === "devis_recus" && (
-                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #E8E8EC", display: "flex", gap: 24, alignItems: "baseline", flexWrap: "wrap" }}>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: "#13762C", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devis6.faites}</div>
-                      <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>comparaisons effectuées</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: "#4E49FC", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{devis6.transmis}</div>
-                      <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>transmissions aux gestionnaires</div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: devis6.aTransmettre > 0 ? "#B4690E" : "#C0C0C9", lineHeight: 1, marginTop: 8, fontVariantNumeric: "tabular-nums" }}>{devis6.aTransmettre}</div>
-                      <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>comparaisons à transmettre</div>
-                    </div>
+                  <div style={subLine}>
+                    <Metric n={devis6.faites} label="comparaisons" c="#13762C" />
+                    <Metric n={devis6.transmis} label="transmises" c="#4E49FC" />
+                    <Metric n={devis6.aTransmettre} label="à transmettre" c={devis6.aTransmettre > 0 ? "#B4690E" : "#C0C0C9"} />
                   </div>
                 )}
 
                 {st.key === "envoye_cs" && (
-                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #E8E8EC", display: "flex", gap: 24, alignItems: "baseline", flexWrap: "wrap" }}>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: cs.transmises > 0 ? "#13762C" : "#C0C0C9", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{cs.transmises}</div>
-                      <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>propositions transmises</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: cs.aTransmettre > 0 ? "#B4690E" : "#C0C0C9", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{cs.aTransmettre}</div>
-                      <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>propositions à transmettre</div>
-                    </div>
+                  <div style={subLine}>
+                    <Metric n={cs.transmises} label="transmises" c={cs.transmises > 0 ? "#13762C" : "#C0C0C9"} />
+                    <Metric n={cs.aTransmettre} label="à transmettre" c={cs.aTransmettre > 0 ? "#B4690E" : "#C0C0C9"} />
                   </div>
                 )}
 
                 {st.key === "signe" && (
-                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #E8E8EC", display: "flex", gap: 24, alignItems: "baseline", flexWrap: "wrap" }}>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: cs.acceptees > 0 ? "#13762C" : "#C0C0C9", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{cs.acceptees}</div>
-                      <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>propositions acceptées</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: cs.refusees > 0 ? "#CA1E12" : "#C0C0C9", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{cs.refusees}</div>
-                      <div style={{ fontSize: 10.5, color: "#656576", marginTop: 2 }}>propositions refusées</div>
-                    </div>
+                  <div style={subLine}>
+                    <Metric n={cs.acceptees} label="acceptées" c={cs.acceptees > 0 ? "#13762C" : "#C0C0C9"} />
+                    <Metric n={cs.refusees} label="refusées" c={cs.refusees > 0 ? "#CA1E12" : "#C0C0C9"} />
                   </div>
                 )}
 
@@ -932,15 +892,9 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                   const autres = wonClassic.length - axa - sada - mila;
                   const rows: [string, number][] = [["AXA", axa], ["Mila", mila], ["SADA", sada], ["Autres", autres]];
                   return (
-                    <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #E8E8EC" }}>
-                      <div style={{ fontSize: 10.5, color: "#A2A1AF", marginBottom: 6 }}>Assureurs des {wonClassic.length} gagnés</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
-                        {rows.map(([label, n]) => (
-                          <span key={label} style={{ fontSize: 12.5, color: n > 0 ? "#26262C" : "#C7C7D1" }}>
-                            <strong style={{ fontVariantNumeric: "tabular-nums" }}>{n}</strong> {label}
-                          </span>
-                        ))}
-                      </div>
+                    <div style={subLine}>
+                      <span style={{ fontSize: 11, color: "#A2A1AF", whiteSpace: "nowrap" }}>Assureurs des {wonClassic.length} :</span>
+                      {rows.map(([label, n]) => (<Metric key={label} n={n} label={label} c={n > 0 ? "#26262C" : "#C7C7D1"} />))}
                     </div>
                   );
                 })()}
