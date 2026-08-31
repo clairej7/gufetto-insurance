@@ -17,6 +17,7 @@ type PipelineWithCopro = {
     nom: string;
     adresse: string | null;
     assureurActuel: string | null;
+    courtierActuel: string | null;
     primeActuelle: number | null;
     dateEcheance: Date | null;
     gestionnaireEmail: string | null;
@@ -253,6 +254,7 @@ type SavedFilters = {
   selectedStatut: string[];
   selectedEcheance: string;
   selectedAssureur: string[];
+  selectedCourtier: string[];
   selectedPrime: string;
   search: string;
 };
@@ -272,6 +274,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
   const [selectedStatut, setSelectedStatut] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [selectedAssureur, setSelectedAssureur] = useState<string[]>([]);
+  const [selectedCourtier, setSelectedCourtier] = useState<string[]>([]);
   const [selectedPrime, setSelectedPrime] = useState("all");
   const [search, setSearch] = useState("");
   const filtersLoaded = useRef(false);
@@ -289,6 +292,7 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
         if (Array.isArray(saved.selectedStatut)) setSelectedStatut(saved.selectedStatut);
         if (typeof saved.selectedEcheance === "string") setSelectedEcheance(saved.selectedEcheance);
         if (Array.isArray(saved.selectedAssureur)) setSelectedAssureur(saved.selectedAssureur);
+        if (Array.isArray(saved.selectedCourtier)) setSelectedCourtier(saved.selectedCourtier);
         if (typeof saved.selectedPrime === "string") setSelectedPrime(saved.selectedPrime);
         if (typeof saved.search === "string") setSearch(saved.search);
       }
@@ -300,23 +304,25 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
   useEffect(() => {
     if (!filtersLoaded.current) return;
     try {
-      const toSave: SavedFilters = { sortKey, sortAsc, view, selectedGestionnaire, selectedStatut, selectedEcheance, selectedAssureur, selectedPrime, search };
+      const toSave: SavedFilters = { sortKey, sortAsc, view, selectedGestionnaire, selectedStatut, selectedEcheance, selectedAssureur, selectedCourtier, selectedPrime, search };
       sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(toSave));
     } catch { /* quota ou indisponible : tant pis, pas bloquant */ }
-  }, [sortKey, sortAsc, view, selectedGestionnaire, selectedStatut, selectedEcheance, selectedAssureur, selectedPrime, search]);
+  }, [sortKey, sortAsc, view, selectedGestionnaire, selectedStatut, selectedEcheance, selectedAssureur, selectedCourtier, selectedPrime, search]);
 
   const assureurs = [...new Set(pipelines.map((p) => p.copro.assureurActuel).filter(Boolean) as string[])].sort();
-  const hasActiveFilters = selectedGestionnaire.length > 0 || selectedStatut.length > 0 || selectedEcheance !== "all" || selectedAssureur.length > 0 || selectedPrime !== "all" || search !== "";
+  const courtiers = [...new Set(pipelines.map((p) => p.copro.courtierActuel).filter(Boolean) as string[])].sort();
+  const hasActiveFilters = selectedGestionnaire.length > 0 || selectedStatut.length > 0 || selectedEcheance !== "all" || selectedAssureur.length > 0 || selectedCourtier.length > 0 || selectedPrime !== "all" || search !== "";
 
   function resetFilters() {
     setSelectedGestionnaire([]); setSelectedStatut([]);
-    setSelectedEcheance("all"); setSelectedAssureur([]); setSelectedPrime("all"); setSearch("");
+    setSelectedEcheance("all"); setSelectedAssureur([]); setSelectedCourtier([]); setSelectedPrime("all"); setSearch("");
   }
 
   const filtered = pipelines.filter((p) => {
     if (selectedGestionnaire.length > 0 && !selectedGestionnaire.includes(p.copro.gestionnaireEmail ?? "")) return false;
     if (selectedStatut.length > 0 && !selectedStatut.includes(p.statut)) return false;
     if (selectedAssureur.length > 0 && !selectedAssureur.includes(p.copro.assureurActuel ?? "")) return false;
+    if (selectedCourtier.length > 0 && !selectedCourtier.includes(p.copro.courtierActuel ?? "")) return false;
     if (search && !p.copro.nom.toLowerCase().includes(search.toLowerCase())) return false;
     if (selectedEcheance !== "all") {
       const days = getDaysUntilEcheance(p.copro.dateEcheance);
@@ -443,6 +449,13 @@ export function PipelineBoard({ pipelines, taskTemplates, gestionnaires, current
         options={assureurs}
         value={selectedAssureur}
         onChange={setSelectedAssureur}
+        width={140}
+      />
+      <MultiSelectFilter
+        placeholder="Courtier"
+        options={courtiers}
+        value={selectedCourtier}
+        onChange={setSelectedCourtier}
         width={140}
       />
       <select value={selectedPrime} onChange={(e) => setSelectedPrime(e.target.value)} style={{ ...selectStyle, width: 140 }}>
