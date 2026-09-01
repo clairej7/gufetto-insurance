@@ -130,8 +130,12 @@ async function slackApi(method: string, body: Record<string, unknown>): Promise<
 export async function postDevisMessage(text: string): Promise<{ ok: boolean; ts?: string | null; channel?: string | null; error?: string }> {
   if (SLACK_BOT_TOKEN && SLACK_DEVIS_CHANNEL_ID) {
     const r = await slackApi("chat.postMessage", { channel: SLACK_DEVIS_CHANNEL_ID, text, unfurl_links: false });
-    if (!r.ok) return { ok: false, error: r.error };
-    return { ok: true, ts: r.ts ?? null, channel: SLACK_DEVIS_CHANNEL_ID };
+    if (r.ok) return { ok: true, ts: r.ts ?? null, channel: SLACK_DEVIS_CHANNEL_ID };
+    // L'API a échoué (ex : missing_scope, bot absent du canal) → on NE bloque PAS
+    // l'envoi : repli sur le webhook (message simple, sans threading). Le threading
+    // se réactive dès que le token/scope est correct.
+    const w = await postToDevisChannel(text);
+    return { ok: w.ok, ts: null, channel: null, error: w.ok ? undefined : (r.error || w.error) };
   }
   const w = await postToDevisChannel(text);
   return { ok: w.ok, ts: null, channel: null, error: w.error };
