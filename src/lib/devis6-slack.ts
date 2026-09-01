@@ -87,7 +87,6 @@ export async function buildGestionnaireMessage(pipelineId: string): Promise<{ ok
     "────────────",
     "*Valides-tu la transmission au Conseil Syndical ?*",
     `　<${BASE_URL}/valider-devis/${token}|Réponse>`,
-    "💬 _Tu pourras ajouter un commentaire sur la page._",
   ].filter((l): l is string => l !== null);
 
   return { ok: true, text: lines.join("\n") };
