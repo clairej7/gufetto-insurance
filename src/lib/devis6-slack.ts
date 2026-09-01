@@ -17,7 +17,7 @@ function parse(raw: string | null): ExtractedLite {
 }
 
 // Compose le message (markdown) envoyé au gestionnaire pour un dossier.
-export async function buildGestionnaireMessage(pipelineId: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+export async function buildGestionnaireMessage(pipelineId: string): Promise<{ ok: true; text: string; blocks: unknown[] } | { ok: false; error: string }> {
   const p = await prisma.insurancePipeline.findUnique({
     where: { id: pipelineId },
     select: {
@@ -70,37 +70,50 @@ export async function buildGestionnaireMessage(pipelineId: string): Promise<{ ok
     : (p.copro.gestionnaireNom ? `Gestionnaire : *${p.copro.gestionnaireNom}*` : null);
 
   const token = signValidationToken(p.id);
-  const lines = [
-    "*Gufetto - Assurance pro*",
-    "",
-    gestioLine,
-    `• *Copropriété* : ${p.copro.adresse || p.copro.nom}`,
-    `• *Assureur actuel* : ${assureurActuel}`,
-    `• *Prix actuel* : ${fmtE(prixActuel)} / an`,
-    devisLine(devis[0], 1),
-    devisLine(devis[1], 2),
-    "",
-    `*En résumé* : ${synthese.join(" ")}`,
-    "",
-    `🔗 *Détail de la comparaison* : ${BASE_URL}/pipeline/${p.id}`,
-    "",
-    "────────────",
-    "*Valides-tu la transmission au Conseil Syndical ?*",
-    `　<${BASE_URL}/valider-devis/${token}|Réponse>`,
+  void devisLine; void gestioLine; // remplacés par les puces Block Kit ci-dessous
+
+  // Puces d'infos (emoji + gras), façon carte materabot.
+  const gestioBullet = gestioUid
+    ? `👤 *Gestionnaire* : <@${gestioUid}>`
+    : (p.copro.gestionnaireNom ? `👤 *Gestionnaire* : *${p.copro.gestionnaireNom}*` : null);
+  const infoLines = [
+    gestioBullet,
+    `🏢 *Copropriété* : ${p.copro.adresse || p.copro.nom}`,
+    `🛡️ *Assureur actuel* : ${assureurActuel}`,
+    `💰 *Prix actuel* : ${fmtE(prixActuel)} / an`,
+    devis[0] ? `🧾 *Devis 1* : ${fmtE(devis[0].primeTTC)} — _${devis[0].assureur}_` : null,
+    devis[1] ? `🧾 *Devis 2* : ${fmtE(devis[1].primeTTC)} — _${devis[1].assureur}_` : null,
   ].filter((l): l is string => l !== null);
 
-  return { ok: true, text: lines.join("\n") };
+  // Block Kit : en-tête + infos + résumé + lien + bouton « Valider ? ».
+  const blocks: unknown[] = [
+    { type: "header", text: { type: "plain_text", text: "Gufetto Assurance Pro - nouveau devis !", emoji: true } },
+    { type: "section", text: { type: "mrkdwn", text: infoLines.join("\n") } },
+    { type: "section", text: { type: "mrkdwn", text: `*En résumé* : ${synthese.join(" ")}` } },
+    { type: "section", text: { type: "mrkdwn", text: `🔗 <${BASE_URL}/pipeline/${p.id}|Voir le détail de la comparaison>` } },
+    { type: "actions", elements: [ { type: "button", text: { type: "plain_text", text: "Valider ?", emoji: true }, url: `${BASE_URL}/valider-devis/${token}`, style: "primary" } ] },
+  ];
+
+  // Fallback texte (notifications + clients qui ne rendent pas les blocks).
+  const text = [
+    "Gufetto Assurance Pro - nouveau devis !",
+    ...infoLines,
+    `En résumé : ${synthese.join(" ")}`,
+    `Répondre : ${BASE_URL}/valider-devis/${token}`,
+  ].join("\n");
+
+  return { ok: true, text, blocks };
 }
 
-// Poste le message dans le canal via le webhook Slack (variable `text`).
-export async function postToDevisChannel(text: string): Promise<{ ok: boolean; error?: string }> {
+// Poste le message dans le canal via le webhook Slack (`text` + `blocks` optionnels).
+export async function postToDevisChannel(text: string, blocks?: unknown[]): Promise<{ ok: boolean; error?: string }> {
   const raw = process.env.SLACK_DEVIS_WEBHOOK_URL;
   if (!raw) return { ok: false, error: "SLACK_DEVIS_WEBHOOK_URL non configuré côté serveur" };
   // Tolérant : si on a collé toute la commande curl d'exemple de Slack au lieu de
   // la seule URL, on récupère l'URL du webhook dedans.
   const url = (raw.match(/https?:\/\/hooks\.slack\.com\/[^\s'"]+/) ?? [raw.trim()])[0];
   try {
-    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(blocks ? { text, blocks } : { text }) });
     if (!res.ok) return { ok: false, error: `Slack a répondu ${res.status}` };
     return { ok: true };
   } catch (e) {
@@ -133,17 +146,16 @@ async function slackApi(method: string, body: Record<string, unknown>): Promise<
 
 // Poste le message initial. Bot token → chat.postMessage (renvoie ts + channel,
 // nécessaire pour le threading) ; sinon → webhook (pas de ts → réponses simples).
-export async function postDevisMessage(text: string): Promise<{ ok: boolean; ts?: string | null; channel?: string | null; error?: string }> {
+export async function postDevisMessage(text: string, blocks?: unknown[]): Promise<{ ok: boolean; ts?: string | null; channel?: string | null; error?: string }> {
   if (SLACK_BOT_TOKEN && SLACK_DEVIS_CHANNEL_ID) {
-    const r = await slackApi("chat.postMessage", { channel: SLACK_DEVIS_CHANNEL_ID, text, unfurl_links: false });
+    const r = await slackApi("chat.postMessage", { channel: SLACK_DEVIS_CHANNEL_ID, text, ...(blocks ? { blocks } : {}), unfurl_links: false });
     if (r.ok) return { ok: true, ts: r.ts ?? null, channel: SLACK_DEVIS_CHANNEL_ID };
     // L'API a échoué (ex : missing_scope, bot absent du canal) → on NE bloque PAS
-    // l'envoi : repli sur le webhook (message simple, sans threading). Le threading
-    // se réactive dès que le token/scope est correct.
-    const w = await postToDevisChannel(text);
+    // l'envoi : repli sur le webhook. Le threading se réactive dès que le token/scope est correct.
+    const w = await postToDevisChannel(text, blocks);
     return { ok: w.ok, ts: null, channel: null, error: w.ok ? undefined : (r.error || w.error) };
   }
-  const w = await postToDevisChannel(text);
+  const w = await postToDevisChannel(text, blocks);
   return { ok: w.ok, ts: null, channel: null, error: w.error };
 }
 

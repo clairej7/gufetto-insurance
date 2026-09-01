@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const built = await buildGestionnaireMessage(pipelineId);
   if (!built.ok) return NextResponse.json({ error: built.error }, { status: 422 });
 
-  const sent = await postDevisMessage(built.text);
+  const sent = await postDevisMessage(built.text, built.blocks);
   if (!sent.ok) return NextResponse.json({ error: sent.error }, { status: 502 });
 
   // On mémorise le ts/channel du message initial (si bot token) → permet aux
