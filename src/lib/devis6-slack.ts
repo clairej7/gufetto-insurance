@@ -22,7 +22,7 @@ export async function buildGestionnaireMessage(pipelineId: string): Promise<{ ok
     where: { id: pipelineId },
     select: {
       id: true, contratActuelData: true,
-      copro: { select: { nom: true, adresse: true, assureurActuel: true, primeActuelle: true, buildingId: true, gestionnaireNom: true } },
+      copro: { select: { nom: true, adresse: true, assureurActuel: true, primeActuelle: true, buildingId: true, gestionnaireNom: true, gestionnaireEmail: true } },
       devisRecus: { orderBy: { createdAt: "asc" }, select: { assureur: true, primeTTC: true, data: true } },
     },
   });
@@ -62,11 +62,18 @@ export async function buildGestionnaireMessage(pipelineId: string): Promise<{ ok
   // Alerter sur la PJ UNIQUEMENT si le contrat actuel en a une et que le devis retenu ne l'a pas (perte réelle).
   if (pjContrat === true && pjBest === false) synthese.push("⚠️ Protection juridique présente au contrat actuel mais absente du devis retenu — à valider.");
 
+  // @mention du gestionnaire (ping) si on résout son ID Slack via son email ;
+  // sinon on garde son nom en texte simple.
+  const gestioUid = p.copro.gestionnaireEmail ? await resolveSlackUserId(p.copro.gestionnaireEmail) : null;
+  const gestioLine = gestioUid
+    ? `Gestionnaire : <@${gestioUid}>`
+    : (p.copro.gestionnaireNom ? `Gestionnaire : *${p.copro.gestionnaireNom}*` : null);
+
   const token = signValidationToken(p.id);
   const lines = [
     "*Assurances Pro*",
     "",
-    p.copro.gestionnaireNom ? `Gestionnaire : *${p.copro.gestionnaireNom}*` : null,
+    gestioLine,
     `• *Copropriété* : ${p.copro.adresse || p.copro.nom}`,
     `• *Assureur actuel* : ${assureurActuel}`,
     `• *Prix actuel* : ${fmtE(prixActuel)} / an`,
@@ -149,4 +156,18 @@ export async function postDevisThreadReply(channel: string, threadTs: string, te
 // Pose une réaction sur le message initial (bot token requis). `emoji` sans « : ».
 export async function addDevisReaction(channel: string, ts: string, emoji: string): Promise<{ ok: boolean; error?: string }> {
   return slackApi("reactions.add", { channel, timestamp: ts, name: emoji });
+}
+
+// Résout l'ID Slack d'un utilisateur à partir de son email (scope
+// `users:read.email` requis). Best-effort → null si absent/non trouvé/pas de
+// token. Sert à @mentionner (pinger) le gestionnaire dans le message.
+export async function resolveSlackUserId(email: string): Promise<string | null> {
+  if (!SLACK_BOT_TOKEN || !email) return null;
+  try {
+    const res = await fetch(`https://slack.com/api/users.lookupByEmail?email=${encodeURIComponent(email)}`, {
+      headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` },
+    });
+    const j = (await res.json().catch(() => ({}))) as { ok?: boolean; user?: { id?: string } };
+    return j.ok && j.user?.id ? j.user.id : null;
+  } catch { return null; }
 }
