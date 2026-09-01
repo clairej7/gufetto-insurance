@@ -71,7 +71,7 @@ export async function buildGestionnaireMessage(pipelineId: string): Promise<{ ok
 
   const token = signValidationToken(p.id);
   const lines = [
-    "*Assurances Pro*",
+    "*Gufetto - Assurance pro*",
     "",
     gestioLine,
     `• *Copropriété* : ${p.copro.adresse || p.copro.nom}`,
