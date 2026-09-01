@@ -101,3 +101,48 @@ export async function postToDevisChannel(text: string): Promise<{ ok: boolean; e
     return { ok: false, error: e instanceof Error ? e.message : "Erreur réseau Slack" };
   }
 }
+
+// ── Slack Web API (bot token) — activé UNIQUEMENT si SLACK_BOT_TOKEN présent ──
+// Permet de : poster le message initial en récupérant son `ts`, répondre en
+// THREAD de ce message, et poser une réaction dessus. Sans token, on retombe sur
+// l'Incoming Webhook et les réponses restent des messages simples (historique).
+const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
+const SLACK_DEVIS_CHANNEL_ID = process.env.SLACK_DEVIS_CHANNEL_ID;
+
+async function slackApi(method: string, body: Record<string, unknown>): Promise<{ ok: boolean; ts?: string; error?: string }> {
+  if (!SLACK_BOT_TOKEN) return { ok: false, error: "SLACK_BOT_TOKEN absent" };
+  try {
+    const res = await fetch(`https://slack.com/api/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8", Authorization: `Bearer ${SLACK_BOT_TOKEN}` },
+      body: JSON.stringify(body),
+    });
+    const j = (await res.json().catch(() => ({}))) as { ok?: boolean; ts?: string; error?: string };
+    if (!j.ok) return { ok: false, error: j.error ?? `HTTP ${res.status}` };
+    return { ok: true, ts: j.ts };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erreur réseau Slack" };
+  }
+}
+
+// Poste le message initial. Bot token → chat.postMessage (renvoie ts + channel,
+// nécessaire pour le threading) ; sinon → webhook (pas de ts → réponses simples).
+export async function postDevisMessage(text: string): Promise<{ ok: boolean; ts?: string | null; channel?: string | null; error?: string }> {
+  if (SLACK_BOT_TOKEN && SLACK_DEVIS_CHANNEL_ID) {
+    const r = await slackApi("chat.postMessage", { channel: SLACK_DEVIS_CHANNEL_ID, text, unfurl_links: false });
+    if (!r.ok) return { ok: false, error: r.error };
+    return { ok: true, ts: r.ts ?? null, channel: SLACK_DEVIS_CHANNEL_ID };
+  }
+  const w = await postToDevisChannel(text);
+  return { ok: w.ok, ts: null, channel: null, error: w.error };
+}
+
+// Répond DANS LE THREAD du message initial (bot token requis).
+export async function postDevisThreadReply(channel: string, threadTs: string, text: string): Promise<{ ok: boolean; error?: string }> {
+  return slackApi("chat.postMessage", { channel, thread_ts: threadTs, text, unfurl_links: false });
+}
+
+// Pose une réaction sur le message initial (bot token requis). `emoji` sans « : ».
+export async function addDevisReaction(channel: string, ts: string, emoji: string): Promise<{ ok: boolean; error?: string }> {
+  return slackApi("reactions.add", { channel, timestamp: ts, name: emoji });
+}

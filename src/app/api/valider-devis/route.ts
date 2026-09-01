@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyValidationToken } from "@/lib/devis6-token";
-import { postToDevisChannel } from "@/lib/devis6-slack";
+import { postToDevisChannel, postDevisThreadReply, addDevisReaction } from "@/lib/devis6-slack";
 
 // POST /api/valider-devis { token, reponse: "valide"|"refus", comment? }
 // PUBLIC (gated by signed token) — réponse du gestionnaire à la proposition de
@@ -40,7 +40,21 @@ export async function POST(req: NextRequest) {
   const head = reponse === "valide"
     ? `✅ *${who}* a *confirmé* la transmission au CS — ${dossier}`
     : `🚫 *${who}* a demandé de *ne pas envoyer* — ${dossier}`;
-  await postToDevisChannel(cleanComment ? `${head}\n💬 _${cleanComment}_` : head).catch(() => {});
+  const body = cleanComment ? `${head}\n💬 _${cleanComment}_` : head;
+
+  // Si le message initial a été posté via bot token (ts mémorisé), on répond EN
+  // THREAD + on pose une réaction dessus (✅/❌). Sinon → message simple (webhook).
+  const notif = await prisma.pipelineEvent.findFirst({
+    where: { pipelineId, metadata: { path: ["auto"], equals: "devis6_notify_gestionnaire" } },
+    orderBy: { createdAt: "desc" }, select: { metadata: true },
+  });
+  const meta = (notif?.metadata ?? null) as { slackTs?: string | null; slackChannel?: string | null } | null;
+  if (meta?.slackTs && meta?.slackChannel) {
+    await postDevisThreadReply(meta.slackChannel, meta.slackTs, body).catch(() => {});
+    await addDevisReaction(meta.slackChannel, meta.slackTs, reponse === "valide" ? "white_check_mark" : "x").catch(() => {});
+  } else {
+    await postToDevisChannel(body).catch(() => {});
+  }
 
   return NextResponse.json({ success: true });
 }
