@@ -55,6 +55,23 @@ export function Devis6Controls({ table }: { table: Table }) {
   const aComparer = table.rows.filter((r) => !r.comparaisonFaite).length;
   const [genBatch, setGenBatch] = useState<{ running: boolean; done: number; total: number; ok: number; fail: number } | null>(null);
 
+  // Auto-refresh : les réponses des gestionnaires arrivent depuis une autre page
+  // (encart /valider-devis) → ce tableau, rendu au chargement, ne le sait pas. On
+  // re-fetch périodiquement (45 s) et au retour de focus, en pause quand l'onglet
+  // est masqué. router.refresh() rafraîchit les données serveur sans réinitialiser
+  // les filtres locaux (l'état client est conservé).
+  useEffect(() => {
+    const refreshIfVisible = () => { if (document.visibilityState === "visible") router.refresh(); };
+    const id = window.setInterval(refreshIfVisible, 45000);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    window.addEventListener("focus", refreshIfVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+      window.removeEventListener("focus", refreshIfVisible);
+    };
+  }, [router]);
+
   async function genererToutes() {
     const targets = table.rows.filter((r) => !r.comparaisonFaite).map((r) => r.pipelineId);
     if (!targets.length) return;
