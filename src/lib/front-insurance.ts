@@ -295,6 +295,26 @@ numeroContrat = le numéro de police/contrat exact. assureur = la compagnie d'as
 // Extraction principale
 // ---------------------------------------------------------------------------
 
+// Récupère le « CCR Pro » (personne assignée) depuis les champs personnalisés
+// des conversations Front de la copro. Best-effort : renvoie null si absent
+// (aucune conv, champ vide, ou erreur réseau) → la ligne est alors omise.
+export async function getCcrProFromFront(buildingId: string): Promise<string | null> {
+  if (!buildingId) return null;
+  const KEYS = ["CCR Pro", "CCR pro", "CCR PRO", "ccr_pro"];
+  try {
+    const convs = await searchByBuildingId(buildingId);
+    for (const c of convs) {
+      const cf = c.custom_fields;
+      if (!cf) continue;
+      for (const k of KEYS) {
+        const v = cf[k];
+        if (typeof v === "string" && v.trim()) return v.trim();
+      }
+    }
+  } catch { /* best-effort */ }
+  return null;
+}
+
 export async function extractInsuranceInfoFromFront(buildingId: string): Promise<InsuranceInfo> {
   const empty: InsuranceInfo = {
     assureur: null, courtier: null, numeroContrat: null, mailCourtier: null,

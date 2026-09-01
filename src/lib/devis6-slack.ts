@@ -64,7 +64,7 @@ export async function buildGestionnaireMessage(pipelineId: string): Promise<{ ok
 
   const token = signValidationToken(p.id);
   const lines = [
-    "*Assurances — nouveaux devis disponibles ! (envoi automatique)*",
+    "*Assurances Pro*",
     "",
     p.copro.gestionnaireNom ? `Gestionnaire : *${p.copro.gestionnaireNom}*` : null,
     `• *Copropriété* : ${p.copro.adresse || p.copro.nom}`,
@@ -79,7 +79,7 @@ export async function buildGestionnaireMessage(pipelineId: string): Promise<{ ok
     "",
     "────────────",
     "*Valides-tu la transmission au Conseil Syndical ?*",
-    `　<${BASE_URL}/valider-devis/${token}?r=oui|✅ Confirmer la transmission au CS>　　<${BASE_URL}/valider-devis/${token}?r=non|🚫 Ne pas envoyer>`,
+    `　<${BASE_URL}/valider-devis/${token}|Réponse>`,
     "💬 _Tu pourras ajouter un commentaire sur la page._",
   ].filter((l): l is string => l !== null);
 

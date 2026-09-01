@@ -28,13 +28,14 @@ export function ValiderForm({ token, defaultChoix }: { token: string; defaultCho
   }
 
   if (done) {
+    const ok = done === "valide";
     return (
-      <div style={{ marginTop: 18, padding: "16px", borderRadius: 12, background: done === "valide" ? "#EAF7EE" : "#FDECEA", border: `1px solid ${done === "valide" ? "#B7E4C4" : "#F4A9A0"}`, textAlign: "center" }}>
-        <div style={{ fontSize: 28 }}>{done === "valide" ? "✅" : "🚫"}</div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#26262C", marginTop: 4 }}>
-          {done === "valide" ? "Merci — transmission au CS confirmée." : "Noté — la proposition ne sera pas envoyée."}
+      <div style={{ marginTop: 18, padding: "18px 16px", borderRadius: 12, background: ok ? "#EAF7EE" : "#FDECEA", border: `1px solid ${ok ? "#B7E4C4" : "#F4A9A0"}`, textAlign: "center" }}>
+        <div style={{ fontSize: 30 }}>{ok ? "✅" : "🚫"}</div>
+        <div style={{ fontSize: 18, fontWeight: 800, color: ok ? "#13762C" : "#CA1E12", marginTop: 4 }}>
+          {ok ? "Proposition validée !" : "Refus"}
         </div>
-        <div style={{ fontSize: 13, color: "#656576", marginTop: 4 }}>L&apos;équipe assurance a été prévenue. Tu peux fermer cette page.</div>
+        <div style={{ fontSize: 13, color: "#656576", marginTop: 6 }}>L&apos;équipe assurance a été prévenue. Tu peux fermer cette page.</div>
       </div>
     );
   }
@@ -58,8 +59,8 @@ export function ValiderForm({ token, defaultChoix }: { token: string; defaultCho
       </div>
 
       <div style={{ marginTop: 14 }}>
-        <label style={{ fontSize: 13, fontWeight: 600, color: "#656576" }}>Commentaire (optionnel)</label>
-        <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={4} placeholder="Une précision pour l'équipe assurance…"
+        <label style={{ fontSize: 13, fontWeight: 600, color: "#656576" }}>Commentaire</label>
+        <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={4} placeholder={"optionnel / ex : « ne rien valider sans l'accord du CS »"}
           style={{ width: "100%", marginTop: 6, fontSize: 14, padding: "10px 12px", border: "1px solid #E8E8EC", borderRadius: 10, resize: "vertical", fontFamily: "inherit" }} />
       </div>
 

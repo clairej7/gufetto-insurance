@@ -73,7 +73,7 @@ export default async function ValiderDevisPage({
 
       {prev?.reponse ? (
         <div style={{ padding: "12px 14px", borderRadius: 10, background: prev.reponse === "valide" ? "#EAF7EE" : "#FDECEA", border: `1px solid ${prev.reponse === "valide" ? "#B7E4C4" : "#F4A9A0"}`, fontSize: 14, color: "#26262C" }}>
-          Réponse déjà enregistrée : <strong>{prev.reponse === "valide" ? "transmission au CS confirmée ✅" : "ne pas envoyer 🚫"}</strong>
+          Réponse déjà enregistrée : <strong style={{ color: prev.reponse === "valide" ? "#13762C" : "#CA1E12" }}>{prev.reponse === "valide" ? "Proposition validée ! ✅" : "Refus 🚫"}</strong>
           {prev.comment ? <div style={{ marginTop: 6, color: "#656576" }}>💬 {prev.comment}</div> : null}
           <div style={{ marginTop: 8, fontSize: 12.5, color: "#656576" }}>Tu peux modifier ta réponse ci-dessous si besoin.</div>
         </div>
