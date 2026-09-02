@@ -95,7 +95,7 @@ export function Devis5Volet3({ lots }: { lots: Lot[] }) {
           ? sends.map((s) => `le ${fmtD(s.at)} à ${s.assureur}`).join(" · ")
           : l.sentAt ? `le ${fmtD(l.sentAt)}` : "";
         return (
-          <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 12px", border: "1px solid #E8E8EC", borderRadius: 10, background: sent ? "#FAFCFB" : "#fff" }}>
+          <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "nowrap", overflowX: "auto", padding: "10px 12px", border: "1px solid #E8E8EC", borderRadius: 10, background: sent ? "#FAFCFB" : "#fff" }}>
             {/* Fichier (toujours téléchargeable) */}
             <button onClick={() => download(l.id, l.createdAt)} disabled={busy === `dl:${l.id}`}
               style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D7DAFB", borderRadius: 8, padding: "7px 12px", cursor: "pointer" }}>
@@ -128,7 +128,7 @@ export function Devis5Volet3({ lots }: { lots: Lot[] }) {
 
             {/* Envoyé ? / Envoyé ! (par assureur) */}
             {sent ? (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: "#13762C", background: "#EFFBF2", border: "1px solid #B7E0C3", borderRadius: 8, padding: "7px 12px" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: "#13762C", background: "#EFFBF2", border: "1px solid #B7E0C3", borderRadius: 8, padding: "7px 12px", whiteSpace: "nowrap", flexShrink: 0 }}>
                 <Check size={14} /> Envoyé ! <span style={{ fontWeight: 500, color: "#4A7D58" }}>{sentTxt}</span>
                 <button onClick={() => markSent(l.id)} disabled={busy === `sent:${l.id}`}
                   title="Ajouter un envoi à un autre assureur"
