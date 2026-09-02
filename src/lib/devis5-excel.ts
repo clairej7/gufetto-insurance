@@ -209,7 +209,13 @@ export async function buildDevis5Xlsx(rows: ExcelRow[]): Promise<Buffer> {
 }
 
 // ─── Volet 3 : lots Excel ────────────────────────────────────────────────────
-export type Devis5LotRow = { id: string; createdAt: string; createdBy: string; sentAt: string | null; count: number };
+export type LotSend = { assureur: string; at: string; by: string };
+export type Devis5LotRow = { id: string; createdAt: string; createdBy: string; sentAt: string | null; count: number; sends: LotSend[] };
+
+function parseSends(raw: string | null): LotSend[] {
+  if (!raw) return [];
+  try { const a = JSON.parse(raw); return Array.isArray(a) ? a : []; } catch { return []; }
+}
 
 // Crée un lot à partir des lignes affichées : fige rows + pipelineIds, marque les
 // dossiers (event devis5Lot → ils sortent du Volet 2). Retourne l'id du lot.
@@ -232,7 +238,7 @@ export async function createDevis5Lot(rows: ExcelRow[], actorEmail: string): Pro
 
 export async function getDevis5Lots(): Promise<Devis5LotRow[]> {
   const lots = await prisma.devis5Lot.findMany({ orderBy: { createdAt: "desc" }, take: 50 });
-  return lots.map((l) => ({ id: l.id, createdAt: l.createdAt.toISOString(), createdBy: l.createdBy, sentAt: l.sentAt?.toISOString() ?? null, count: l.count }));
+  return lots.map((l) => ({ id: l.id, createdAt: l.createdAt.toISOString(), createdBy: l.createdBy, sentAt: l.sentAt?.toISOString() ?? null, count: l.count, sends: parseSends(l.sends) }));
 }
 
 // Re-génère le .xlsx d'un lot depuis ses lignes figées.
@@ -246,15 +252,25 @@ export async function getDevis5LotXlsx(lotId: string): Promise<Buffer | null> {
 
 // Marque un lot « envoyé » (à la main) → date + event devis_sent sur chaque dossier
 // (⇒ « demandes envoyées » du dashboard). Idempotent.
-export async function markDevis5LotSent(lotId: string, actorEmail: string): Promise<{ ok: boolean; sentAt: string; marked: number }> {
+export async function markDevis5LotSent(lotId: string, actorEmail: string, assureur?: string): Promise<{ ok: boolean; sentAt: string; marked: number; sends: LotSend[] }> {
   const lot = await prisma.devis5Lot.findUnique({ where: { id: lotId } });
   if (!lot) throw new Error("lot introuvable");
-  const now = lot.sentAt ?? new Date();
+  const now = new Date();
+  const firstSend = !lot.sentAt;
   let ids: string[] = [];
   try { ids = JSON.parse(lot.pipelineIds) as string[]; } catch { ids = []; }
-  if (!lot.sentAt) {
-    await prisma.devis5Lot.update({ where: { id: lotId }, data: { sentAt: now, sentBy: actorEmail } });
-    // devis_sent sur les dossiers qui ne l'ont pas encore (anti-doublon).
+
+  // Ajoute l'envoi (par assureur) à l'historique du lot.
+  const sends = parseSends(lot.sends);
+  sends.push({ assureur: (assureur || "").trim() || "assureur", at: now.toISOString(), by: actorEmail });
+  const data: { sends: string; sentAt?: Date; sentBy?: string } = { sends: JSON.stringify(sends) };
+  if (firstSend) { data.sentAt = now; data.sentBy = actorEmail; }
+  await prisma.devis5Lot.update({ where: { id: lotId }, data });
+
+  // Le comptage « demande envoyée » ne se fait qu'au PREMIER envoi (idempotent) :
+  // envoyer le même lot à un 2ᵉ assureur ne re-compte pas les dossiers.
+  let marked = 0;
+  if (firstSend) {
     const already = await prisma.pipelineEvent.findMany({
       where: { pipelineId: { in: ids }, metadata: { path: ["devisType"], equals: "devis_sent" } },
       select: { pipelineId: true },
@@ -265,12 +281,12 @@ export async function markDevis5LotSent(lotId: string, actorEmail: string): Prom
       await prisma.pipelineEvent.createMany({
         data: todo.map((pid) => ({
           pipelineId: pid, type: "action_manuelle" as const,
-          description: `Demande de devis envoyée (lot Excel AXA du ${now.toLocaleDateString("fr-FR")})`,
+          description: `Demande de devis envoyée (lot Excel du ${now.toLocaleDateString("fr-FR")})`,
           metadata: { devisType: "devis_sent", relanceNum: 0, auto: "devis5_lot", lotId }, createdBy: actorEmail,
         })),
       });
     }
-    return { ok: true, sentAt: now.toISOString(), marked: todo.length };
+    marked = todo.length;
   }
-  return { ok: true, sentAt: now.toISOString(), marked: 0 };
+  return { ok: true, sentAt: (lot.sentAt ?? now).toISOString(), marked, sends };
 }

@@ -9,7 +9,8 @@ import JSZip from "jszip";
 import { Loader2, Download, Mail, Check, FolderArchive } from "lucide-react";
 import { toast } from "sonner";
 
-type Lot = { id: string; createdAt: string; createdBy: string; sentAt: string | null; count: number };
+type LotSend = { assureur: string; at: string; by: string };
+type Lot = { id: string; createdAt: string; createdBy: string; sentAt: string | null; count: number; sends: LotSend[] };
 
 export function Devis5Volet3({ lots }: { lots: Lot[] }) {
   const router = useRouter();
@@ -32,12 +33,16 @@ export function Devis5Volet3({ lots }: { lots: Lot[] }) {
   }
 
   async function markSent(id: string) {
+    const assureur = window.prompt("À quel assureur ce lot a-t-il été envoyé ? (ex : AXA, Sada)");
+    if (assureur === null) return; // annulé
+    const a = assureur.trim();
+    if (!a) { toast.error("Indique un assureur."); return; }
     setBusy(`sent:${id}`);
     try {
-      const res = await fetch("/api/devis5/lot/mark-sent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lotId: id }) });
+      const res = await fetch("/api/devis5/lot/mark-sent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lotId: id, assureur: a }) });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Erreur");
-      toast.success(`Lot marqué envoyé — ${d.marked} dossier(s) comptés comme demande envoyée.`);
+      toast.success(d.marked ? `Envoi à ${a} enregistré — ${d.marked} dossier(s) comptés comme demande envoyée.` : `Envoi à ${a} enregistré.`);
       router.refresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Erreur"); }
     finally { setBusy(null); }
@@ -75,6 +80,7 @@ export function Devis5Volet3({ lots }: { lots: Lot[] }) {
   }
 
   const fmt = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const fmtD = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
   if (!lots.length) {
     return <p style={{ fontSize: 12.5, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun lot pour l&apos;instant. Depuis le Volet 2, clique « Générer l&apos;excel » : le fichier apparaîtra ici.</p>;
@@ -83,7 +89,11 @@ export function Devis5Volet3({ lots }: { lots: Lot[] }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {lots.map((l) => {
-        const sent = !!l.sentAt;
+        const sends = l.sends ?? [];
+        const sent = sends.length > 0 || !!l.sentAt;
+        const sentTxt = sends.length
+          ? sends.map((s) => `le ${fmtD(s.at)} à ${s.assureur}`).join(" · ")
+          : l.sentAt ? `le ${fmtD(l.sentAt)}` : "";
         return (
           <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 12px", border: "1px solid #E8E8EC", borderRadius: 10, background: sent ? "#FAFCFB" : "#fff" }}>
             {/* Fichier (toujours téléchargeable) */}
@@ -116,10 +126,15 @@ export function Devis5Volet3({ lots }: { lots: Lot[] }) {
               <span style={{ fontSize: 10.5, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "#FFF7EB", color: "#955804" }}>à venir</span>
             </span>
 
-            {/* Envoyé ? / Envoyé ! */}
+            {/* Envoyé ? / Envoyé ! (par assureur) */}
             {sent ? (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: "#13762C", background: "#EFFBF2", border: "1px solid #B7E0C3", borderRadius: 8, padding: "7px 12px" }}>
-                <Check size={14} /> Envoyé ! <span style={{ fontWeight: 500, color: "#4A7D58" }}>le {fmt(l.sentAt!)}</span>
+                <Check size={14} /> Envoyé ! <span style={{ fontWeight: 500, color: "#4A7D58" }}>{sentTxt}</span>
+                <button onClick={() => markSent(l.id)} disabled={busy === `sent:${l.id}`}
+                  title="Ajouter un envoi à un autre assureur"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 4, fontSize: 11.5, fontWeight: 700, color: "#13762C", background: "transparent", border: "1px solid #B7E0C3", borderRadius: 6, padding: "2px 7px", cursor: "pointer" }}>
+                  {busy === `sent:${l.id}` ? <Loader2 size={12} className="animate-spin" /> : "+"} ajouter
+                </button>
               </span>
             ) : (
               <button onClick={() => markSent(l.id)} disabled={busy === `sent:${l.id}`}

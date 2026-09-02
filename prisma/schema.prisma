@@ -543,6 +543,7 @@ model Devis5Lot {
   count       Int
   rows        String    @db.Text // JSON des lignes du tableau (re-génération du xlsx)
   pipelineIds String    @db.Text // JSON des pipelineId couverts
+  sends       String?   @db.Text // JSON [{assureur, at, by}] : envois par assureur (AXA, Sada…)
 }
 
 // Snapshot hebdomadaire du taux de pénétration (pour la vue « Progression » de la

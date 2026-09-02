@@ -7,8 +7,8 @@ import { markDevis5LotSent } from "@/lib/devis5-excel";
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.isAdmin) return NextResponse.json({ error: "Réservé aux admins" }, { status: 403 });
-  const { lotId } = await req.json().catch(() => ({}));
+  const { lotId, assureur } = await req.json().catch(() => ({}));
   if (!lotId) return NextResponse.json({ error: "lotId requis" }, { status: 400 });
-  const r = await markDevis5LotSent(lotId, session.user.email ?? "?");
+  const r = await markDevis5LotSent(lotId, session.user.email ?? "?", typeof assureur === "string" ? assureur : undefined);
   return NextResponse.json(r);
 }
