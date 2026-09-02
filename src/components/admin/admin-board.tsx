@@ -354,11 +354,16 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
   //    est normalement INFÉRIEURE au total (assureur pas toujours renseigné).
   //  Les perdus/refusés sont dans lostPipelines (hors `fp`) → exclus d'office.
   const odrRows         = fp.filter(p => !!p.odrPartenaire);
-  // Agrégat pipeline (statut) — bloc du bas :
-  const aggEnCours = fp.filter(p => p.statut === "odr_en_cours");
-  const aggEnvoye  = fp.filter(p => p.statut === "odr_envoye");
-  const aggAccepte = fp.filter(p => p.statut === "odr_accepte");
-  const aggClos    = odrRows.filter(p => bucketOf(p) === "clos"); // ODR-clos = marqués
+  // Agrégat pipeline (bloc du bas) — via `bucketOf` (= categoriseDossier), donc
+  // ALIGNÉ sur le Kanban « Répartition par étape » et sur la compo Actifs/Gagnés
+  // de « Revenus ». En cours/envoyé écartent les copros déjà clientes MRI (bucket
+  // clos) → plus de double-comptage. Accepté/clos exigent le marqueur ODR (cf.
+  // entête « accepté & clos = uniquement de vrais ODR ») → identiques au bloc par
+  // assureur (aux copros sans assureur renseigné près, exclues côté par-assureur).
+  const aggEnCours = fp.filter(p => bucketOf(p) === "odr");
+  const aggEnvoye  = fp.filter(p => bucketOf(p) === "odr_envoye");
+  const aggAccepte = odrRows.filter(p => bucketOf(p) === "odr_accepte");
+  const aggClos    = odrRows.filter(p => bucketOf(p) === "clos");
   const odrStages = [
     { key: "odr",     label: "ODR en cours",  rows: aggEnCours, color: "#955804" },
     { key: "envoye",  label: "ODR envoyées",  rows: aggEnvoye,  color: "#8A4B04" },
