@@ -24,7 +24,6 @@ import { getDevis5Volet1Data, getDevis5DocsToLoad, getDocLoadHistory, getDevis5N
 import { getDevis5Lots } from "@/lib/devis5-excel";
 import { getDevis6TableData } from "@/lib/devis6";
 import { Devis6Controls } from "@/components/admin/devis6-controls";
-import { WeeklyRecapButton } from "@/components/admin/weekly-recap-button";
 import { getDevis7TableData } from "@/lib/devis7";
 import { getDevis7Volet2, getDevis7CsHistory } from "@/lib/devis7-cs";
 import { Devis7Controls } from "@/components/admin/devis7-controls";
@@ -247,7 +246,7 @@ export default async function AutomatisationsPage() {
     },
     {
       n: 8,
-      nom: "Agent de nettoyage de la data & remontée des cas étranges",
+      nom: "Autre : nettoyage data, piscine, baluardo, recap hebdo",
       etat: "deploye",
       description: [
         "Agent de nettoyage de la donnée — un seul des composants de l'automatisation finale. Trois volets sont en ligne ci-dessous : « clean prime », « clean avis d'échéance (données périmées) » et « correction GetHumanCall ».",
@@ -274,9 +273,6 @@ export default async function AutomatisationsPage() {
 
         <AutomationModeTabs semiAuto={
         <>
-        <div style={{ marginBottom: 16 }}>
-          <WeeklyRecapButton />
-        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {automations.map((a) => {
             const etat = ETATS[a.etat];
@@ -680,7 +676,7 @@ export default async function AutomatisationsPage() {
                     <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
                       <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
                         <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 5</span>
-                        <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Agent de détection d&apos;anomalies</span>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Baluardo : agent de détection d&apos;anomalies</span>
                       </div>
                       <p style={{ fontSize: 13, color: "#8A8A99", margin: 0, fontStyle: "italic" }}>À venir au fur et à mesure des automatisations finales.</p>
                     </div>
