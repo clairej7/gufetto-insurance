@@ -12,7 +12,8 @@ export const RELANCE_APRES_HEURES = 24;
 export async function sendDevis6Relances(
   now: Date = new Date(),
   by = "auto:devis6-relance",
-): Promise<{ relances: number; ignores: number; details: string[] }> {
+  opts: { limit?: number; dryRun?: boolean } = {},
+): Promise<{ relances: number; ignores: number; eligibles: number; dryRun: boolean; details: string[] }> {
   const seuil = new Date(now.getTime() - RELANCE_APRES_HEURES * 60 * 60 * 1000);
 
   // Dernier message « nouveaux devis » par dossier (avec son ts/canal Slack).
@@ -28,7 +29,7 @@ export async function sendDevis6Relances(
     lastNotif.set(e.pipelineId, { createdAt: e.createdAt, slackTs: m.slackTs ?? null, slackChannel: m.slackChannel ?? null });
   }
   const ids = [...lastNotif.keys()];
-  if (!ids.length) return { relances: 0, ignores: 0, details: [] };
+  if (!ids.length) return { relances: 0, ignores: 0, eligibles: 0, dryRun: !!opts.dryRun, details: [] };
 
   const [responses, relancesEv, pipelines, excl] = await Promise.all([
     prisma.pipelineEvent.findMany({ where: { pipelineId: { in: ids }, metadata: { path: ["auto"], equals: "devis6_gestio_response" } }, select: { pipelineId: true, createdAt: true } }),
@@ -46,7 +47,7 @@ export async function sendDevis6Relances(
   const lastRel = latest(relancesEv);
   const pById = new Map(pipelines.map((p) => [p.id, p]));
 
-  let relances = 0, ignores = 0; const details: string[] = [];
+  let relances = 0, ignores = 0, eligibles = 0; const details: string[] = [];
   for (const id of ids) {
     const notif = lastNotif.get(id)!;
     const p = pById.get(id);
@@ -62,6 +63,11 @@ export async function sendDevis6Relances(
     const thread = await getThreadReplies(notif.slackChannel, notif.slackTs);
     if (thread.ok && thread.messages.some((m) => m.ts && m.ts !== notif.slackTs && !m.bot_id && !m.subtype && m.user)) { ignores++; continue; }
 
+    // Dossier ÉLIGIBLE à partir d'ici.
+    eligibles++;
+    if (opts.dryRun) { details.push(`${p.copro.nom} : éligible (dry-run, non envoyé)`); continue; }
+    if (opts.limit != null && relances >= opts.limit) { ignores++; continue; } // quota de test atteint
+
     const uid = p.copro.gestionnaireEmail ? await resolveSlackUserId(p.copro.gestionnaireEmail) : null;
     const ping = uid ? `<@${uid}> ` : "";
     const text =
@@ -71,9 +77,9 @@ export async function sendDevis6Relances(
     const sent = await postDevisThreadReply(notif.slackChannel, notif.slackTs, text);
     if (!sent.ok) { ignores++; details.push(`${p.copro.nom} : échec Slack (${sent.error ?? "?"})`); continue; }
     await prisma.pipelineEvent.create({
-      data: { pipelineId: id, type: "action_manuelle", description: "Relance gestionnaire (2 j sans réponse) postée en thread Slack", metadata: { auto: "devis6_relance", slackTs: notif.slackTs, slackChannel: notif.slackChannel }, createdBy: by },
+      data: { pipelineId: id, type: "action_manuelle", description: "Relance gestionnaire (24 h sans réponse) postée en thread Slack", metadata: { auto: "devis6_relance", slackTs: notif.slackTs, slackChannel: notif.slackChannel }, createdBy: by },
     });
     relances++; details.push(`${p.copro.nom} : relancé`);
   }
-  return { relances, ignores, details };
+  return { relances, ignores, eligibles, dryRun: !!opts.dryRun, details };
 }

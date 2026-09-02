@@ -5,9 +5,15 @@ import { sendDevis6Relances } from "@/lib/devis6-relance";
 const CRON_SECRET = process.env.CRON_SECRET;
 
 // POST /api/cron/devis6-relances
-// Relance en thread les gestionnaires sans réponse depuis ≥ 2 jours (auto 6).
-// Auth : header Authorization: Bearer CRON_SECRET (cron interne) OU session admin
-// (bouton manuel). Appelé quotidiennement par le service crm-assurance-cron.
+// Relance en thread les gestionnaires sans réponse depuis ≥ 24 h (auto 6).
+// Auth : Bearer CRON_SECRET (cron interne) OU session admin (bouton manuel).
+//
+// GARDE-FOU ANTI-ENVOI EN MASSE :
+//  • Appel CRON (Bearer) → n'ENVOIE QUE si env DEVIS6_RELANCE_ENABLED === "true",
+//    sinon dry-run (compte les éligibles, n'envoie rien). Permet de valider à la
+//    main avant d'activer l'auto.
+//  • Appel ADMIN (bouton) → ?dryRun=1 pour compter, ?limit=N pour n'envoyer que N
+//    dossiers (test avec 1), sinon envoie tous les éligibles.
 export async function POST(req: NextRequest) {
   const authz = req.headers.get("authorization");
   const isCron = !!CRON_SECRET && authz === `Bearer ${CRON_SECRET}`;
@@ -15,6 +21,16 @@ export async function POST(req: NextRequest) {
   if (!isCron && !session?.user?.isAdmin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const by = isCron ? "auto:devis6-relance" : (session?.user?.email ?? "admin");
-  const r = await sendDevis6Relances(new Date(), by);
-  return NextResponse.json({ success: true, ...r });
+  const url = new URL(req.url);
+  const limitParam = url.searchParams.get("limit");
+  const limit = limitParam ? Math.max(0, parseInt(limitParam, 10)) : undefined;
+  const dryRunParam = url.searchParams.get("dryRun") === "1";
+
+  const cronEnabled = process.env.DEVIS6_RELANCE_ENABLED === "true";
+  const opts = isCron
+    ? { dryRun: !cronEnabled }               // cron : dry-run tant que non activé
+    : { limit, dryRun: dryRunParam };         // admin : test paramétrable
+
+  const r = await sendDevis6Relances(new Date(), by, opts);
+  return NextResponse.json({ success: true, gated: isCron && !cronEnabled, ...r });
 }
