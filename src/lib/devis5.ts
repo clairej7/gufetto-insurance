@@ -534,8 +534,13 @@ export async function getGestionnaireFlowDaily(): Promise<{ rows: DevisFlowDay[]
     prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "devis6_notify_gestionnaire" } }, select: { pipelineId: true, createdAt: true } }),
     prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "devis6_gestio_response" } }, select: { pipelineId: true, createdAt: true, metadata: true }, orderBy: { createdAt: "asc" } }),
   ]);
+  // TRANSMIS = notify bot OU réponse gestio (même définition que la carte
+  // « transmises » du dashboard) → le lot manuel (validé sans notify) compte aussi.
+  // Date de transmission = plus ancien signal (notify si présent, sinon réponse).
   const firstSent = new Map<string, Date>();
-  for (const e of notifEv) { const cur = firstSent.get(e.pipelineId); if (!cur || e.createdAt < cur) firstSent.set(e.pipelineId, e.createdAt); }
+  const noteSent = (pid: string, at: Date) => { const cur = firstSent.get(pid); if (!cur || at < cur) firstSent.set(pid, at); };
+  for (const e of notifEv) noteSent(e.pipelineId, e.createdAt);
+  for (const e of respEv) noteSent(e.pipelineId, e.createdAt);
   const firstValid = new Map<string, Date>();
   for (const e of respEv) {
     if ((e.metadata as { reponse?: string } | null)?.reponse !== "valide") continue;
