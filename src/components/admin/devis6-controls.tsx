@@ -229,6 +229,7 @@ export function Devis6Controls({ table }: { table: Table }) {
           style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: "#fff", background: aComparer === 0 ? "#B8B5FD" : genBatch?.running ? "#7B77F5" : "#4E49FC", border: "none", borderRadius: 10, padding: "9px 16px", cursor: aComparer === 0 || genBatch?.running ? "default" : "pointer" }}>
           {genBatch?.running ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} {genBatch?.running ? `Génération… ${genBatch.done}/${genBatch.total}` : `Générer les ${aComparer} comparaison${aComparer > 1 ? "s" : ""}`}
         </button>
+        <span style={{ marginLeft: 10, verticalAlign: "middle" }}><Devis6RelanceButton /></span>
         <span style={{ fontSize: 11.5, color: "#A2A1AF", marginLeft: 10 }}>Comparaisons Claude des dossiers restants (celles sans devis stocké seront ignorées).</span>
         {(genBatch?.running || (genBatch && !genBatch.running)) && (
           <div style={{ marginTop: 8 }}>
@@ -238,16 +239,6 @@ export function Devis6Controls({ table }: { table: Table }) {
             <p style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>{genBatch!.done}/{genBatch!.total} · <b style={{ color: "#13762C" }}>{genBatch!.ok} générées</b>{genBatch!.fail ? ` · ${genBatch!.fail} ignorées (pas de devis stocké)` : ""}{genBatch!.running ? " · en cours…" : ""}</p>
           </div>
         )}
-      </div>
-
-      {/* Volet 6 — Relance des gestionnaires */}
-      <div style={{ marginBottom: 16, paddingTop: 12, borderTop: "1px dashed #E8E8EC" }}>
-        <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 6</span>
-          <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Relance des gestionnaires</span>
-        </div>
-        <p style={{ fontSize: 12, color: "#656576", margin: "0 0 10px" }}>Relance en thread Slack les gestionnaires sans réponse (ni bouton ni commentaire) depuis 48 h.</p>
-        <Devis6RelanceButton />
       </div>
 
       {/* Barre de recherche / filtres */}
