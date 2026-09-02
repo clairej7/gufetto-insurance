@@ -83,14 +83,20 @@ export async function computeWeeklyRecap(ref: Date) {
     devisRecus: setFor("devis_recus"),
     signe: setFor("contrat_signe"),
   };
-  const resp = await prisma.pipelineEvent.findMany({
-    where: { createdAt: { gte: start, lte: end }, metadata: { path: ["auto"], equals: "devis6_gestio_response" } },
-    select: { metadata: true, pipelineId: true },
+  // Propositions au CS (auto 7) : transmises (devis7_cs_sent) et acceptées (devis7_cs_statut = accepte).
+  const csSentEv = await prisma.pipelineEvent.findMany({
+    where: { createdAt: { gte: start, lte: end }, metadata: { path: ["auto"], equals: "devis7_cs_sent" } },
+    select: { pipelineId: true },
   });
-  const devisValides = new Set(resp.filter((r) => (r.metadata as { reponse?: string } | null)?.reponse === "valide").map((r) => r.pipelineId));
+  const csStatutEv = await prisma.pipelineEvent.findMany({
+    where: { createdAt: { gte: start, lte: end }, metadata: { path: ["auto"], equals: "devis7_cs_statut" } },
+    select: { pipelineId: true, metadata: true },
+  });
+  const propTransmises = new Set(csSentEv.map((e) => e.pipelineId));
+  const propAcceptees = new Set(csStatutEv.filter((e) => (e.metadata as { value?: string } | null)?.value === "accepte").map((e) => e.pipelineId));
 
   // € du flux : prime des dossiers concernés.
-  const ids = new Set<string>([...wk.odrEnvoyes, ...wk.odrAcceptes, ...wk.rsObtenus, ...wk.devisRecus, ...wk.signe, ...devisValides]);
+  const ids = new Set<string>([...wk.odrEnvoyes, ...wk.odrAcceptes, ...wk.rsObtenus, ...wk.devisRecus, ...wk.signe, ...propTransmises, ...propAcceptees]);
   const primeById = new Map<string, number>();
   if (ids.size) {
     const rows = await prisma.insurancePipeline.findMany({ where: { id: { in: [...ids] } }, select: { id: true, copro: { select: { primeActuelle: true } } } });
@@ -99,7 +105,7 @@ export async function computeWeeklyRecap(ref: Date) {
   const aggOf = (s: Set<string>): Agg => ({ n: s.size, mt: [...s].reduce((a, id) => a + (primeById.get(id) ?? 0), 0) });
   const weekly = {
     odrEnvoyes: aggOf(wk.odrEnvoyes), odrAcceptes: aggOf(wk.odrAcceptes), rsObtenus: aggOf(wk.rsObtenus),
-    devisRecus: aggOf(wk.devisRecus), devisValides: aggOf(devisValides), signe: aggOf(wk.signe),
+    devisRecus: aggOf(wk.devisRecus), propTransmises: aggOf(propTransmises), propAcceptees: aggOf(propAcceptees), signe: aggOf(wk.signe),
   };
 
   // ── Message Block Kit ──
@@ -109,7 +115,8 @@ export async function computeWeeklyRecap(ref: Date) {
     li("• ✅ ODR acceptés", weekly.odrAcceptes),
     li("• 📄 RS obtenus", weekly.rsObtenus),
     li("• 📨 Devis reçus", weekly.devisRecus),
-    li("• 💬 Devis validés par les gestio", weekly.devisValides),
+    li("• 📩 Propositions transmises au CS", weekly.propTransmises),
+    li("• 🤝 Propositions acceptées par le CS", weekly.propAcceptees),
     li("• 🖋️ Signés", weekly.signe),
   ].join("\n");
   const pipeTxt = [
