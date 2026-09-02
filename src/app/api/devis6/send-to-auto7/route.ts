@@ -22,11 +22,16 @@ export async function POST() {
     },
     select: {
       id: true,
+      contratActuelData: true,
+      documents: { where: { kind: "contrat_mri" }, select: { id: true }, take: 1 },
       events: { where: { metadata: { path: ["auto"], equals: "devis6_gestio_response" } }, orderBy: { createdAt: "desc" }, take: 1, select: { metadata: true } },
     },
   });
   // Ne garder que ceux dont la DERNIÈRE réponse gestionnaire est « valide ».
-  const prets = ps.filter((p) => (p.events[0]?.metadata as { reponse?: string } | undefined)?.reponse === "valide");
+  const valides = ps.filter((p) => (p.events[0]?.metadata as { reponse?: string } | undefined)?.reponse === "valide");
+  // Garde-fou : on n'envoie au CS que les dossiers avec contrat rattaché.
+  const prets = valides.filter((p) => p.documents.length > 0 || !!(p.contratActuelData && p.contratActuelData.trim()));
+  const bloques = valides.length - prets.length;
 
   let moved = 0;
   for (const p of prets) {
@@ -34,5 +39,5 @@ export async function POST() {
     await prisma.insurancePipeline.update({ where: { id: p.id }, data: { statut: "envoye_cs" } });
     moved++;
   }
-  return NextResponse.json({ success: true, moved });
+  return NextResponse.json({ success: true, moved, bloques });
 }

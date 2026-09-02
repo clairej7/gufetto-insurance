@@ -92,6 +92,21 @@ function parseContratPrime(raw: string | null): number | null {
   try { const d = JSON.parse(raw) as { primeTTC?: unknown }; return typeof d.primeTTC === "number" ? d.primeTTC : null; } catch { return null; }
 }
 
+// Garde-fou « contrat présent » : un dossier ne peut être transmis (gestionnaire
+// puis CS) que si le contrat actuel est rattaché — soit un document contrat_mri,
+// soit des données contrat extraites (contratActuelData). Évite les comparaisons /
+// économies bâties sur une prime Omni non vérifiée (cf. cas 3 Rue des Guilands).
+export async function contratPresent(pipelineId: string): Promise<boolean> {
+  const p = await prisma.insurancePipeline.findUnique({
+    where: { id: pipelineId },
+    select: { contratActuelData: true, documents: { where: { kind: "contrat_mri" }, select: { id: true }, take: 1 } },
+  });
+  if (!p) return false;
+  return p.documents.length > 0 || !!(p.contratActuelData && p.contratActuelData.trim());
+}
+
+export const CONTRAT_MANQUANT_MSG = "Contrat actuel absent de la comparaison — rattache le contrat MRI au dossier avant de transmettre (sinon l'économie repose sur une prime non vérifiée).";
+
 export async function getDevis6TableData(): Promise<Devis6Table> {
   const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({

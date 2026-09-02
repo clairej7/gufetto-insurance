@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { buildGestionnaireMessage, postDevisMessage } from "@/lib/devis6-slack";
+import { contratPresent, CONTRAT_MANQUANT_MSG } from "@/lib/devis6";
 
 // POST /api/devis6/notify-gestionnaire { pipelineId } (admin)
 // Automatisation 6 — bouton « Envoyer » : poste dans le canal Slack le message
@@ -13,6 +14,9 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.isAdmin) return NextResponse.json({ error: "Réservé aux admins" }, { status: 403 });
   const { pipelineId } = (await req.json().catch(() => ({}))) as { pipelineId?: string };
   if (!pipelineId) return NextResponse.json({ error: "pipelineId requis" }, { status: 400 });
+
+  // Garde-fou : pas de contrat rattaché → on refuse la transmission.
+  if (!(await contratPresent(pipelineId))) return NextResponse.json({ error: CONTRAT_MANQUANT_MSG }, { status: 422 });
 
   const built = await buildGestionnaireMessage(pipelineId);
   if (!built.ok) return NextResponse.json({ error: built.error }, { status: 422 });
