@@ -9,7 +9,7 @@ import { Search, Loader2, Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Devis5ExcelTable } from "@/components/admin/devis5-excel-table";
 import { Devis5Volet3 } from "@/components/admin/devis5-volet3";
-type Devis5Lot = { id: string; createdAt: string; createdBy: string; sentAt: string | null; count: number };
+type Devis5Lot = { id: string; createdAt: string; createdBy: string; sentAt: string | null; count: number; sends: { assureur: string; at: string; by: string }[] };
 
 type Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; prime: number | null; courtier: string | null; gestionnaire: string | null; hasRs: boolean; hasContrat: boolean; frontUrl: string | null };
 type Data = { total: number; prets: number; docsManquants: number; rows: Row[] };
