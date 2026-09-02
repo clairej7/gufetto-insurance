@@ -74,9 +74,34 @@ export async function scanCsReplies(offset: number, limit: number): Promise<{ to
   for (const p of slice) {
     const bid = p.copro.buildingId;
     const csEmails = csEmailsOf(p.copro);
-    if (!bid || !csEmails.size) continue;
-    const sd = await frontGet(`/conversations/search/${encodeURIComponent(`custom_field:"building_id=${bid}"`)}?limit=50`);
-    const convs = (((sd?._results as unknown[]) ?? []) as { id: string; tags?: { id: string }[] }[]).filter((c) => (c.tags ?? []).some((t) => t.id === GUFETTO_TAG)).slice(0, 15);
+    if (!csEmails.size) continue; // sans email CS on ne peut pas identifier l'expéditeur
+
+    // Convs candidates, taguées Gufetto. On cherche par building_id ET par email de
+    // membre du CS : le thread de PROPOSITION au CS (envoyé à la main) n'a pas
+    // toujours le custom field building_id → la recherche par email le rattrape.
+    type Cand = { id: string; bidField: string; fromEmail: boolean };
+    const convById = new Map<string, Cand>();
+    const addConvs = (arr: unknown[], fromEmail: boolean) => {
+      for (const c of (arr as { id: string; tags?: { id: string }[]; custom_fields?: Record<string, unknown> }[])) {
+        if (!(c.tags ?? []).some((t) => t.id === GUFETTO_TAG)) continue;
+        const bidField = String((c.custom_fields?.["building_id"] ?? "") || "").trim();
+        // Match par email : on écarte les convs rattachées à un AUTRE immeuble.
+        if (fromEmail && bidField && bid && bidField !== bid) continue;
+        const prev = convById.get(c.id);
+        if (!prev) convById.set(c.id, { id: c.id, bidField, fromEmail });
+        else if (fromEmail && !prev.fromEmail) prev.fromEmail = true;
+      }
+    };
+    if (bid) {
+      const sd = await frontGet(`/conversations/search/${encodeURIComponent(`custom_field:"building_id=${bid}"`)}?limit=50`);
+      addConvs((sd?._results as unknown[]) ?? [], false);
+    }
+    for (const em of csEmails) {
+      const sd = await frontGet(`/conversations/search/${encodeURIComponent(em)}?limit=30`);
+      addConvs((sd?._results as unknown[]) ?? [], true);
+    }
+    const convs = [...convById.values()].slice(0, 25);
+
     let best: { m: FMsg; cid: string } | null = null;
     for (const c of convs) {
       const list = await frontGet(`/conversations/${c.id}/messages?limit=20`);
@@ -87,6 +112,10 @@ export async function scanCsReplies(offset: number, limit: number): Promise<{ to
         if (!best || m.created_at > best.m.created_at) best = { m, cid: c.id };
       }
     }
+    // Lien Front pour la ligne (même sans réponse) : conv du fil CS (match email,
+    // prioritairement celle sans building_id = le fil de proposition), sinon 1re conv.
+    const proposalCid = best?.cid ?? convs.find((c) => c.fromEmail && !c.bidField)?.id ?? convs.find((c) => c.fromEmail)?.id ?? convs[0]?.id ?? null;
+
     // Efface l'ancien verdict pour ce dossier puis (ré)écrit le plus récent.
     await prisma.pipelineEvent.deleteMany({ where: { pipelineId: p.id, metadata: { path: ["auto"], equals: "devis7_cs_reply" } } });
     if (best) {
@@ -95,6 +124,9 @@ export async function scanCsReplies(offset: number, limit: number): Promise<{ to
       const kind = classifyCsReply(body);
       await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Réponse CS détectée (${kind})`, metadata: { auto: "devis7_cs_reply", kind, snippet: body.slice(0, 240), convId: best.cid, from: fromHandle(best.m), at: new Date(best.m.created_at * 1000).toISOString() }, createdBy: "auto:scan_cs" } });
       found++;
+    } else if (proposalCid) {
+      // Pas de réponse détectée, mais on connaît le fil CS → on garde le lien Front.
+      await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: "Fil CS repéré (pas encore de réponse détectée)", metadata: { auto: "devis7_cs_reply", kind: null, convId: proposalCid, snippet: null, from: null, at: null }, createdBy: "auto:scan_cs" } });
     }
   }
   const nextOffset = offset + slice.length;
@@ -119,8 +151,9 @@ export async function getDevis7Volet2(): Promise<Devis7Volet2> {
   const rows: CsReplyRow[] = ps.map((p) => {
     const ev = byPipe.get(p.id);
     const m = ev?.metadata as { kind?: CsReplyKind; snippet?: string; convId?: string; from?: string; at?: string } | undefined;
-    if (ev) { withReply++; if (!lastScan || ev.createdAt > lastScan) lastScan = ev.createdAt; }
+    if (ev) { if (!lastScan || ev.createdAt > lastScan) lastScan = ev.createdAt; }
     const kind = m?.kind ?? null;
+    if (kind) withReply++; // « réponse détectée » = verdict non nul (un event peut ne porter que le lien Front)
     return {
       pipelineId: p.id, nom: p.copro.nom, adresse: p.copro.adresse,
       replyKind: kind, snippet: m?.snippet ?? null, from: m?.from ?? null, at: m?.at ?? null,
