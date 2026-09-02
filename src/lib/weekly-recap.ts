@@ -4,6 +4,7 @@
 // pour matcher EXACTEMENT les buckets du Tracking (« Répartition par étape »).
 import { prisma } from "@/lib/prisma";
 import { categoriseDossier } from "@/lib/pipeline";
+import { getPenetrationSeries } from "@/lib/penetration";
 
 type Agg = { n: number; mt: number };
 const A = (): Agg => ({ n: 0, mt: 0 });
@@ -27,19 +28,20 @@ function isoWeek(d: Date): number {
   return 1 + Math.round((diff - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
 }
 
-// Semaine PASSÉE (lundi 00:00 → dimanche 23:59) relative à `ref`.
-function lastWeekRange(ref: Date) {
+// Semaine EN COURS (lundi 00:00 → `ref`), pensée pour un run le vendredi ~16h :
+// le flux couvre lundi → l'instant du run, et l'étiquette de plage va jusqu'au
+// vendredi de la même semaine.
+function currentWeekRange(ref: Date) {
   const d = new Date(ref);
   const dayNum = (d.getDay() + 6) % 7; // lundi = 0
-  const monThis = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dayNum, 0, 0, 0, 0);
-  const start = new Date(monThis); start.setDate(monThis.getDate() - 7);
-  const end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23, 59, 59, 999);
-  const friday = new Date(start); friday.setDate(start.getDate() + 4);
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dayNum, 0, 0, 0, 0);
+  const friday = new Date(start); friday.setDate(start.getDate() + 4); friday.setHours(23, 59, 59, 999);
+  const end = ref < friday ? ref : friday; // jusqu'au run (vendredi 16h) ou fin de vendredi
   return { start, end, friday };
 }
 
 export async function computeWeeklyRecap(ref: Date) {
-  const { start, end, friday } = lastWeekRange(ref);
+  const { start, end, friday } = currentWeekRange(ref);
   const week = isoWeek(start);
 
   // ── STOCK pipeline actuel (via categoriseDossier = mêmes buckets que le Tracking) ──
@@ -109,9 +111,11 @@ export async function computeWeeklyRecap(ref: Date) {
   };
 
   // ── Message Block Kit ──
+  // Vocabulaire ODR (demande Enzo) : « envoyé » = en attente d'acceptation par
+  // l'assureur ; « en cours » = en cours de préparation (pas encore envoyé).
   const li = (label: string, a: Agg) => `${label} : *${a.n}* · ${fmtMt(a.mt)}`;
   const semaineTxt = [
-    li("• 📤 ODR envoyés", weekly.odrEnvoyes),
+    li("• 📤 ODR mis en attente d'acceptation", weekly.odrEnvoyes),
     li("• ✅ ODR acceptés", weekly.odrAcceptes),
     li("• 📄 RS obtenus", weekly.rsObtenus),
     li("• 📨 Devis reçus", weekly.devisRecus),
@@ -120,8 +124,8 @@ export async function computeWeeklyRecap(ref: Date) {
     li("• 🖋️ Signés", weekly.signe),
   ].join("\n");
   const pipeTxt = [
-    li("• ODR en cours", stock.odrEnCours),
-    li("• ODR envoyés", stock.odrEnvoyes),
+    li("• ODR en cours de préparation", stock.odrEnCours),
+    li("• ODR en attente d'acceptation", stock.odrEnvoyes),
     li("• ODR acceptés", stock.odrAcceptes),
     li("• Non identifiés", stock.nonIdentifies),
     li("• Attente RS", stock.attenteRS),
@@ -133,12 +137,19 @@ export async function computeWeeklyRecap(ref: Date) {
     li("• Perdus", stock.perdus),
   ].join("\n");
 
+  // ── Taux de pénétration (north-star Enzo) : dernier point + delta vs semaine préc. ──
+  const penSeries = await getPenetrationSeries();
+  const penNow = penSeries.at(-1)?.taux ?? null;
+  const penPrev = penSeries.at(-2)?.taux ?? null;
+  const penTxt = penNow == null ? null
+    : `📈 *Taux de pénétration : ${penNow}%*` + (penPrev != null ? ` (${penNow - penPrev >= 0 ? "+" : ""}${penNow - penPrev} pt vs S-1)` : "");
+
   const blocks: unknown[] = [
     { type: "header", text: { type: "plain_text", text: `Recap hebdo Assurance Pro — semaine ${week}`, emoji: true } },
     { type: "section", text: { type: "mrkdwn", text: `*🗓️ Cette semaine (${fmtDay(start)} – ${fmtDay(friday)})*\n${semaineTxt}` } },
     { type: "divider" },
     { type: "section", text: { type: "mrkdwn", text: `*📦 Pipeline aujourd'hui* _(volume · valeur)_\n${pipeTxt}` } },
-    { type: "context", elements: [{ type: "mrkdwn", text: `💰 *Total en jeu : ${fmtMt(totalEnJeu)}*` }] },
+    { type: "context", elements: [{ type: "mrkdwn", text: `💰 *Total en jeu : ${fmtMt(totalEnJeu)}*${penTxt ? `   ·   ${penTxt}` : ""}` }] },
   ];
   const text = `Recap hebdo Assurance Pro - semaine ${week} (du ${fmtDay(start)} au ${fmtDay(friday)})`;
 
