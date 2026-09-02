@@ -190,3 +190,17 @@ export async function resolveSlackUserId(email: string): Promise<string | null> 
     return j.ok && j.user?.id ? j.user.id : null;
   } catch { return null; }
 }
+
+// Lit les réponses d'un thread (scope `channels:history` requis + bot membre du
+// canal). Sert à détecter une question posée par un gestionnaire sous une propo.
+export type SlackReply = { ts?: string; user?: string; text?: string; bot_id?: string; subtype?: string };
+export async function getThreadReplies(channel: string, threadTs: string): Promise<{ ok: boolean; messages: SlackReply[]; error?: string }> {
+  if (!SLACK_BOT_TOKEN) return { ok: false, messages: [], error: "SLACK_BOT_TOKEN absent" };
+  try {
+    const res = await fetch(`https://slack.com/api/conversations.replies?channel=${encodeURIComponent(channel)}&ts=${encodeURIComponent(threadTs)}&limit=100`, {
+      headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` },
+    });
+    const j = (await res.json().catch(() => ({}))) as { ok?: boolean; messages?: SlackReply[]; error?: string };
+    return { ok: !!j.ok, messages: j.messages ?? [], error: j.error };
+  } catch (e) { return { ok: false, messages: [], error: e instanceof Error ? e.message : "fetch error" }; }
+}
