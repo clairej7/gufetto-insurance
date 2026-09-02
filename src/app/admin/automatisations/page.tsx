@@ -270,13 +270,13 @@ export default async function AutomatisationsPage() {
           <p className="text-sm mt-1" style={{ color: "#656576" }}>
             Les 8 automatisations du parcours MRI — état d&apos;avancement et contrôles admin.
           </p>
-          <div style={{ marginTop: 12 }}>
-            <WeeklyRecapButton />
-          </div>
         </div>
 
         <AutomationModeTabs semiAuto={
         <>
+        <div style={{ marginBottom: 16 }}>
+          <WeeklyRecapButton />
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {automations.map((a) => {
             const etat = ETATS[a.etat];
