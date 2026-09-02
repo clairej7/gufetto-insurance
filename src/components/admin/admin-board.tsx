@@ -11,6 +11,7 @@ import { FlowChart } from "./rs-flow-chart";
 
 type Pipeline = {
   id: string;
+  coproId: string;
   statut: string;
   nouveauPrimeTTC: number | null;
   odrPartenaire: string | null;
@@ -74,6 +75,7 @@ interface AdminBoardProps {
   propositionsFlow: { rows: { date: string; label: string; sent: number; recus: number }[]; demandesTotal: number; recusTotal: number };
   // Nb de dossiers exclus des automatisations (à re-traiter plus tard).
   excludedCount: number;
+  excludedCoproIds: string[];
 }
 
 
@@ -244,7 +246,7 @@ function PartTitle({ n, title, first, mt }: { n: number; title: string; first?: 
   );
 }
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRelances, rsRecus, contratsRecus, devisMailsEnvoyes, devisAReclamer, odrByInsurer, devisRecus, devis6, cs, rsFlow, devisFlow, propositionsFlow, excludedCount, penetrationSeries = [] }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRelances, rsRecus, contratsRecus, devisMailsEnvoyes, devisAReclamer, odrByInsurer, devisRecus, devis6, cs, rsFlow, devisFlow, propositionsFlow, excludedCount, excludedCoproIds, penetrationSeries = [] }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
@@ -353,15 +355,19 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
   //  • Par assureur (haut) = par MARQUEUR `odrPartenaire`. La somme des 4 assureurs
   //    est normalement INFÉRIEURE au total (assureur pas toujours renseigné).
   //  Les perdus/refusés sont dans lostPipelines (hors `fp`) → exclus d'office.
-  const odrRows         = fp.filter(p => !!p.odrPartenaire);
-  // Agrégat pipeline (bloc du bas) — via `bucketOf` (= categoriseDossier), donc
-  // ALIGNÉ sur le Kanban « Répartition par étape » et sur la compo Actifs/Gagnés
-  // de « Revenus ». En cours/envoyé écartent les copros déjà clientes MRI (bucket
-  // clos) → plus de double-comptage. Accepté/clos exigent le marqueur ODR (cf.
-  // entête « accepté & clos = uniquement de vrais ODR ») → identiques au bloc par
-  // assureur (aux copros sans assureur renseigné près, exclues côté par-assureur).
-  const aggEnCours = fp.filter(p => bucketOf(p) === "odr");
-  const aggEnvoye  = fp.filter(p => bucketOf(p) === "odr_envoye");
+  // La carte ODR est la vue « automatisation » : on écarte les copros exclues de
+  // l'auto (Lynda/Emilie/🚫), EXACTEMENT comme le bloc par assureur (serveur) → les
+  // barres du bas et les colonnes du haut portent enfin sur la même population.
+  const exclSet = new Set(excludedCoproIds);
+  const odrFp   = fp.filter(p => !exclSet.has(p.coproId));
+  const odrRows = odrFp.filter(p => !!p.odrPartenaire);
+  // Agrégat pipeline (bloc du bas) — via `bucketOf` (= categoriseDossier). En cours/
+  // envoyé écartent les copros déjà clientes MRI (bucket clos) → plus de double-
+  // comptage. Accepté/clos exigent le marqueur ODR (cf. entête « accepté & clos =
+  // uniquement de vrais ODR ») → identiques au bloc par assureur (aux copros sans
+  // assureur renseigné près, non attribuées à une colonne).
+  const aggEnCours = odrFp.filter(p => bucketOf(p) === "odr");
+  const aggEnvoye  = odrFp.filter(p => bucketOf(p) === "odr_envoye");
   const aggAccepte = odrRows.filter(p => bucketOf(p) === "odr_accepte");
   const aggClos    = odrRows.filter(p => bucketOf(p) === "clos");
   const odrStages = [

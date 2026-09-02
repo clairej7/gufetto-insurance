@@ -184,6 +184,7 @@ export default async function AdminPage() {
           devisFlow={devisFlow}
           propositionsFlow={propositionsFlow}
           excludedCount={excludedCount}
+          excludedCoproIds={exclCoproIds}
         />
       </main>
     </div>
