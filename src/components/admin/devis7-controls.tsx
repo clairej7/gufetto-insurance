@@ -69,13 +69,15 @@ export function Devis7Controls({ table, volet2, csHistory }: { table: Table; vol
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setScanningCs(false); }
   }
 
-  async function validerCsStatut(pipelineId: string, value: "accepte" | "refus") {
+  async function setCsVerdict(pipelineId: string, verdict: "accord" | "refus") {
+    const label = verdict === "accord" ? "Accord → dossier SIGNÉ" : "Refus → dossier PERDU";
+    if (!confirm(`Confirmer : ${label} ?`)) return;
     setBusy(pipelineId + "v2");
     try {
-      const res = await fetch("/api/devis7/statut", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId, field: "cs_statut", value }) });
+      const res = await fetch("/api/devis7/cs-verdict", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pipelineId, verdict }) });
       const j = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string };
       if (!res.ok || !j.success) throw new Error(j.error ?? "Échec");
-      toast.success(`Statut CS validé : ${value === "accepte" ? "accepté" : "refus"}.`);
+      toast.success(verdict === "accord" ? "Accord enregistré → dossier signé." : "Refus enregistré → dossier perdu.");
       router.refresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec"); } finally { setBusy(null); }
   }
@@ -271,11 +273,12 @@ export function Devis7Controls({ table, volet2, csHistory }: { table: Table; vol
                   </td>
                   <td style={td}>{b ? <span style={{ fontSize: 11, fontWeight: 700, color: b.c, background: b.bg, border: `1px solid ${b.bd}`, borderRadius: 999, padding: "3px 10px", whiteSpace: "nowrap" }}>{b.l}</span> : <span style={{ color: "#C7C7D1" }}>—</span>}</td>
                   <td style={td}>
-                    {r.proposedStatut ? (
-                      <button disabled={vbusy} onClick={() => validerCsStatut(r.pipelineId, r.proposedStatut!)} style={{ ...blueBtn, background: r.proposedStatut === "refus" ? "#CA1E12" : "#13762C", borderColor: r.proposedStatut === "refus" ? "#CA1E12" : "#13762C" }}>
-                        {vbusy ? "…" : `Valider : ${r.proposedStatut === "accepte" ? "Accepté" : "Refus"}`}
-                      </button>
-                    ) : <span style={{ fontSize: 11, color: "#A2A1AF" }}>à qualifier à la main</span>}
+                    <select disabled={vbusy} value="" onChange={(e) => { const v = e.target.value; if (v === "accord" || v === "refus") setCsVerdict(r.pipelineId, v); }}
+                      style={{ fontSize: 12, padding: "6px 8px", border: "1px solid #E8E8EC", borderRadius: 8, background: "#fff", cursor: vbusy ? "default" : "pointer" }}>
+                      <option value="">{vbusy ? "…" : "Traiter à la main"}</option>
+                      <option value="accord">Accord → signé</option>
+                      <option value="refus">Refus → perdu</option>
+                    </select>
                   </td>
                 </tr>
               );
