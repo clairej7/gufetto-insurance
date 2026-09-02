@@ -106,9 +106,10 @@ export default async function AdminPage() {
   const { getRsFlowDaily } = await import("@/lib/rs4");
   const rsFlow = await getRsFlowDaily();
   const penetrationSeries = await getPenetrationSeries();
-  const { getDevisFlowDaily, getPropositionsFlowDaily } = await import("@/lib/devis5");
+  const { getDevisFlowDaily, getPropositionsFlowDaily, getGestionnaireFlowDaily } = await import("@/lib/devis5");
   const devisFlow = await getDevisFlowDaily();
   const propositionsFlow = await getPropositionsFlowDaily();
+  const gestionnaireFlow = await getGestionnaireFlowDaily();
   const { getExcludedCoproIds } = await import("@/lib/exclusions");
   const exclCoproIds = await getExcludedCoproIds();
   const excludedCount = await prisma.insurancePipeline.count({ where: { coproId: { in: exclCoproIds }, copro: { archivedAt: null } } });
@@ -183,6 +184,7 @@ export default async function AdminPage() {
           rsFlow={rsFlow}
           devisFlow={devisFlow}
           propositionsFlow={propositionsFlow}
+          gestionnaireFlow={gestionnaireFlow}
           excludedCount={excludedCount}
         />
       </main>

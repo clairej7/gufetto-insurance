@@ -525,3 +525,34 @@ export async function getPropositionsFlowDaily(): Promise<{ rows: DevisFlowDay[]
   }
   return { rows, demandesTotal: firstSent.size, recusTotal: firstAccept.size };
 }
+
+// Flux « gestionnaire » (Auto 6) par jour : propositions TRANSMISES au gestionnaire
+// (event devis6_notify_gestionnaire) vs VALIDÉES par le gestionnaire
+// (devis6_gestio_response, reponse = "valide"). Miroir des autres flux.
+export async function getGestionnaireFlowDaily(): Promise<{ rows: DevisFlowDay[]; demandesTotal: number; recusTotal: number }> {
+  const [notifEv, respEv] = await Promise.all([
+    prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "devis6_notify_gestionnaire" } }, select: { pipelineId: true, createdAt: true } }),
+    prisma.pipelineEvent.findMany({ where: { metadata: { path: ["auto"], equals: "devis6_gestio_response" } }, select: { pipelineId: true, createdAt: true, metadata: true }, orderBy: { createdAt: "asc" } }),
+  ]);
+  const firstSent = new Map<string, Date>();
+  for (const e of notifEv) { const cur = firstSent.get(e.pipelineId); if (!cur || e.createdAt < cur) firstSent.set(e.pipelineId, e.createdAt); }
+  const firstValid = new Map<string, Date>();
+  for (const e of respEv) {
+    if ((e.metadata as { reponse?: string } | null)?.reponse !== "valide") continue;
+    const cur = firstValid.get(e.pipelineId); if (!cur || e.createdAt < cur) firstValid.set(e.pipelineId, e.createdAt);
+  }
+  const dayKey = (d: Date) => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris" }).format(d);
+  const sentBy = new Map<string, number>(); const recuBy = new Map<string, number>();
+  for (const d of firstSent.values()) sentBy.set(dayKey(d), (sentBy.get(dayKey(d)) ?? 0) + 1);
+  for (const d of firstValid.values()) recuBy.set(dayKey(d), (recuBy.get(dayKey(d)) ?? 0) + 1);
+  const all = [...sentBy.keys(), ...recuBy.keys()].sort();
+  if (!all.length) return { rows: [], demandesTotal: 0, recusTotal: 0 };
+  const start = new Date(all[0] + "T12:00:00Z");
+  const end = new Date(dayKey(new Date()) + "T12:00:00Z");
+  const rows: DevisFlowDay[] = [];
+  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    const k = d.toISOString().slice(0, 10);
+    rows.push({ date: k, label: `${k.slice(8, 10)}/${k.slice(5, 7)}`, sent: sentBy.get(k) ?? 0, recus: recuBy.get(k) ?? 0 });
+  }
+  return { rows, demandesTotal: firstSent.size, recusTotal: firstValid.size };
+}

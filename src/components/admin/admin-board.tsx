@@ -73,6 +73,8 @@ interface AdminBoardProps {
   devisFlow: { rows: { date: string; label: string; sent: number; recus: number }[]; demandesTotal: number; recusTotal: number };
   // Flux propositions au CS par jour (transmises vs acceptées) + totaux pour le taux d'acceptation.
   propositionsFlow: { rows: { date: string; label: string; sent: number; recus: number }[]; demandesTotal: number; recusTotal: number };
+  // Flux gestionnaire par jour (transmises au gestio vs validées par le gestio) + totaux.
+  gestionnaireFlow: { rows: { date: string; label: string; sent: number; recus: number }[]; demandesTotal: number; recusTotal: number };
   // Nb de dossiers exclus des automatisations (à re-traiter plus tard).
   excludedCount: number;
 }
@@ -245,12 +247,12 @@ function PartTitle({ n, title, first, mt }: { n: number; title: string; first?: 
   );
 }
 
-export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRelances, rsRecus, contratsRecus, devisMailsEnvoyes, devisAReclamer, odrByInsurer, devisRecus, devis6, cs, rsFlow, devisFlow, propositionsFlow, excludedCount, penetrationSeries = [] }: AdminBoardProps) {
+export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, primeStages, rsDemandes, rsRelances, rsRecus, contratsRecus, devisMailsEnvoyes, devisAReclamer, odrByInsurer, devisRecus, devis6, cs, rsFlow, devisFlow, propositionsFlow, gestionnaireFlow, excludedCount, penetrationSeries = [] }: AdminBoardProps) {
   const [selectedGestionnaires, setSelectedGestionnaires] = useState<string[]>([]);
   const [selectedEcheance, setSelectedEcheance] = useState("all");
   const [activeKpi, setActiveKpi] = useState<KpiFilter>(null);
   const [penView, setPenView] = useState<"chiffres" | "progression">("chiffres");
-  const [fluxView, setFluxView] = useState<"rs" | "devis" | "propositions">("rs");
+  const [fluxView, setFluxView] = useState<"rs" | "devis" | "gestionnaire" | "propositions">("rs");
 
   // Libellé d'affichage par email (nom Omni si présent, sinon dérivation).
   const gestioNomByEmail = new Map<string, string | null>();
@@ -914,7 +916,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
         {/* Flux par jour — sélecteur RS / devis / propositions (un seul graphe affiché) */}
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #EFEFF3" }}>
           <div style={{ display: "inline-flex", background: "#F0F0F6", borderRadius: 8, padding: 3, marginBottom: 16 }}>
-            {(([["rs", "Flux RS"], ["devis", "Flux devis"], ["propositions", "Flux propositions"]] as const)).map(([v, label]) => (
+            {(([["rs", "Flux RS"], ["devis", "Flux devis"], ["gestionnaire", "Flux gestionnaire"], ["propositions", "Flux CS"]] as const)).map(([v, label]) => (
               <button key={v} onClick={() => setFluxView(v)}
                 style={{ fontSize: 12.5, fontWeight: 700, padding: "5px 14px", borderRadius: 6, border: "none", cursor: "pointer",
                   background: fluxView === v ? "#4E49FC" : "transparent", color: fluxView === v ? "#fff" : "#656576" }}>
@@ -950,10 +952,24 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
               demandesUnit="demandes envoyées"
             />
           )}
+          {fluxView === "gestionnaire" && (
+            <FlowChart
+              data={gestionnaireFlow.rows}
+              title="Flux gestionnaire — par jour"
+              subtitle="Propositions transmises au gestionnaire (barres) vs validées par le gestionnaire (ligne). Maj automatique."
+              sentLabel="Propositions transmises"
+              recusLabel="Validées par le gestio"
+              recusTotal={gestionnaireFlow.recusTotal}
+              demandesTotal={gestionnaireFlow.demandesTotal}
+              tauxTitle="Taux de validation gestionnaire"
+              recusUnit="validées"
+              demandesUnit="transmises"
+            />
+          )}
           {fluxView === "propositions" && (
             <FlowChart
               data={propositionsFlow.rows}
-              title="Flux des propositions au CS — par jour"
+              title="Flux CS — par jour"
               subtitle="Propositions transmises au conseil syndical (barres) vs propositions acceptées (ligne). Maj automatique."
               sentLabel="Propositions transmises"
               recusLabel="Propositions acceptées"
