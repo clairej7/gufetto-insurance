@@ -12,9 +12,10 @@ export const RELANCE_APRES_HEURES = 48;
 export async function sendDevis6Relances(
   now: Date = new Date(),
   by = "auto:devis6-relance",
-  opts: { limit?: number; dryRun?: boolean } = {},
+  opts: { limit?: number; dryRun?: boolean; hours?: number } = {},
 ): Promise<{ relances: number; ignores: number; eligibles: number; dryRun: boolean; details: string[] }> {
-  const seuil = new Date(now.getTime() - RELANCE_APRES_HEURES * 60 * 60 * 1000);
+  const heures = opts.hours && opts.hours > 0 ? opts.hours : RELANCE_APRES_HEURES; // override de test (admin) sinon 48 h
+  const seuil = new Date(now.getTime() - heures * 60 * 60 * 1000);
 
   // Dernier message « nouveaux devis » par dossier (avec son ts/canal Slack).
   const notifs = await prisma.pipelineEvent.findMany({

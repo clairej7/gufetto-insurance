@@ -25,11 +25,13 @@ export async function POST(req: NextRequest) {
   const limitParam = url.searchParams.get("limit");
   const limit = limitParam ? Math.max(0, parseInt(limitParam, 10)) : undefined;
   const dryRunParam = url.searchParams.get("dryRun") === "1";
+  const hoursParam = url.searchParams.get("hours");
+  const hours = hoursParam ? Math.min(168, Math.max(1, parseInt(hoursParam, 10))) : undefined; // override de test admin (1..168 h)
 
   const cronEnabled = process.env.DEVIS6_RELANCE_ENABLED === "true";
   const opts = isCron
-    ? { dryRun: !cronEnabled }               // cron : dry-run tant que non activé
-    : { limit, dryRun: dryRunParam };         // admin : test paramétrable
+    ? { dryRun: !cronEnabled }               // cron : dry-run tant que non activé, seuil 48 h
+    : { limit, dryRun: dryRunParam, hours };  // admin : test paramétrable (+ override d'heures)
 
   const r = await sendDevis6Relances(new Date(), by, opts);
   return NextResponse.json({ success: true, gated: isCron && !cronEnabled, ...r });
