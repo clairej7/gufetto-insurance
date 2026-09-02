@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getExcludedCoproIds } from "@/lib/exclusions";
 import { getThreadReplies, postDevisThreadReply, resolveSlackUserId } from "@/lib/devis6-slack";
 
-export const RELANCE_APRES_HEURES = 24;
+export const RELANCE_APRES_HEURES = 48;
 
 export async function sendDevis6Relances(
   now: Date = new Date(),
@@ -53,7 +53,7 @@ export async function sendDevis6Relances(
     const p = pById.get(id);
     // Garde-fous : dossier vivant, encore en attente de réponse, non exclu.
     if (!p || p.copro.archivedAt || exclSet.has(p.coproId) || p.statut !== "devis_recus") { ignores++; continue; }
-    if (notif.createdAt > seuil) { ignores++; continue; }               // < 24 h
+    if (notif.createdAt > seuil) { ignores++; continue; }               // < 48 h
     if (!notif.slackTs || !notif.slackChannel) { ignores++; continue; } // posté via webhook (pas de thread possible)
     const resp = lastResp.get(id); if (resp && resp >= notif.createdAt) { ignores++; continue; } // réponse bouton (valider/refus)
     const rel = lastRel.get(id); if (rel && rel >= notif.createdAt) { ignores++; continue; }      // déjà relancé ce cycle
@@ -77,7 +77,7 @@ export async function sendDevis6Relances(
     const sent = await postDevisThreadReply(notif.slackChannel, notif.slackTs, text);
     if (!sent.ok) { ignores++; details.push(`${p.copro.nom} : échec Slack (${sent.error ?? "?"})`); continue; }
     await prisma.pipelineEvent.create({
-      data: { pipelineId: id, type: "action_manuelle", description: "Relance gestionnaire (24 h sans réponse) postée en thread Slack", metadata: { auto: "devis6_relance", slackTs: notif.slackTs, slackChannel: notif.slackChannel }, createdBy: by },
+      data: { pipelineId: id, type: "action_manuelle", description: "Relance gestionnaire (48 h sans réponse) postée en thread Slack", metadata: { auto: "devis6_relance", slackTs: notif.slackTs, slackChannel: notif.slackChannel }, createdBy: by },
     });
     relances++; details.push(`${p.copro.nom} : relancé`);
   }

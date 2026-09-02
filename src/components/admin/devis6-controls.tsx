@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { Search, Loader2, RefreshCw, Sparkles, ExternalLink, Send, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { resolvePrimeReference } from "@/lib/devis-prime";
+import { Devis6RelanceButton } from "@/components/admin/devis6-relance-button";
 
 type Devis = { assureur: string; prime: number | null };
 type Statut = "non_envoye" | "attente" | "valide" | "refus";
@@ -228,6 +229,7 @@ export function Devis6Controls({ table }: { table: Table }) {
           style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: "#fff", background: aComparer === 0 ? "#B8B5FD" : genBatch?.running ? "#7B77F5" : "#4E49FC", border: "none", borderRadius: 10, padding: "9px 16px", cursor: aComparer === 0 || genBatch?.running ? "default" : "pointer" }}>
           {genBatch?.running ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} {genBatch?.running ? `Génération… ${genBatch.done}/${genBatch.total}` : `Générer les ${aComparer} comparaison${aComparer > 1 ? "s" : ""}`}
         </button>
+        <span style={{ marginLeft: 10, verticalAlign: "middle" }}><Devis6RelanceButton /></span>
         <span style={{ fontSize: 11.5, color: "#A2A1AF", marginLeft: 10 }}>Comparaisons Claude des dossiers restants (celles sans devis stocké seront ignorées).</span>
         {(genBatch?.running || (genBatch && !genBatch.running)) && (
           <div style={{ marginTop: 8 }}>

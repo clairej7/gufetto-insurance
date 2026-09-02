@@ -25,7 +25,6 @@ import { getDevis5Lots } from "@/lib/devis5-excel";
 import { getDevis6TableData } from "@/lib/devis6";
 import { Devis6Controls } from "@/components/admin/devis6-controls";
 import { WeeklyRecapButton } from "@/components/admin/weekly-recap-button";
-import { Devis6RelanceButton } from "@/components/admin/devis6-relance-button";
 import { getDevis7TableData } from "@/lib/devis7";
 import { getDevis7Volet2, getDevis7CsHistory } from "@/lib/devis7-cs";
 import { Devis7Controls } from "@/components/admin/devis7-controls";
@@ -275,9 +274,8 @@ export default async function AutomatisationsPage() {
 
         <AutomationModeTabs semiAuto={
         <>
-        <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ marginBottom: 16 }}>
           <WeeklyRecapButton />
-          <Devis6RelanceButton />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {automations.map((a) => {

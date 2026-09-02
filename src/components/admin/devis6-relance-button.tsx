@@ -20,7 +20,7 @@ export function Devis6RelanceButton() {
       const dj = (await dry.json().catch(() => ({}))) as { success?: boolean; eligibles?: number; error?: string };
       if (!dry.ok || !dj.success) throw new Error(dj.error ?? "Échec");
       const n = dj.eligibles ?? 0;
-      if (n === 0) { toast.info("Aucun dossier éligible à relancer (24 h sans réponse)."); return; }
+      if (n === 0) { toast.info("Aucun dossier éligible à relancer (48 h sans réponse)."); return; }
 
       // 2) Combien envoyer ? (défaut 1 pour tester)
       const ans = window.prompt(`${n} dossier(s) éligible(s). Combien veux-tu relancer maintenant ? (1 = test, laisse le nombre total pour tous)`, "1");
@@ -45,7 +45,7 @@ export function Devis6RelanceButton() {
       display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 14px", borderRadius: 10, border: "none",
       fontSize: 13, fontWeight: 700, background: busy ? "#C9C8D3" : "#B4690E", color: "#fff", cursor: busy ? "default" : "pointer",
     }}>
-      {busy ? <Loader2 size={15} className="animate-spin" /> : <BellRing size={15} />} Relancer les gestios (24 h sans réponse)
+      {busy ? <Loader2 size={15} className="animate-spin" /> : <BellRing size={15} />} Relancer les gestios (2 j sans réponse)
     </button>
   );
 }
