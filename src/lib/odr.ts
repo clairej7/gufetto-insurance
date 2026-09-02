@@ -104,9 +104,11 @@ export async function getOdrByPartner(): Promise<OdrPartnerBucket[]> {
 export type OdrInsurerStage = { label: string; count: number; montant: number; arr: number; color: string };
 export type OdrInsurerBoard = { key: OdrPartnerKey; label: string; count: number; montant: number; arr: number; stages: OdrInsurerStage[] };
 export async function getOdrByInsurerBoard(): Promise<OdrInsurerBoard[]> {
-  const excl = await getExcludedCoproIds();
+  // Vue de REPORTING (affichage dashboard uniquement, pas l'envoi) : on N'exclut PAS
+  // les copros hors périmètre auto (Lynda/Emilie/🚫) — elles doivent rester comptées
+  // dans les dashboards. L'exclusion ne concerne que l'ENVOI (cf. getOdrByInsurer).
   const rows = await prisma.insurancePipeline.findMany({
-    where: { coproId: { notIn: excl }, copro: { archivedAt: null }, statut: { notIn: ["abandonne", "refuse", "non_assurable"] } },
+    where: { copro: { archivedAt: null }, statut: { notIn: ["abandonne", "refuse", "non_assurable"] } },
     select: { statut: true, odrPartenaire: true, copro: { select: { assureurActuel: true, primeActuelle: true, clientMriStatut: true, dateEcheance: true } } },
   });
   const STAGES = [
