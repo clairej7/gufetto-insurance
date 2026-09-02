@@ -11,7 +11,6 @@ import { Search, Loader2, RefreshCw, Sparkles, ExternalLink, Send, ArrowRight } 
 import { toast } from "sonner";
 import { resolvePrimeReference } from "@/lib/devis-prime";
 import { Devis6RelanceButton } from "@/components/admin/devis6-relance-button";
-import { WeeklyRecapButton } from "@/components/admin/weekly-recap-button";
 
 type Devis = { assureur: string; prime: number | null };
 type Statut = "non_envoye" | "attente" | "valide" | "refus";
@@ -240,16 +239,6 @@ export function Devis6Controls({ table }: { table: Table }) {
             <p style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>{genBatch!.done}/{genBatch!.total} · <b style={{ color: "#13762C" }}>{genBatch!.ok} générées</b>{genBatch!.fail ? ` · ${genBatch!.fail} ignorées (pas de devis stocké)` : ""}{genBatch!.running ? " · en cours…" : ""}</p>
           </div>
         )}
-      </div>
-
-      {/* Volet 6 — Recap hebdo des avancées */}
-      <div style={{ marginBottom: 16, paddingTop: 12, borderTop: "1px dashed #E8E8EC" }}>
-        <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 6</span>
-          <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Recap hebdo des avancées</span>
-        </div>
-        <p style={{ fontSize: 12, color: "#656576", margin: "0 0 10px" }}>Publie le recap hebdomadaire dans #team_insurance_fr (auto le vendredi 16h, ou à la demande ici).</p>
-        <WeeklyRecapButton />
       </div>
 
       {/* Barre de recherche / filtres */}

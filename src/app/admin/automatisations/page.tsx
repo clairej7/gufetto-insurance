@@ -30,6 +30,7 @@ import { Devis7Controls } from "@/components/admin/devis7-controls";
 import { getDocsStats } from "@/lib/rs-docs";
 import { Devis5Controls } from "@/components/admin/devis5-controls";
 import { getExclusionState } from "@/lib/exclusions";
+import { WeeklyRecapButton } from "@/components/admin/weekly-recap-button";
 import { ExclusionsPanel } from "@/components/admin/exclusions-panel";
 import { getOdrByPartner, getOdrSent, getOdrSendHistory, ODR_TEMPLATE_TEXT } from "@/lib/odr";
 import { buildPiscine } from "@/lib/piscine";
@@ -679,6 +680,16 @@ export default async function AutomatisationsPage() {
                         <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Baluardo : agent de détection d&apos;anomalies</span>
                       </div>
                       <p style={{ fontSize: 13, color: "#8A8A99", margin: 0, fontStyle: "italic" }}>À venir au fur et à mesure des automatisations finales.</p>
+                    </div>
+
+                    {/* Volet 6 — Recap hebdo des avancées */}
+                    <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+                      <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 6</span>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Recap hebdo des avancées</span>
+                      </div>
+                      <p style={{ fontSize: 13, color: "#656576", margin: "0 0 10px" }}>Publie le recap hebdomadaire dans #team_insurance_fr (auto le vendredi 16h, ou à la demande ici).</p>
+                      <WeeklyRecapButton />
                     </div>
                   </details>
                 )}
