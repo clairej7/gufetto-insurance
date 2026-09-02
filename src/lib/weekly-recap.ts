@@ -127,9 +127,8 @@ export async function computeWeeklyRecap(ref: Date) {
   ].join("\n");
 
   const blocks: unknown[] = [
-    { type: "header", text: { type: "plain_text", text: `Recap hebdo Assurance Pro - semaine ${week}`, emoji: true } },
-    { type: "context", elements: [{ type: "mrkdwn", text: `_Semaine du ${fmtDay(start)} au ${fmtDay(friday)}_` }] },
-    { type: "section", text: { type: "mrkdwn", text: `*🗓️ Cette semaine*\n${semaineTxt}` } },
+    { type: "header", text: { type: "plain_text", text: `Recap hebdo Assurance Pro — semaine ${week}`, emoji: true } },
+    { type: "section", text: { type: "mrkdwn", text: `*🗓️ Cette semaine (${fmtDay(start)} – ${fmtDay(friday)})*\n${semaineTxt}` } },
     { type: "divider" },
     { type: "section", text: { type: "mrkdwn", text: `*📦 Pipeline aujourd'hui* _(volume · valeur)_\n${pipeTxt}` } },
     { type: "context", elements: [{ type: "mrkdwn", text: `💰 *Total en jeu : ${fmtMt(totalEnJeu)}*` }] },
