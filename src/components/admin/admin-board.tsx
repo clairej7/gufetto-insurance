@@ -417,7 +417,7 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
     { key: "signe",          label: "Signé",                 rows: rowsForCol("contrat_signe").filter(p => !p.odrPartenaire), color: "#13762C" },
     { key: "clos",           label: "Clos",                  rows: rowsForCol("_clos").filter(p => !p.odrPartenaire),         color: "#0E5D22" },
   ];
-  const wonClassic = [...classicStages[4].rows, ...classicStages[5].rows];
+  // Regroupement d'assureur pour la ventilation « Assureurs des N » de la carte Clos.
   const insurerGroup = (a: string | null): string => {
     const s = (a || "").toLowerCase();
     if (!s) return "Non renseigné";
@@ -427,12 +427,6 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
     if (/\bsada\b/.test(s)) return "SADA";
     return "Autre";
   };
-  const classicInsurers = (() => {
-    const m: Record<string, number> = {};
-    for (const p of wonClassic) { const k = insurerGroup(p.copro.assureurActuel); m[k] = (m[k] ?? 0) + 1; }
-    const order = ["AXA", "Mila", "Generali", "SADA", "Autre", "Non renseigné"];
-    return Object.entries(m).sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0])).map(([label, count]) => ({ label, count }));
-  })();
 
   const renderBar = (bar: (typeof barData)[number]) => {
     const barH = bar.count > 0 ? Math.max(Math.round((bar.count / maxBar) * CHART_H), 6) : 0;
@@ -896,13 +890,16 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
                 )}
 
                 {st.key === "clos" && (() => {
-                  const g = (l: string) => classicInsurers.find(x => x.label === l)?.count ?? 0;
-                  const axa = g("AXA"), sada = g("SADA"), mila = g("Mila");
-                  const autres = wonClassic.length - axa - sada - mila;
+                  // Ventilation sur les CLOS (hors ODR) UNIQUEMENT = même population que
+                  // le compteur de la carte → somme des assureurs = nb de clos.
+                  const closRows = st.rows;
+                  const cnt = (l: string) => closRows.filter(p => insurerGroup(p.copro.assureurActuel) === l).length;
+                  const axa = cnt("AXA"), sada = cnt("SADA"), mila = cnt("Mila");
+                  const autres = closRows.length - axa - sada - mila;
                   const rows: [string, number][] = [["AXA", axa], ["Mila", mila], ["SADA", sada], ["Autres", autres]];
                   return (
                     <div style={subLine}>
-                      <span style={{ fontSize: 11, color: "#A2A1AF", whiteSpace: "nowrap" }}>Assureurs des {wonClassic.length} :</span>
+                      <span style={{ fontSize: 11, color: "#A2A1AF", whiteSpace: "nowrap" }}>Assureurs des {closRows.length} :</span>
                       {rows.map(([label, n]) => (<Metric key={label} n={n} label={label} c={n > 0 ? "#26262C" : "#C7C7D1"} />))}
                     </div>
                   );
