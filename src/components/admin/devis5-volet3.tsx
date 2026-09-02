@@ -86,7 +86,18 @@ export function Devis5Volet3({ lots }: { lots: Lot[] }) {
     return <p style={{ fontSize: 12.5, color: "#A2A1AF", margin: 0, fontStyle: "italic" }}>Aucun lot pour l&apos;instant. Depuis le Volet 2, clique « Générer l&apos;excel » : le fichier apparaîtra ici.</p>;
   }
 
+  // Historique plat de TOUS les envois (un lot peut être envoyé à plusieurs assureurs).
+  const history = lots
+    .flatMap((l) => {
+      const s = l.sends ?? [];
+      if (s.length) return s.map((x) => ({ at: x.at, count: l.count, assureur: x.assureur }));
+      if (l.sentAt) return [{ at: l.sentAt, count: l.count, assureur: "—" }];
+      return [];
+    })
+    .sort((a, b) => b.at.localeCompare(a.at));
+
   return (
+    <>
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {lots.map((l) => {
         const sends = l.sends ?? [];
@@ -147,5 +158,33 @@ export function Devis5Volet3({ lots }: { lots: Lot[] }) {
         );
       })}
     </div>
+
+    {/* Historique des envois (menu déroulant) */}
+    <details style={{ marginTop: 12, border: "1px solid #E8E8EC", borderRadius: 10, background: "#fff" }}>
+      <summary style={{ cursor: "pointer", listStyle: "none", padding: "9px 12px", fontSize: 12.5, fontWeight: 700, color: "#26262C" }}>
+        Historique des envois <span style={{ fontWeight: 500, color: "#A2A1AF" }}>({history.length})</span>
+      </summary>
+      <div style={{ borderTop: "1px solid #F0F0F3", padding: "4px 12px 10px" }}>
+        <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ color: "#A2A1AF", textAlign: "left" }}>
+              <th style={{ padding: "6px 8px 6px 0", fontWeight: 600 }}>Date</th>
+              <th style={{ padding: "6px 8px", fontWeight: 600 }}>Dossiers</th>
+              <th style={{ padding: "6px 8px", fontWeight: 600 }}>Assureur</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.map((h, i) => (
+              <tr key={i} style={{ borderTop: "1px solid #F4F4F6" }}>
+                <td style={{ padding: "6px 8px 6px 0", color: "#26262C", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{fmtD(h.at)}</td>
+                <td style={{ padding: "6px 8px", color: "#656576", fontVariantNumeric: "tabular-nums" }}>{h.count}</td>
+                <td style={{ padding: "6px 8px", color: "#26262C", fontWeight: 600 }}>{h.assureur}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    </>
   );
 }
