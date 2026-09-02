@@ -97,7 +97,7 @@ export function Devis6Controls({ table }: { table: Table }) {
       const res = await fetch("/api/devis6/send-to-auto7", { method: "POST" });
       const j = (await res.json().catch(() => ({}))) as { success?: boolean; moved?: number; bloques?: number; error?: string };
       if (!res.ok || !j.success) throw new Error(j.error ?? "Échec");
-      toast.success(`${j.moved ?? 0} dossier(s) envoyé(s) à l'automatisation 7.${j.bloques ? ` · ${j.bloques} bloqué(s) (contrat manquant)` : ""}`);
+      toast.success(`${j.moved ?? 0} dossier(s) envoyé(s) à l'automatisation 7.${j.bloques ? ` · ${j.bloques} bloqué(s) (contrat ou devis manquant)` : ""}`);
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Échec");

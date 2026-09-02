@@ -107,6 +107,33 @@ export async function contratPresent(pipelineId: string): Promise<boolean> {
 
 export const CONTRAT_MANQUANT_MSG = "Contrat actuel absent de la comparaison — rattache le contrat MRI au dossier avant de transmettre (sinon l'économie repose sur une prime non vérifiée).";
 
+// Un devis est « valide » (= vraie MRI) s'il a un assureur ET au moins une garantie
+// à true. Écarte les faux devis captés par erreur (ex. devis de TRAVAUX : assureur
+// null + toutes garanties false, cf. 13 Rue Léon Bernard = 32 000 € HT + TVA 10 %).
+export function devisEstValide(data: string | null): boolean {
+  if (!data || !data.trim()) return false;
+  try {
+    const d = JSON.parse(data) as { assureur?: string | null; garanties?: Record<string, unknown> | null };
+    const hasAssureur = !!(d.assureur && String(d.assureur).trim());
+    const g = d.garanties;
+    const auMoinsUneGarantie = !!g && typeof g === "object" && Object.values(g).some((v) => v === true);
+    return hasAssureur && auMoinsUneGarantie;
+  } catch { return false; }
+}
+
+// ≥ 1 devis valide sur le dossier ? (sinon la comparaison ne repose que sur des
+// faux devis → on bloque la transmission).
+export async function comparaisonValide(pipelineId: string): Promise<boolean> {
+  const p = await prisma.insurancePipeline.findUnique({
+    where: { id: pipelineId },
+    select: { devisRecus: { select: { data: true } } },
+  });
+  if (!p) return false;
+  return p.devisRecus.some((d) => devisEstValide(d.data));
+}
+
+export const DEVIS_INVALIDE_MSG = "Aucun devis d'assurance valide dans la comparaison (devis sans assureur ou hors MRI, ex. devis de travaux) — vérifie/supprime ce devis avant de transmettre.";
+
 export async function getDevis6TableData(): Promise<Devis6Table> {
   const excl = await getExcludedCoproIds();
   const ps = await prisma.insurancePipeline.findMany({

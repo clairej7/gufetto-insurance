@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getExcludedCoproIds } from "@/lib/exclusions";
+import { devisEstValide } from "@/lib/devis6";
 
 // POST /api/devis6/send-to-auto7 (admin)
 // Envoie vers l'automatisation 7 tous les dossiers de l'auto 6 (devis_recus) dont
@@ -24,13 +25,17 @@ export async function POST() {
       id: true,
       contratActuelData: true,
       documents: { where: { kind: "contrat_mri" }, select: { id: true }, take: 1 },
+      devisRecus: { select: { data: true } },
       events: { where: { metadata: { path: ["auto"], equals: "devis6_gestio_response" } }, orderBy: { createdAt: "desc" }, take: 1, select: { metadata: true } },
     },
   });
   // Ne garder que ceux dont la DERNIÈRE réponse gestionnaire est « valide ».
   const valides = ps.filter((p) => (p.events[0]?.metadata as { reponse?: string } | undefined)?.reponse === "valide");
-  // Garde-fou : on n'envoie au CS que les dossiers avec contrat rattaché.
-  const prets = valides.filter((p) => p.documents.length > 0 || !!(p.contratActuelData && p.contratActuelData.trim()));
+  // Garde-fous : contrat rattaché ET au moins un devis d'assurance valide.
+  const prets = valides.filter((p) =>
+    (p.documents.length > 0 || !!(p.contratActuelData && p.contratActuelData.trim())) &&
+    p.devisRecus.some((d) => devisEstValide(d.data)),
+  );
   const bloques = valides.length - prets.length;
 
   let moved = 0;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { contratPresent, CONTRAT_MANQUANT_MSG } from "@/lib/devis6";
+import { contratPresent, CONTRAT_MANQUANT_MSG, comparaisonValide, DEVIS_INVALIDE_MSG } from "@/lib/devis6";
 
 // POST /api/devis7/mark-sent { pipelineId, to } (admin)
 // Journalise l'envoi de la proposition au conseil syndical (auto 7). NE CHANGE PAS
@@ -19,6 +19,8 @@ export async function POST(req: NextRequest) {
 
   // Garde-fou : pas de contrat rattaché → on refuse l'envoi au CS.
   if (!(await contratPresent(pipelineId))) return NextResponse.json({ error: CONTRAT_MANQUANT_MSG }, { status: 422 });
+  // Garde-fou : aucun devis d'assurance valide → refus.
+  if (!(await comparaisonValide(pipelineId))) return NextResponse.json({ error: DEVIS_INVALIDE_MSG }, { status: 422 });
 
   await prisma.pipelineEvent.create({
     data: {
