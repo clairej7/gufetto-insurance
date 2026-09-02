@@ -227,6 +227,9 @@ const DEVIS_CONTACT_RE = /achille\.leboeuf|souscription@mila\.fr/i;
 function isUsableEmail(email: string | null): boolean {
   if (!email) return false;
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return false;
+  // Un courtier/assureur n'est JAMAIS une adresse interne Matera : on l'exclut
+  // (évite qu'un collègue intervenu sur le fil soit capté comme "mail courtier").
+  if (/@matera\.eu$/i.test(email)) return false;
   if (DEVIS_CONTACT_RE.test(email)) return false;
   return !JUNK_EMAIL.some((re) => re.test(email));
 }
