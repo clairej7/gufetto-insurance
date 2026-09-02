@@ -169,6 +169,14 @@ export async function addDevisReaction(channel: string, ts: string, emoji: strin
   return slackApi("reactions.add", { channel, timestamp: ts, name: emoji });
 }
 
+// Poste un message (texte + blocks optionnels) dans un canal quelconque via le
+// bot (chat:write). Utilisé par le recap hebdo → #team_insurance_fr.
+export async function postToChannelViaBot(channel: string, text: string, blocks?: unknown[]): Promise<{ ok: boolean; ts?: string; error?: string }> {
+  if (!SLACK_BOT_TOKEN) return { ok: false, error: "SLACK_BOT_TOKEN absent" };
+  if (!channel) return { ok: false, error: "channel manquant" };
+  return slackApi("chat.postMessage", { channel, text, ...(blocks ? { blocks } : {}), unfurl_links: false });
+}
+
 // Résout l'ID Slack d'un utilisateur à partir de son email (scope
 // `users:read.email` requis). Best-effort → null si absent/non trouvé/pas de
 // token. Sert à @mentionner (pinger) le gestionnaire dans le message.

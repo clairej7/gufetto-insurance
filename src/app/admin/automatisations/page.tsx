@@ -24,6 +24,7 @@ import { getDevis5Volet1Data, getDevis5DocsToLoad, getDocLoadHistory, getDevis5N
 import { getDevis5Lots } from "@/lib/devis5-excel";
 import { getDevis6TableData } from "@/lib/devis6";
 import { Devis6Controls } from "@/components/admin/devis6-controls";
+import { WeeklyRecapButton } from "@/components/admin/weekly-recap-button";
 import { getDevis7TableData } from "@/lib/devis7";
 import { getDevis7Volet2, getDevis7CsHistory } from "@/lib/devis7-cs";
 import { Devis7Controls } from "@/components/admin/devis7-controls";
@@ -269,6 +270,9 @@ export default async function AutomatisationsPage() {
           <p className="text-sm mt-1" style={{ color: "#656576" }}>
             Les 8 automatisations du parcours MRI — état d&apos;avancement et contrôles admin.
           </p>
+          <div style={{ marginTop: 12 }}>
+            <WeeklyRecapButton />
+          </div>
         </div>
 
         <AutomationModeTabs semiAuto={
