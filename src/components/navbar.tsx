@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LayoutDashboard, LogOut, CheckSquare, RefreshCw, Zap, BarChart3, ScrollText, Umbrella } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PiloteBanner } from "@/components/admin/pilote-banner";
 
 interface NavbarProps {
   user: {
@@ -32,6 +33,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
     : (user.email?.[0] || "?").toUpperCase();
 
   return (
+    <>
     <header className="bg-white border-b sticky top-0 z-50" style={{ borderColor: "#E8E8EC" }}>
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex items-center justify-between h-14">
@@ -173,5 +175,7 @@ export function Navbar({ user, lastSyncAt }: NavbarProps) {
         </div>
       </div>
     </header>
+    <PiloteBanner />
+    </>
   );
 }
