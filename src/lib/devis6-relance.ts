@@ -17,6 +17,15 @@ export async function sendDevis6Relances(
   const heures = opts.hours && opts.hours > 0 ? opts.hours : RELANCE_APRES_HEURES; // override de test (admin) sinon 48 h
   const seuil = new Date(now.getTime() - heures * 60 * 60 * 1000);
 
+  // Pas de relance le week-end : jour + heure Europe/Paris (gère l'heure d'été/hiver).
+  const parisWH = (d: Date): { wd: string; hour: number } => {
+    const o: Record<string, string> = {};
+    for (const p of new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris", weekday: "short", hour: "2-digit", hour12: false }).formatToParts(d)) o[p.type] = p.value;
+    return { wd: o.weekday, hour: parseInt(o.hour, 10) };
+  };
+  const isWeekend = (wd: string) => wd === "Sat" || wd === "Sun";
+  const nowWH = parisWH(now);
+
   // Dernier message « nouveaux devis » par dossier (avec son ts/canal Slack).
   const notifs = await prisma.pipelineEvent.findMany({
     where: { metadata: { path: ["auto"], equals: "devis6_notify_gestionnaire" } },
@@ -55,6 +64,11 @@ export async function sendDevis6Relances(
     // Garde-fous : dossier vivant, encore en attente de réponse, non exclu.
     if (!p || p.copro.archivedAt || exclSet.has(p.coproId) || p.statut !== "devis_recus") { ignores++; continue; }
     if (notif.createdAt > seuil) { ignores++; continue; }               // < 48 h
+    // Pas de relance le week-end : si on est samedi/dimanche, ou si l'échéance des
+    // 48 h tombe un week-end, on reporte au LUNDI 10 h (Paris).
+    if (isWeekend(nowWH.wd)) { ignores++; continue; }
+    const eligWH = parisWH(new Date(notif.createdAt.getTime() + heures * 60 * 60 * 1000));
+    if (isWeekend(eligWH.wd) && !(nowWH.wd === "Mon" && nowWH.hour >= 10)) { ignores++; continue; }
     if (!notif.slackTs || !notif.slackChannel) { ignores++; continue; } // posté via webhook (pas de thread possible)
     const resp = lastResp.get(id); if (resp && resp >= notif.createdAt) { ignores++; continue; } // réponse bouton (valider/refus)
     const rel = lastRel.get(id); if (rel && rel >= notif.createdAt) { ignores++; continue; }      // déjà relancé ce cycle
