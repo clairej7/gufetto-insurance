@@ -5,7 +5,7 @@
 // One-shot par cycle de notification : on ne relance qu'une fois par message posté.
 import { prisma } from "@/lib/prisma";
 import { getExcludedCoproIds } from "@/lib/exclusions";
-import { getThreadReplies, postDevisThreadReply, resolveSlackUserId } from "@/lib/devis6-slack";
+import { getThreadReplies, postDevisThreadReply, resolveSlackUserId, getMessageReactions, getBotUserId } from "@/lib/devis6-slack";
 
 export const RELANCE_APRES_HEURES = 48;
 
@@ -72,6 +72,14 @@ export async function sendDevis6Relances(
     if (!notif.slackTs || !notif.slackChannel) { ignores++; continue; } // posté via webhook (pas de thread possible)
     const resp = lastResp.get(id); if (resp && resp >= notif.createdAt) { ignores++; continue; } // réponse bouton (valider/refus)
     const rel = lastRel.get(id); if (rel && rel >= notif.createdAt) { ignores++; continue; }      // déjà relancé ce cycle
+
+    // Vérif « aucune réaction emoji » : un gestionnaire qui a réagi (👀/✅/👍…) a vu
+    // la proposition → on ne le relance pas. On EXCLUT les réactions du bot lui-même
+    // (✅/❌ posés après validation). Best-effort (scope `reactions:read`) : si la
+    // lecture échoue, on ne bloque pas (comme le check commentaire).
+    const botId = await getBotUserId();
+    const reacts = await getMessageReactions(notif.slackChannel, notif.slackTs);
+    if (reacts.ok && reacts.reactions.some((r) => (r.users ?? []).some((u) => u !== botId))) { ignores++; continue; }
 
     // Vérif « aucun commentaire dans le fil » : si le gestio a déjà écrit quelque
     // chose (question/remarque), il a engagé la conversation → on ne relance pas.

@@ -191,6 +191,35 @@ export async function resolveSlackUserId(email: string): Promise<string | null> 
   } catch { return null; }
 }
 
+// ID Slack du bot lui-même (via auth.test) — sert à EXCLURE les réactions posées
+// par le bot (✅/❌ après validation) du garde-fou « le gestio a réagi ». Mémoïsé.
+let _botUserId: string | null | undefined;
+export async function getBotUserId(): Promise<string | null> {
+  if (_botUserId !== undefined) return _botUserId;
+  if (!SLACK_BOT_TOKEN) return (_botUserId = null);
+  try {
+    const res = await fetch("https://slack.com/api/auth.test", { method: "POST", headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` } });
+    const j = (await res.json().catch(() => ({}))) as { ok?: boolean; user_id?: string };
+    return (_botUserId = j.ok && j.user_id ? j.user_id : null);
+  } catch { return (_botUserId = null); }
+}
+
+// Lit les réactions emoji posées sur un message (scope `reactions:read` requis +
+// bot membre du canal). Sert de garde-fou relance : un gestionnaire qui a réagi
+// (👀/✅/👍…) a vu la proposition → on ne le relance pas. `users` = IDs des
+// personnes ayant posé chaque emoji (permet d'exclure le bot lui-même).
+export type SlackReaction = { name?: string; users?: string[]; count?: number };
+export async function getMessageReactions(channel: string, ts: string): Promise<{ ok: boolean; reactions: SlackReaction[]; error?: string }> {
+  if (!SLACK_BOT_TOKEN) return { ok: false, reactions: [], error: "SLACK_BOT_TOKEN absent" };
+  try {
+    const res = await fetch(`https://slack.com/api/reactions.get?channel=${encodeURIComponent(channel)}&timestamp=${encodeURIComponent(ts)}&full=true`, {
+      headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` },
+    });
+    const j = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: { reactions?: SlackReaction[] }; error?: string };
+    return { ok: !!j.ok, reactions: j.message?.reactions ?? [], error: j.error };
+  } catch (e) { return { ok: false, reactions: [], error: e instanceof Error ? e.message : "fetch error" }; }
+}
+
 // Lit les réponses d'un thread (scope `channels:history` requis + bot membre du
 // canal). Sert à détecter une question posée par un gestionnaire sous une propo.
 export type SlackReply = { ts?: string; user?: string; text?: string; bot_id?: string; subtype?: string };
