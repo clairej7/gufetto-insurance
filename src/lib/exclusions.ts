@@ -9,7 +9,23 @@ import { prisma } from "@/lib/prisma";
 export type ExclusionRow = { id: string; kind: string; value: string; label: string | null; createdAt: Date };
 
 export async function getExclusions(): Promise<ExclusionRow[]> {
-  return prisma.automationExclusion.findMany({ orderBy: [{ kind: "asc" }, { label: "asc" }], select: { id: true, kind: true, value: true, label: true, createdAt: true } });
+  // Exclut les lignes "app_flag" (drapeaux applicatifs, cf. isAppFlagOn) qui
+  // n'ont rien à voir avec les exclusions de dossiers.
+  return prisma.automationExclusion.findMany({ where: { kind: { not: "app_flag" } }, orderBy: [{ kind: "asc" }, { label: "asc" }], select: { id: true, kind: true, value: true, label: true, createdAt: true } });
+}
+
+// Drapeaux d'activation d'automatisations, stockés en BASE (plus fiable qu'une
+// variable d'env Railway, qui doit être posée sur le bon service — cause réelle du
+// blocage des relances gestio le 2026-09-03 : le cron tournait mais l'app ne voyait
+// pas DEVIS6_RELANCE_ENABLED). Réutilise AutomationExclusion (kind "app_flag") pour
+// éviter un changement de schéma. Présence de la ligne = activé.
+export async function isAppFlagOn(name: string): Promise<boolean> {
+  const row = await prisma.automationExclusion.findFirst({ where: { kind: "app_flag", value: name }, select: { id: true } });
+  return !!row;
+}
+export async function setAppFlag(name: string, on: boolean, by?: string): Promise<void> {
+  if (on) await prisma.automationExclusion.upsert({ where: { kind_value: { kind: "app_flag", value: name } }, create: { kind: "app_flag", value: name, label: `flag applicatif : ${name}`, createdBy: by ?? "system" }, update: {} });
+  else await prisma.automationExclusion.deleteMany({ where: { kind: "app_flag", value: name } });
 }
 
 // Renvoie l'ensemble des coproId exclus (gestionnaires résolus en copros + copros

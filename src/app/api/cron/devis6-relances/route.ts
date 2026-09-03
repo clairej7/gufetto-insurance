@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { sendDevis6Relances } from "@/lib/devis6-relance";
+import { isAppFlagOn } from "@/lib/exclusions";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
@@ -28,7 +29,11 @@ export async function POST(req: NextRequest) {
   const hoursParam = url.searchParams.get("hours");
   const hours = hoursParam ? Math.min(168, Math.max(1, parseInt(hoursParam, 10))) : undefined; // override de test admin (1..168 h)
 
-  const cronEnabled = process.env.DEVIS6_RELANCE_ENABLED === "true";
+  // Activation via TOGGLE EN BASE (isAppFlagOn) — PLUS d'env Railway (c'était la
+  // cause du bug le 2026-09-03 : le cron tournait, mais l'app ne voyait pas
+  // DEVIS6_RELANCE_ENABLED posée sur le mauvais service → dry-run permanent). La base
+  // est vue de façon fiable par tous les services. Défaut = OFF (aucune ligne).
+  const cronEnabled = await isAppFlagOn("devis6_relance_enabled");
   const opts = isCron
     ? { dryRun: !cronEnabled }               // cron : dry-run tant que non activé, seuil 48 h
     : { limit, dryRun: dryRunParam, hours };  // admin : test paramétrable (+ override d'heures)
