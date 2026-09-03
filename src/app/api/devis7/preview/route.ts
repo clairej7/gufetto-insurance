@@ -79,7 +79,21 @@ export async function GET(req: NextRequest) {
   // le flag pour bloquer l'envoi côté modale, sans jamais retomber silencieusement
   // sur le contrat. Cf. src/lib/devis-prime.ts.
   const contratPrime = typeof contratActuel.primeTTC === "number" ? contratActuel.primeTTC : null;
-  const primeRes = resolvePrimeReference(contratPrime, primePayee);
+  let primeRes = resolvePrimeReference(contratPrime, primePayee);
+  // Garde-fou renforcé (2026-09-03) : la prime de référence de la copro
+  // (`primeActuelle`, généralement synchronisée d'une source fiable / avis d'échéance,
+  // et confirmée = valeur du contrat Matera) doit CORROBORER la base retenue. Si elle
+  // diverge de plus de ±25 %, on NE tranche pas : bloque + vérif manuelle. Sinon un
+  // chiffre extrait/périmé peut passer en silence — cas réel « 2 rue Belle Appelle » :
+  // base 403 € (echo de notre mail de demande) alors que la vraie prime = 596 €
+  // (primeActuelle + contrat Matera). Complète le blocage contrat↔prime payée existant.
+  const primeActuelleNum = typeof p.copro.primeActuelle === "number" && p.copro.primeActuelle > 0 ? p.copro.primeActuelle : null;
+  if (primeRes.flag === "ok" && primeRes.value != null && primeActuelleNum != null) {
+    const rPa = primeActuelleNum / primeRes.value;
+    if (rPa < 0.8 || rPa > 1.25) {
+      primeRes = { value: null, source: "none", flag: "bloque", contrat: primeRes.contrat ?? contratPrime, primePayee: primeActuelleNum, ratio: rPa };
+    }
+  }
   const prime = { flag: primeRes.flag, value: primeRes.value, contrat: primeRes.contrat, primePayee: primeRes.primePayee, ratio: primeRes.ratio, source: primeRes.source };
 
   return NextResponse.json({
