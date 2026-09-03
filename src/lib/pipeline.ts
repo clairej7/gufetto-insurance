@@ -106,12 +106,15 @@ export function isClientMri(clientMriStatut: string | null | undefined): boolean
   return clientMriStatut === "Insurance client";
 }
 
-// Clôture "définitive" parce que cliente MRI HubSpot (hors Wakam à migrer).
+// Clôture "définitive" dès que HubSpot dit cliente MRI — Y COMPRIS Wakam.
+// Décision Quentin (2026-09-03) : le champ assureur (« Matera Assurance »/Wakam)
+// est souvent périmé, donc on ne s'y fie pas ; le flag client HubSpot prime → clos.
+// `assureurActuel` conservé pour la signature (appelée partout) mais plus utilisé.
 export function isCloturePourClient(
   clientMriStatut: string | null | undefined,
-  assureurActuel: string | null | undefined
+  _assureurActuel?: string | null | undefined
 ): boolean {
-  return isClientMri(clientMriStatut) && !isWakam(assureurActuel);
+  return isClientMri(clientMriStatut);
 }
 
 export function categoriseDossier(input: {
