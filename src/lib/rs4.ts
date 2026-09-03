@@ -1017,8 +1017,14 @@ export async function sendRelance(actorEmail: string, relanceNum: number, nowMs:
     // on NE RELANCE PAS. On regarde le fil d'origine ET tous les autres fils
     // « gufetto » du MÊME IMMEUBLE (building_id) — car un courtier répond parfois
     // dans un mail séparé (le RS déjà envoyé ailleurs). → marque + retour détecteur.
-    // On compte les réponses postérieures au DERNIER envoi initial (renvoi inclus).
-    const sentMs = baseMs;
+    // FENÊTRE = depuis la DEMANDE INITIALE (1er draft_sent), PAS depuis baseMs :
+    // rs4SentAt a pu avancer quand on a répondu APRÈS une réponse du courtier
+    // (weRepliedLast / relance remise à 1), ce qui « consommait » sa réponse et le
+    // rendait relançable. Règle Quentin : toute conv où le courtier a répondu — même
+    // si on a renvoyé après, peu importe le contenu — ne doit JAMAIS être relancée.
+    // p.events ne contient que des draft_sent → leur min = notre 1er envoi.
+    const firstSendMs = p.events.length ? Math.min(...p.events.map((e) => e.createdAt.getTime())) : baseMs;
+    const sentMs = Math.min(baseMs, firstSendMs);
     type FMsg = { id: string; is_inbound: boolean; created_at: number; blurb?: string; attachments?: { contentType?: string; filename?: string }[]; author?: { email?: string }; recipients?: { role: string; handle: string }[] };
     const convToCheck = new Set<string>([cid]);
     if (p.copro.buildingId) {
@@ -1040,8 +1046,9 @@ export async function sendRelance(actorEmail: string, relanceNum: number, nowMs:
       const body = stripHtml(last.blurb || "").slice(0, 300);
       const kind = classifyReply(body, repliedMsgs.some((m) => realDoc(m.attachments ?? [])), false);
       const autreFil = repliedConv !== cid;
-      await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: kind, rs4ReplyAt: new Date(last.created_at * 1000), rs4ReplySnippet: body.slice(0, 160), rs4ReplyMsgId: last.id, rs4ReplyConvId: repliedConv, rs4RelanceAt: null } });
-      await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Relance ${relanceNum} ANNULÉE — réponse détectée (${kind}${autreFil ? ", autre fil du même immeuble" : ""}), dossier renvoyé au détecteur`, metadata: { auto: "rs4_relance_skipped_replied", kind, autreFil }, createdBy: actorEmail } });
+      const flagSnippet = `⚠️ À traiter à la main — le courtier a répondu (${kind}${autreFil ? ", autre fil" : ""}) : ${body || "(voir conversation)"}`.slice(0, 240);
+      await prisma.insurancePipeline.update({ where: { id: p.id }, data: { rs4ReplyScanAt: now, rs4ReplyKind: kind, rs4ReplyAt: new Date(last.created_at * 1000), rs4ReplySnippet: flagSnippet, rs4ReplyMsgId: last.id, rs4ReplyConvId: repliedConv, rs4RelanceAt: null } });
+      await prisma.pipelineEvent.create({ data: { pipelineId: p.id, type: "action_manuelle", description: `Relance ${relanceNum} ANNULÉE — réponse détectée depuis la demande initiale (${kind}${autreFil ? ", autre fil du même immeuble" : ""}), dossier sorti de la boucle → à traiter à la main`, metadata: { auto: "rs4_relance_skipped_replied", kind, autreFil }, createdBy: actorEmail } });
       skippedReplied++;
       continue;
     }
