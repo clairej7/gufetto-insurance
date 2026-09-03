@@ -93,6 +93,7 @@ type Pipeline = {
     contactCsNom: string | null;
     csMembersData: string | null;
     csMembersSyncedAt: Date | null;
+    badge: string | null;
     gestionnaireEmail: string | null;
     gestionnaireNom: string | null;
     contactCourtierEmail: string | null;
@@ -826,6 +827,11 @@ export function CoproDetail({ pipeline, taskTemplates, userEmail, pipelineTasks 
             <div className="flex items-center gap-2 flex-wrap">
               {excluded && <span title="Exclu de toute automatisation" style={{ fontSize: 20 }}>🚫</span>}
               <h1 className="text-2xl font-bold" style={{ color: "#26262C" }}>{pipeline.copro.nom}</h1>
+              {pipeline.copro.badge && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full border" style={{ color: "#7A3E9D", background: "#F3E8FB", borderColor: "#E3CDF3" }}>
+                  {pipeline.copro.badge}
+                </span>
+              )}
               {excluded && (
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full border" style={{ color: "#CA1E12", background: "#FDECEA", borderColor: "#F4C7C2" }}>
                   Exclu de toute automatisation

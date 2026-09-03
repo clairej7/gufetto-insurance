@@ -140,6 +140,7 @@ model Copro {
 
   // Sync metadata
   source    String    @default("omni") // "omni" | "duomo"
+  badge     String?   // marqueur libre affiché en badge sur la fiche/liste (ex. « Copros Enzo »)
   syncedAt  DateTime  @default(now())
   archivedAt DateTime? // copro absente du dernier inventaire Omni complet — conservée, masquée des vues actives
 

@@ -23,6 +23,7 @@ type PipelineWithCopro = {
     gestionnaireEmail: string | null;
     gestionnaireNom: string | null;
     clientMriStatut: string | null;
+    badge: string | null;
   };
   taskCompletions: Array<{ taskId: string; task: { required: boolean; statut: string } }>;
 };
@@ -194,6 +195,11 @@ function PipelineRow({ pipeline, taskTemplates, cloture = false, odr = false }: 
               {pipeline.copro.nom}
             </span>
             <Excl id={pipeline.copro.id} />
+            {pipeline.copro.badge && (
+              <span title={pipeline.copro.badge} style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: "#7A3E9D", background: "#F3E8FB", border: "1px solid #E3CDF3", borderRadius: 999, padding: "1px 7px", whiteSpace: "nowrap" }}>
+                {pipeline.copro.badge}
+              </span>
+            )}
             {(pipeline.copro.primeActuelle ?? 0) > 10000 && <span title="Prime > 10 k€" style={{ flexShrink: 0 }}>👑</span>}
           </span>
           {pipeline.copro.adresse && (
