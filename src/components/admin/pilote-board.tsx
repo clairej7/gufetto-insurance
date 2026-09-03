@@ -11,7 +11,7 @@ import { ChevronRight, ChevronDown, CircleDot, X, Rocket, Square, Loader2, Histo
 // Synthèse (description) par tâche automatisée, affichée dans le détail tâche.
 const TASK_DETAIL: Record<string, string> = {
   remplissage_infos:
-    "Une fois le mode Pilote déployé, cette tâche fait tourner l'Automatisation 1 (pré-remplissage depuis Front) en autonomie : elle traite 5 dossiers en « Identification » toutes les 10 minutes, complète les informations manquantes (assureur, n° de contrat, mail courtier) et ne repasse jamais deux fois sur le même dossier, jusqu'à épuisement du lot ou arrêt manuel. À l'arrêt, un recap de session est archivé dans l'historique.",
+    "Une fois le mode Pilote déployé, cette tâche fait tourner l'Automatisation 1 (pré-remplissage depuis Front) en autonomie : elle traite 5 dossiers en « Identification » chaque minute, complète les informations manquantes (assureur, n° de contrat, mail courtier) et ne repasse jamais deux fois sur le même dossier, jusqu'à épuisement du lot ou arrêt manuel. À l'arrêt, un recap de session est archivé dans l'historique.",
 };
 
 // Type d'état renvoyé par /api/pilote/status.
@@ -194,8 +194,8 @@ export function PiloteBoard() {
     try { const r = await fetch("/api/pilote/status"); const j = await r.json(); if (j?.success) setStatus(j as PiloteStatus); } catch { /* ignore */ }
   }, []);
   useEffect(() => { load(); }, [load]);
-  // Rafraîchit les stats en direct quand c'est déployé (le cron tourne toutes les 10 min).
-  useEffect(() => { if (!deployed) return; const t = setInterval(load, 60_000); return () => clearInterval(t); }, [deployed, load]);
+  // Rafraîchit les stats en direct quand c'est déployé (le cron tourne chaque minute).
+  useEffect(() => { if (!deployed) return; const t = setInterval(load, 15_000); return () => clearInterval(t); }, [deployed, load]);
 
   const deploy = async () => { setBusy(true); try { const r = await fetch("/api/pilote/deploy", { method: "POST" }); const j = await r.json(); if (j?.success) setStatus(j as PiloteStatus); } finally { setBusy(false); } };
   const stop = async () => { setBusy(true); try { const r = await fetch("/api/pilote/stop", { method: "POST" }); const j = await r.json(); if (j?.recap) setRecap(j.recap as PiloteRecap); await load(); } finally { setBusy(false); } };
@@ -448,7 +448,7 @@ export function PiloteBoard() {
                         <span style={{ fontSize: 12, color: "#8A8A99" }}>· {status.stats.traites} traités · {status.stats.completes} complétés · {status.stats.runs} cycles</span>
                       </div>
                       {status.recent.length === 0 ? (
-                        <p style={{ fontSize: 13, color: "#8A8A99", fontStyle: "italic", margin: 0 }}>En attente du prochain cycle (5 dossiers toutes les 10 min)…</p>
+                        <p style={{ fontSize: 13, color: "#8A8A99", fontStyle: "italic", margin: 0 }}>En attente du prochain cycle (5 dossiers par minute)…</p>
                       ) : (
                         <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto", border: "1px solid #E8E8EC", borderRadius: 10, padding: 8, background: "#FAFAFC" }}>
                           {status.recent.map((it, i) => (
@@ -464,7 +464,7 @@ export function PiloteBoard() {
                           ))}
                         </div>
                       )}
-                      <p style={{ fontSize: 11.5, color: "#B0B0BC", margin: "8px 0 0" }}>Actualisé automatiquement · cadence 5 dossiers / 10 min.</p>
+                      <p style={{ fontSize: 11.5, color: "#B0B0BC", margin: "8px 0 0" }}>Actualisé automatiquement · cadence 5 dossiers / minute.</p>
                     </div>
                   )}
                 </div>

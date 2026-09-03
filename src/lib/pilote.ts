@@ -1,7 +1,7 @@
 // Mode PILOTE — orchestration en autonomie des automatisations.
 // PREMIÈRE TÂCHE BRANCHÉE : Identification › « Remplissage des informations
 // manquantes » = fait tourner en boucle l'Auto 1 (runAutofillChunk) par lots de 5
-// toutes les 10 min (cron), sans refaire les mêmes dossiers (curseur autofillTenteLe),
+// chaque minute (cron), sans refaire les mêmes dossiers (curseur autofillTenteLe),
 // jusqu'à épuisement du lot OU clic « Stopper le mode Pilote ».
 //
 // Stockage SANS changement de schéma (évite un db push qui pousserait des edits de
