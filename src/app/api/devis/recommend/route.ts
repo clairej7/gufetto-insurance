@@ -213,7 +213,7 @@ function buildPrompt(
   if (rec.toUpperCase().includes("AXA")) {
     lines.push(
       "",
-      "=== RÉFÉRENCE INTERNE AXA (à utiliser pour argumenter, ne pas citer mot pour mot) ===",
+      "=== RÉFÉRENCE INTERNE AXA (contexte QUALITATIF uniquement — pour tout montant/plafond/franchise, utilise EXCLUSIVEMENT les données du devis ci-dessus, jamais un chiffre de ce bloc) ===",
       "Points forts à valoriser :",
       "- AXA est un acteur historique et incontournable de l'assurance en France : marque reconnue, solidité financière garantie, très rassurant pour les copropriétaires",
       "- Couverture très large : quasiment tous les risques majeurs pour l'immeuble sont inclus",
@@ -229,10 +229,10 @@ function buildPrompt(
   } else if (rec.toUpperCase().includes("MILA")) {
     lines.push(
       "",
-      "=== RÉFÉRENCE INTERNE MILA (à utiliser pour argumenter, ne pas citer mot pour mot) ===",
+      "=== RÉFÉRENCE INTERNE MILA (contexte QUALITATIF uniquement — AUCUN chiffre ci-dessous n'est fiable pour CE dossier ; pour tout montant/plafond, utilise EXCLUSIVEMENT les données du devis ci-dessus) ===",
       "Points forts à valoriser :",
       "- Couverture complète incluant des risques souvent exclus : graffitis, recherche de fuite, consommation d'eau supplémentaire",
-      "- Forts plafonds de garantie : Effondrement 3 M€, RC propriétaire 6 M€, Bris de machine 100 000 €, Vol/vandalisme 40 000 €",
+      "- Forts plafonds de garantie (effondrement, RC propriétaire d'immeuble, bris de machine, vol/vandalisme) — NE cite JAMAIS de montant générique ici : reprends UNIQUEMENT les chiffres réels du devis de ce dossier",
       "- Garantie spécifique pour le conseil syndical (rare dans les contrats concurrents)",
       "- Possibilité d'ajouter la RC du syndic bénévole (adaptée aux petites copropriétés)",
       "- Indexation automatique FFB : protection contre l'inflation des coûts de construction",
@@ -266,6 +266,8 @@ function buildPrompt(
     "- Paragraphe recommandation : 2 à 3 phrases maximum, concret et chiffré, uniquement à partir des données réelles ci-dessus.",
     "- N'affirme JAMAIS qu'une garantie est absente du contrat actuel, « ajoutée », « élargie » ou « nouvelle » : le statut des garanties du contrat actuel n'est jamais prouvé (extraction partielle). Présente les garanties du DEVIS comme une couverture complète (« couvre notamment … »), SANS jamais dire ou sous-entendre qu'elles manqueraient au contrat actuel. Argumente les vraies différences prouvables : prix, franchises, plafonds/LCI chiffrés.",
     "- Les catastrophes naturelles et technologiques sont obligatoires (toujours présentes dans les deux contrats) : ne les cite JAMAIS comme un ajout, une nouveauté ou un avantage du devis.",
+    "- CHIFFRES (RÈGLE ABSOLUE) : tout montant, plafond, franchise, LCI ou prime que tu écris doit provenir EXCLUSIVEMENT des sections CONTRAT ACTUEL / DEVIS REÇUS ci-dessus. N'utilise JAMAIS un chiffre issu des références internes AXA/MILA — elles sont génériques et diffèrent souvent de ce dossier (ex. un plafond effondrement réel de 2 M€ alors que la référence dit 3 M€). En cas de doute sur un chiffre, ne le cite pas.",
+    "- GARANTIE PERDUE : si le contrat actuel dispose d'une garantie dont la valeur est PROUVÉE présente (true dans ses données, ex. protection juridique) et que le devis recommandé ne l'a PAS (false dans les données du devis), signale-le honnêtement en une courte incise (« à noter : … »). C'est l'INVERSE du cas interdit — ici c'est le devis qui manque quelque chose (donnée fiable), pas le contrat. N'invente jamais une garantie perdue : uniquement si contrat=true ET devis=false explicitement.",
     `- LCI : ${lciDirective}`,
     "- Pour mettre un mot ou un chiffre en gras : **texte**. Mets le symbole € APRÈS les chiffres (« 3 979 € », jamais « €3 979 »).",
     "- Termine EXACTEMENT par « Cordialement, » : n'ajoute NI nom, NI « Matera », NI aucune note/commentaire après (la signature est ajoutée automatiquement)."
