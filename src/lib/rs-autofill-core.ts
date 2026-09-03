@@ -231,8 +231,11 @@ export async function applyAutofill(
     }
   }
 
-  revalidatePath("/pipeline");
-  revalidatePath(`/pipeline/${pipelineId}`);
+  // Revalidation du cache = best-effort. Hors contexte requête Next (cron interne,
+  // boucle Pilote, script), revalidatePath lève « static generation store missing » ;
+  // ce n'est PAS une erreur métier (les écritures ci-dessus sont déjà commitées), donc
+  // on ne laisse jamais ça faire échouer l'autofill.
+  try { revalidatePath("/pipeline"); revalidatePath(`/pipeline/${pipelineId}`); } catch { /* revalidation optionnelle */ }
   return {
     pipelineId, buildingId: copro.buildingId, info, targetStatut, moved, wroteFields, writtenFields,
     reliable: effReliable, assureur: effAssureur, numeroContrat: effNumero, mailCourtier: effMail, contactMailStored, usedOmni,
