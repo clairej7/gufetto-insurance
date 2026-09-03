@@ -194,8 +194,26 @@ export function PiloteBoard() {
     try { const r = await fetch("/api/pilote/status"); const j = await r.json(); if (j?.success) setStatus(j as PiloteStatus); } catch { /* ignore */ }
   }, []);
   useEffect(() => { load(); }, [load]);
-  // Rafraîchit les stats en direct quand c'est déployé (le cron tourne chaque minute).
+  // Rafraîchit les stats en direct quand c'est déployé.
   useEffect(() => { if (!deployed) return; const t = setInterval(load, 15_000); return () => clearInterval(t); }, [deployed, load]);
+
+  // MOTEUR (secours fiable) côté client : tant que le mode est déployé ET cette page
+  // ouverte, on déclenche un cycle (5 dossiers) chaque minute. Indispensable tant que
+  // le service cron Railway n'a pas repris la nouvelle config. L'autofill est idempotent
+  // (curseur autofillTenteLe) → aucun double traitement même avec plusieurs onglets.
+  const ticking = useRef(false);
+  useEffect(() => {
+    if (!deployed) return;
+    const tick = async () => {
+      if (ticking.current) return;
+      ticking.current = true;
+      try { await fetch("/api/cron/pilote-identification", { method: "POST" }); await load(); }
+      catch { /* réseau */ } finally { ticking.current = false; }
+    };
+    tick();
+    const t = setInterval(tick, 60_000);
+    return () => clearInterval(t);
+  }, [deployed, load]);
 
   const deploy = async () => { setBusy(true); try { const r = await fetch("/api/pilote/deploy", { method: "POST" }); const j = await r.json(); if (j?.success) setStatus(j as PiloteStatus); } finally { setBusy(false); } };
   const stop = async () => { setBusy(true); try { const r = await fetch("/api/pilote/stop", { method: "POST" }); const j = await r.json(); if (j?.recap) setRecap(j.recap as PiloteRecap); await load(); } finally { setBusy(false); } };
