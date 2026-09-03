@@ -9,9 +9,9 @@ import { prisma } from "@/lib/prisma";
 export type ExclusionRow = { id: string; kind: string; value: string; label: string | null; createdAt: Date };
 
 export async function getExclusions(): Promise<ExclusionRow[]> {
-  // Exclut les lignes "app_flag" (drapeaux applicatifs, cf. isAppFlagOn) qui
-  // n'ont rien à voir avec les exclusions de dossiers.
-  return prisma.automationExclusion.findMany({ where: { kind: { not: "app_flag" } }, orderBy: [{ kind: "asc" }, { label: "asc" }], select: { id: true, kind: true, value: true, label: true, createdAt: true } });
+  // Exclut les lignes techniques (drapeaux applicatifs "app_flag", sessions Pilote
+  // "pilote_session") qui n'ont rien à voir avec les exclusions de dossiers.
+  return prisma.automationExclusion.findMany({ where: { kind: { notIn: ["app_flag", "pilote_session"] } }, orderBy: [{ kind: "asc" }, { label: "asc" }], select: { id: true, kind: true, value: true, label: true, createdAt: true } });
 }
 
 // Drapeaux d'activation d'automatisations, stockés en BASE (plus fiable qu'une

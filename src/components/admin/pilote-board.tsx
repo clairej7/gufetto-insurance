@@ -5,8 +5,25 @@
 // Chaque carte : titre / état (déployé = vert, non déployé = rouge) / % d'automatisation.
 // Placeholder : tout en « Non déployé » + « 0% automatisé ». Clic → vue agrandie.
 
-import { useEffect, useRef, useState } from "react";
-import { ChevronRight, CircleDot, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronRight, ChevronDown, CircleDot, X, Rocket, Square, Loader2, History } from "lucide-react";
+
+// Synthèse (description) par tâche automatisée, affichée dans le détail tâche.
+const TASK_DETAIL: Record<string, string> = {
+  remplissage_infos:
+    "Une fois le mode Pilote déployé, cette tâche fait tourner l'Automatisation 1 (pré-remplissage depuis Front) en autonomie : elle traite 5 dossiers en « Identification » toutes les 10 minutes, complète les informations manquantes (assureur, n° de contrat, mail courtier) et ne repasse jamais deux fois sur le même dossier, jusqu'à épuisement du lot ou arrêt manuel. À l'arrêt, un recap de session est archivé dans l'historique.",
+};
+
+// Type d'état renvoyé par /api/pilote/status.
+type PiloteStats = { runs: number; traites: number; completes: number; sansInfo: number; erreurs: number };
+type PiloteRecap = { id: string; startedAt: string; endedAt: string; stats: PiloteStats };
+type RecentItem = { nom: string; champs: string[]; wroteFields: boolean; at: string };
+type PiloteStatus = { deployed: boolean; startedAt: string | null; stats: PiloteStats; recent: RecentItem[]; history: PiloteRecap[] };
+// Libellés lisibles des champs complétés par l'autofill.
+const CHAMP_LABEL: Record<string, string> = { assureurActuel: "assureur", numeroContrat: "n° contrat", contactCourtierEmail: "mail courtier", courtierActuel: "courtier", primeActuelle: "prime", adresse: "adresse" };
+const champLabel = (k: string) => CHAMP_LABEL[k] ?? k;
+
+const fmtDateTime = (iso: string) => new Date(iso).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 // 1 tâche = 1 ligne dans la vue agrandie d'une carte. Le % d'automatisation de la carte
 // est DÉRIVÉ des tâches (automatisées / total) → il s'actualise tout seul dès qu'on
@@ -22,7 +39,7 @@ const pctOf = (c: CardData): number => (c.tasks.length ? Math.round((c.tasks.fil
 
 const FUNNEL: CardData[] = [
   { key: "identification", title: "Identification", deployed: false, tasks: [
-    { key: "remplissage_infos", name: "Remplissage des informations manquantes", automated: false },
+    { key: "remplissage_infos", name: "Remplissage des informations manquantes", automated: true },
     { key: "identification_dossiers", name: "Identification des dossiers", automated: false },
   ] },
   { key: "rs", title: "Récupération du RS", deployed: false, tasks: [
@@ -166,6 +183,26 @@ export function PiloteBoard() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const close = () => { setSelected(null); setSelectedTask(null); };
 
+  // État Pilote (déployé ?, stats en cours, historique) + actions déployer/stopper.
+  const [status, setStatus] = useState<PiloteStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [recap, setRecap] = useState<PiloteRecap | null>(null);
+  const [histOpen, setHistOpen] = useState(false);
+  const deployed = !!status?.deployed;
+
+  const load = useCallback(async () => {
+    try { const r = await fetch("/api/pilote/status"); const j = await r.json(); if (j?.success) setStatus(j as PiloteStatus); } catch { /* ignore */ }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  // Rafraîchit les stats en direct quand c'est déployé (le cron tourne toutes les 10 min).
+  useEffect(() => { if (!deployed) return; const t = setInterval(load, 60_000); return () => clearInterval(t); }, [deployed, load]);
+
+  const deploy = async () => { setBusy(true); try { const r = await fetch("/api/pilote/deploy", { method: "POST" }); const j = await r.json(); if (j?.success) setStatus(j as PiloteStatus); } finally { setBusy(false); } };
+  const stop = async () => { setBusy(true); try { const r = await fetch("/api/pilote/stop", { method: "POST" }); const j = await r.json(); if (j?.recap) setRecap(j.recap as PiloteRecap); await load(); } finally { setBusy(false); } };
+
+  // Reflète l'état déployé sur la carte Identification (seule carte branchée).
+  const withDeploy = (c: CardData): CardData => (c.key === "identification" ? { ...c, deployed } : c);
+
   // Mesure des coins pour tracer la flèche diagonale Identification → ODR en cours.
   const wrapRef = useRef<HTMLDivElement>(null);
   const idRef = useRef<HTMLDivElement>(null);
@@ -216,7 +253,7 @@ export function PiloteBoard() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", columnGap: GUTTER, alignItems: "stretch" }}>
             {FUNNEL.map((c, i) => (
               <div key={c.key} ref={i === 0 ? idRef : undefined} style={{ position: "relative", gridColumn: i + 1, gridRow: 1 }}>
-                <FlowCard data={c} onClick={() => setSelected(c)} />
+                <FlowCard data={withDeploy(c)} onClick={() => setSelected(withDeploy(c))} />
                 {i < FUNNEL.length - 1 && <RightArrow />}
               </div>
             ))}
@@ -265,18 +302,43 @@ export function PiloteBoard() {
           </div>
         </div>
 
-        {/* Ligne 4 — bouton de déploiement (inactif pour l'instant) */}
-        <div style={{ display: "flex", justifyContent: "center", marginTop: 40 }}>
+        {/* Ligne 4 — bouton déployer / stopper + stats en direct */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginTop: 40 }}>
           <button
             type="button"
-            onClick={() => { /* inactif — le mode Pilote n'est pas encore déployable */ }}
-            title="Bientôt"
-            style={{ display: "inline-flex", alignItems: "center", gap: 10, fontSize: 15, fontWeight: 700, color: "#fff", background: "#4E49FC", border: "none", borderRadius: 12, padding: "14px 30px", cursor: "pointer", boxShadow: "0 4px 14px rgba(78,73,252,0.22)", opacity: 0.55 }}
+            onClick={deployed ? stop : deploy}
+            disabled={busy}
+            style={{ display: "inline-flex", alignItems: "center", gap: 10, fontSize: 15, fontWeight: 700, color: "#fff", background: deployed ? "#CA1E12" : "#4E49FC", border: "none", borderRadius: 12, padding: "14px 30px", cursor: busy ? "wait" : "pointer", boxShadow: deployed ? "0 4px 14px rgba(202,30,18,0.22)" : "0 4px 14px rgba(78,73,252,0.22)", opacity: busy ? 0.6 : 1 }}
           >
-            <CircleDot size={17} />
-            Déployer le mode Pilote
+            {busy ? <Loader2 size={17} /> : deployed ? <Square size={16} /> : <Rocket size={17} />}
+            {deployed ? "Stopper le mode Pilote" : "Déployer le mode Pilote"}
           </button>
+          {deployed && status && (
+            <div style={{ fontSize: 12.5, color: "#656576", textAlign: "center" }}>
+              🟢 En autonomie depuis {status.startedAt ? fmtDateTime(status.startedAt) : "—"} · <strong>{status.stats.traites}</strong> dossiers traités · <strong>{status.stats.completes}</strong> infos complétées
+            </div>
+          )}
         </div>
+
+        {/* Historique des sessions Pilote (menu déroulant) */}
+        {status && status.history.length > 0 && (
+          <div style={{ marginTop: 22, maxWidth: 640, marginLeft: "auto", marginRight: "auto" }}>
+            <button onClick={() => setHistOpen((o) => !o)} style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: "6px 0" }}>
+              <History size={15} /> Historique des sessions Pilote ({status.history.length})
+              <ChevronDown size={15} style={{ transform: histOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+            </button>
+            {histOpen && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                {status.history.map((h) => (
+                  <div key={h.id} style={{ border: "1px solid #E8E8EC", borderRadius: 10, padding: "12px 14px", background: "#fff" }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: "#26262C", marginBottom: 4 }}>Session Pilote {fmtDateTime(h.startedAt)} – {fmtDateTime(h.endedAt)}</div>
+                    <div style={{ fontSize: 12.5, color: "#656576" }}><strong>{h.stats.traites}</strong> dossiers traités · <strong>{h.stats.completes}</strong> infos complétées · {h.stats.sansInfo} sans info · {h.stats.erreurs} erreurs · {h.stats.runs} cycles</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Séparateur pointillé + distance avant l'encart Hors automatisation */}
         <div style={{ borderTop: "2px dashed #D7D7DF", margin: "44px 0 28px" }} />
@@ -373,12 +435,68 @@ export function PiloteBoard() {
                 </div>
                 <div style={{ borderTop: "1px dashed #E8E8EC", paddingTop: 18 }}>
                   <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#8A8A99", textTransform: "uppercase", marginBottom: 10 }}>Détail de la tâche</div>
-                  <p style={{ fontSize: 14, color: "#8A8A99", fontStyle: "italic", margin: 0 }}>
-                    À venir (ex. : nombre de dossiers qui se traitent automatiquement dans le temps une fois déployé).
-                  </p>
+                  {TASK_DETAIL[selectedTask.key] ? (
+                    <p style={{ fontSize: 14, color: "#3A3A44", lineHeight: 1.55, margin: 0 }}>{TASK_DETAIL[selectedTask.key]}</p>
+                  ) : (
+                    <p style={{ fontSize: 14, color: "#8A8A99", fontStyle: "italic", margin: 0 }}>À venir (ex. : nombre de dossiers qui se traitent automatiquement dans le temps une fois déployé).</p>
+                  )}
+                  {selectedTask.key === "remplissage_infos" && deployed && status && (
+                    <div style={{ marginTop: 16 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#34C759", boxShadow: "0 0 0 4px rgba(52,199,89,0.18)" }} />
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: "#13762C" }}>Suivi en direct</span>
+                        <span style={{ fontSize: 12, color: "#8A8A99" }}>· {status.stats.traites} traités · {status.stats.completes} complétés · {status.stats.runs} cycles</span>
+                      </div>
+                      {status.recent.length === 0 ? (
+                        <p style={{ fontSize: 13, color: "#8A8A99", fontStyle: "italic", margin: 0 }}>En attente du prochain cycle (5 dossiers toutes les 10 min)…</p>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto", border: "1px solid #E8E8EC", borderRadius: 10, padding: 8, background: "#FAFAFC" }}>
+                          {status.recent.map((it, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, padding: "8px 10px", background: "#fff", border: "1px solid #EEEEF2", borderRadius: 8 }}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: "#26262C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.nom}</div>
+                                <div style={{ fontSize: 12, color: it.wroteFields ? "#13762C" : "#8A8A99", marginTop: 2 }}>
+                                  {it.wroteFields ? `✓ ${it.champs.map(champLabel).join(", ")}` : "aucune info trouvée"}
+                                </div>
+                              </div>
+                              <span style={{ fontSize: 11, color: "#B0B0BC", whiteSpace: "nowrap" }}>{new Date(it.at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <p style={{ fontSize: 11.5, color: "#B0B0BC", margin: "8px 0 0" }}>Actualisé automatiquement · cadence 5 dossiers / 10 min.</p>
+                    </div>
+                  )}
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Recap de session affiché à l'arrêt du mode Pilote */}
+      {recap && (
+        <div onClick={() => setRecap(null)} style={{ position: "absolute", inset: 0, background: "rgba(251,251,253,0.9)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 32, zIndex: 30, borderRadius: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", width: "100%", maxWidth: 480, background: "#fff", border: "1px solid #E4E4EA", borderRadius: 16, boxShadow: "0 12px 40px rgba(16,16,24,0.18)", padding: "26px 28px" }}>
+            <button onClick={() => setRecap(null)} aria-label="Fermer" style={{ position: "absolute", top: 14, right: 14, width: 32, height: 32, borderRadius: 8, border: "1px solid #E8E8EC", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#656576" }}>
+              <X size={16} />
+            </button>
+            <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.5, color: "#13762C", textTransform: "uppercase", marginBottom: 6 }}>Session Pilote terminée</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "#26262C", marginBottom: 18 }}>{fmtDateTime(recap.startedAt)} – {fmtDateTime(recap.endedAt)}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {[
+                { label: "Dossiers traités", value: recap.stats.traites, accent: "#4E49FC" },
+                { label: "Infos complétées", value: recap.stats.completes, accent: "#13762C" },
+                { label: "Sans info trouvée", value: recap.stats.sansInfo, accent: "#8A8A99" },
+                { label: "Erreurs", value: recap.stats.erreurs, accent: recap.stats.erreurs > 0 ? "#CA1E12" : "#8A8A99" },
+              ].map((s) => (
+                <div key={s.label} style={{ border: "1px solid #E8E8EC", borderRadius: 10, padding: "12px 14px" }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: s.accent }}>{s.value}</div>
+                  <div style={{ fontSize: 12, color: "#656576", marginTop: 2 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 12.5, color: "#8A8A99", marginTop: 14 }}>{recap.stats.runs} cycles de traitement · archivé dans l&apos;historique des sessions Pilote.</div>
           </div>
         </div>
       )}
