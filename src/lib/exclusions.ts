@@ -22,6 +22,9 @@ export async function getExcludedCoproIds(): Promise<string[]> {
     const copros = await prisma.copro.findMany({ where: { gestionnaireEmail: { in: gestEmails } }, select: { id: true } });
     for (const c of copros) coproIds.add(c.id);
   }
+  // Ré-inclusion explicite (kind "copro_include") : force une copro DANS les autos,
+  // même si son gestionnaire est globalement exclu. Priorité sur toute exclusion.
+  for (const e of excl) if (e.kind === "copro_include") coproIds.delete(e.value);
   return [...coproIds];
 }
 
@@ -30,6 +33,7 @@ export async function getExcludedCoproIds(): Promise<string[]> {
 // impacte tous ses dossiers). null = pas exclue. La copro prime sur le gestio.
 export async function getCoproExclusion(coproId: string, gestionnaireEmail: string | null): Promise<{ kind: "copro" | "gestionnaire"; value: string } | null> {
   const excl = await prisma.automationExclusion.findMany({ select: { kind: true, value: true } });
+  if (excl.some((e) => e.kind === "copro_include" && e.value === coproId)) return null; // ré-inclus explicitement → jamais exclu
   if (excl.some((e) => e.kind === "copro" && e.value === coproId)) return { kind: "copro", value: coproId };
   const g = gestionnaireEmail?.toLowerCase().trim();
   if (g && excl.some((e) => e.kind === "gestionnaire" && e.value.toLowerCase() === g)) return { kind: "gestionnaire", value: g };
