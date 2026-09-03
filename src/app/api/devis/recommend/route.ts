@@ -296,9 +296,19 @@ export async function POST(req: NextRequest) {
 
     const response = await client.messages.create({
       model: "claude-sonnet-5",
-      max_tokens: 1500,
+      // sonnet-5 fait du raisonnement adaptatif par défaut, qui CONSOMME des tokens
+      // sur max_tokens → à 1500 le mail (raisonnement + template) était parfois
+      // TRONQUÉ en plein milieu (« …Nous nous charge »). On donne une marge large.
+      max_tokens: 4000,
       messages: [{ role: "user", content: prompt }],
     });
+
+    // Garde-fou anti-troncature : si la génération a buté sur la limite de tokens,
+    // le corps est incomplet (fin « Cordialement, » manquante) → on ÉCHOUE plutôt
+    // que de renvoyer un mail coupé (l'UI proposera de régénérer).
+    if (response.stop_reason === "max_tokens") {
+      return NextResponse.json({ error: "Génération tronquée (limite de tokens) — régénère." }, { status: 502 });
+    }
 
     // sonnet-5 : raisonnement adaptatif par défaut → 1er bloc parfois "thinking".
     const content = response.content.find((b) => b.type === "text");
