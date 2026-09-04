@@ -12,18 +12,26 @@
 
 import { prisma } from "@/lib/prisma";
 import { runAutofillChunk } from "@/lib/autofill-batch";
+import { sendDevis6Relances } from "@/lib/devis6-relance";
+
+// Throttle des relances gestio dans le Pilote : on ne re-scanne pas Slack à chaque
+// tick (inutile + coûteux), une passe par heure suffit (les relances sont à 48 h).
+const RELANCE_THROTTLE_MS = 55 * 60 * 1000;
 
 const FLAG_KIND = "app_flag";
 const FLAG_VALUE = "pilote_identification";
 const SESSION_KIND = "pilote_session";
 const CHUNK = 5; // dossiers par tick
 
-export type PiloteStats = { runs: number; traites: number; completes: number; sansInfo: number; erreurs: number };
-const ZERO: PiloteStats = { runs: 0, traites: 0, completes: 0, sansInfo: 0, erreurs: 0 };
+export type PiloteStats = { runs: number; traites: number; completes: number; sansInfo: number; erreurs: number; relances: number };
+const ZERO: PiloteStats = { runs: 0, traites: 0, completes: 0, sansInfo: 0, erreurs: 0, relances: 0 };
 
 function parseStats(label: string | null): PiloteStats {
-  try { const o = JSON.parse(label ?? "{}"); return { runs: o.runs ?? 0, traites: o.traites ?? 0, completes: o.completes ?? 0, sansInfo: o.sansInfo ?? 0, erreurs: o.erreurs ?? 0 }; }
+  try { const o = JSON.parse(label ?? "{}"); return { runs: o.runs ?? 0, traites: o.traites ?? 0, completes: o.completes ?? 0, sansInfo: o.sansInfo ?? 0, erreurs: o.erreurs ?? 0, relances: o.relances ?? 0 }; }
   catch { return { ...ZERO }; }
+}
+function parseLastRelanceAt(label: string | null): string | null {
+  try { const o = JSON.parse(label ?? "{}"); return typeof o.lastRelanceAt === "string" ? o.lastRelanceAt : null; } catch { return null; }
 }
 
 // Un dossier récemment traité (pour le suivi en direct).
@@ -94,20 +102,33 @@ export async function stopPiloteIdentification(by: string): Promise<{ stopped: b
 export async function piloteIdentificationTick(by = "auto:pilote"): Promise<{ ran: boolean; count?: number; done?: boolean; stats?: PiloteStats }> {
   const flag = await prisma.automationExclusion.findFirst({ where: { kind: FLAG_KIND, value: FLAG_VALUE } });
   if (!flag) return { ran: false };
+  // ── Tâche 1 (Identification) : remplissage d'un lot ──────────────────────────
   const r = await runAutofillChunk(by, CHUNK);
   const s = parseStats(flag.label);
+
+  // ── Tâche 4 (Comparaison des devis) : relances gestio, throttlée 1×/h ─────────
+  // Réutilise la logique semi-auto (>48 h, 1 SEULE relance one-shot par notification,
+  // garde-fous emoji/commentaire/week-end). On ne la lance qu'une fois par heure.
+  let relancesSent = 0;
+  const lastRelanceAt = parseLastRelanceAt(flag.label);
+  const relanceDue = !lastRelanceAt || Date.now() - new Date(lastRelanceAt).getTime() > RELANCE_THROTTLE_MS;
+  if (relanceDue) {
+    try { const rr = await sendDevis6Relances(new Date(), "auto:pilote-relance", {}); relancesSent = rr.relances; }
+    catch (e) { console.error("[pilote-relance]", e); }
+  }
+
   const next: PiloteStats = {
     runs: s.runs + 1,
     traites: s.traites + r.stats.traites,
     completes: s.completes + r.stats.completes,
     sansInfo: s.sansInfo + r.stats.sansInfo,
     erreurs: s.erreurs + r.stats.erreurs,
+    relances: s.relances + relancesSent,
   };
   // Suivi en direct : on empile les dossiers de ce lot (les plus récents en tête).
   const newItems: RecentItem[] = r.details.filter((d) => d.nom).map((d) => ({ nom: d.nom, champs: d.champs, wroteFields: d.wroteFields, at: new Date().toISOString() }));
   const recent = [...newItems, ...parseRecent(flag.label)].slice(0, 20);
-  await prisma.automationExclusion.update({ where: { id: flag.id }, data: { label: JSON.stringify({ startedAt: flag.createdAt.toISOString(), ...next, recent }) } });
-  // done = plus aucun dossier dans le lot (curseur épuisé) → la session tourne à vide
-  // jusqu'à ce que Quentin stoppe (ou que le sync nocturne réalimente le stock).
+  const newLastRelanceAt = relanceDue ? new Date().toISOString() : lastRelanceAt;
+  await prisma.automationExclusion.update({ where: { id: flag.id }, data: { label: JSON.stringify({ startedAt: flag.createdAt.toISOString(), ...next, recent, lastRelanceAt: newLastRelanceAt }) } });
   return { ran: true, count: r.count, done: r.count === 0, stats: next };
 }

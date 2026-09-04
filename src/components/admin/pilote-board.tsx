@@ -12,10 +12,12 @@ import { ChevronRight, ChevronDown, CircleDot, X, Rocket, Square, Loader2, Histo
 const TASK_DETAIL: Record<string, string> = {
   remplissage_infos:
     "Une fois le mode Pilote déployé, cette tâche fait tourner l'Automatisation 1 (pré-remplissage depuis Front) en autonomie : elle traite 5 dossiers en « Identification » chaque minute, complète les informations manquantes (assureur, n° de contrat, mail courtier) et ne repasse jamais deux fois sur le même dossier, jusqu'à épuisement du lot ou arrêt manuel. À l'arrêt, un recap de session est archivé dans l'historique.",
+  relancer_gestionnaires:
+    "Une fois le mode Pilote déployé, cette tâche relance automatiquement (dans le thread Slack) les gestionnaires qui n'ont pas répondu à une proposition de devis depuis plus de 2 jours. UNE seule relance par dossier (elle sort de la boucle dès qu'une relance est envoyée). Avant chaque envoi, elle vérifie qu'il n'y a eu ni réponse, ni commentaire, ni réaction emoji sur le message — et ne relance jamais le week-end. Passe toutes les heures.",
 };
 
 // Type d'état renvoyé par /api/pilote/status.
-type PiloteStats = { runs: number; traites: number; completes: number; sansInfo: number; erreurs: number };
+type PiloteStats = { runs: number; traites: number; completes: number; sansInfo: number; erreurs: number; relances: number };
 type PiloteRecap = { id: string; startedAt: string; endedAt: string; stats: PiloteStats };
 type RecentItem = { nom: string; champs: string[]; wroteFields: boolean; at: string };
 type PiloteStatus = { deployed: boolean; startedAt: string | null; stats: PiloteStats; recent: RecentItem[]; history: PiloteRecap[] };
@@ -58,6 +60,7 @@ const FUNNEL: CardData[] = [
     { key: "verif_primes", name: "Vérification des primes", automated: false },
     { key: "generation_comparaisons", name: "Génération des comparaisons", automated: false },
     { key: "transmission_gestionnaires", name: "Transmission aux gestionnaires", automated: false },
+    { key: "relancer_gestionnaires", name: "Relancer les gestionnaires", automated: true },
   ] },
   { key: "validation_cs", title: "Validation du CS", deployed: false, tasks: [], manualOnly: true },
   { key: "signe", title: "Signé", deployed: false, tasks: [], manualOnly: true },
@@ -218,8 +221,8 @@ export function PiloteBoard() {
   const deploy = async () => { setBusy(true); try { const r = await fetch("/api/pilote/deploy", { method: "POST" }); const j = await r.json(); if (j?.success) setStatus(j as PiloteStatus); } finally { setBusy(false); } };
   const stop = async () => { setBusy(true); try { const r = await fetch("/api/pilote/stop", { method: "POST" }); const j = await r.json(); if (j?.recap) setRecap(j.recap as PiloteRecap); await load(); } finally { setBusy(false); } };
 
-  // Reflète l'état déployé sur la carte Identification (seule carte branchée).
-  const withDeploy = (c: CardData): CardData => (c.key === "identification" ? { ...c, deployed } : c);
+  // Reflète l'état déployé sur toute carte ayant au moins une tâche automatisée.
+  const withDeploy = (c: CardData): CardData => (c.tasks.some((t) => t.automated) ? { ...c, deployed } : c);
 
   // Mesure des coins pour tracer la flèche diagonale Identification → ODR en cours.
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -333,7 +336,7 @@ export function PiloteBoard() {
           </button>
           {deployed && status && (
             <div style={{ fontSize: 12.5, color: "#656576", textAlign: "center" }}>
-              🟢 En autonomie depuis {status.startedAt ? fmtDateTime(status.startedAt) : "—"} · <strong>{status.stats.traites}</strong> dossiers traités · <strong>{status.stats.completes}</strong> infos complétées
+              🟢 En autonomie depuis {status.startedAt ? fmtDateTime(status.startedAt) : "—"} · <strong>{status.stats.traites}</strong> dossiers traités · <strong>{status.stats.completes}</strong> infos complétées · <strong>{status.stats.relances}</strong> relances gestio
             </div>
           )}
         </div>
@@ -350,7 +353,7 @@ export function PiloteBoard() {
                 {status.history.map((h) => (
                   <div key={h.id} style={{ border: "1px solid #E8E8EC", borderRadius: 10, padding: "12px 14px", background: "#fff" }}>
                     <div style={{ fontSize: 13.5, fontWeight: 700, color: "#26262C", marginBottom: 4 }}>Session Pilote {fmtDateTime(h.startedAt)} – {fmtDateTime(h.endedAt)}</div>
-                    <div style={{ fontSize: 12.5, color: "#656576" }}><strong>{h.stats.traites}</strong> dossiers traités · <strong>{h.stats.completes}</strong> infos complétées · {h.stats.sansInfo} sans info · {h.stats.erreurs} erreurs · {h.stats.runs} cycles</div>
+                    <div style={{ fontSize: 12.5, color: "#656576" }}><strong>{h.stats.traites}</strong> dossiers traités · <strong>{h.stats.completes}</strong> infos complétées · <strong>{h.stats.relances}</strong> relances gestio · {h.stats.sansInfo} sans info · {h.stats.erreurs} erreurs · {h.stats.runs} cycles</div>
                   </div>
                 ))}
               </div>
@@ -485,6 +488,11 @@ export function PiloteBoard() {
                       <p style={{ fontSize: 11.5, color: "#B0B0BC", margin: "8px 0 0" }}>Actualisé automatiquement · cadence 5 dossiers / minute.</p>
                     </div>
                   )}
+                  {selectedTask.key === "relancer_gestionnaires" && deployed && status && (
+                    <div style={{ marginTop: 16, background: "#EFFBF2", border: "1px solid #CDEFD6", borderRadius: 10, padding: "12px 14px", fontSize: 13, color: "#13762C" }}>
+                      🟢 Active depuis {status.startedAt ? fmtDateTime(status.startedAt) : "—"} — <strong>{status.stats.relances}</strong> relance(s) gestio envoyée(s). Scan Slack + envoi toutes les heures.
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -505,6 +513,7 @@ export function PiloteBoard() {
               {[
                 { label: "Dossiers traités", value: recap.stats.traites, accent: "#4E49FC" },
                 { label: "Infos complétées", value: recap.stats.completes, accent: "#13762C" },
+                { label: "Relances gestio", value: recap.stats.relances, accent: "#4E49FC" },
                 { label: "Sans info trouvée", value: recap.stats.sansInfo, accent: "#8A8A99" },
                 { label: "Erreurs", value: recap.stats.erreurs, accent: recap.stats.erreurs > 0 ? "#CA1E12" : "#8A8A99" },
               ].map((s) => (
