@@ -11,6 +11,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "pipelineId requis" }, { status: 400 });
   }
 
+  // Priorité à une « dernière prime payée » IMPORTÉE (lot Excel envoyé à AXA) —
+  // pour les dossiers sans mail Front de demande de devis. Le plus récent fait foi.
+  const imported = await prisma.pipelineEvent.findFirst({
+    where: { pipelineId, metadata: { path: ["auto"], equals: "prime_payee_import" } },
+    orderBy: { createdAt: "desc" },
+    select: { metadata: true },
+  });
+  const impMontant = (imported?.metadata as { montant?: unknown } | null)?.montant;
+  if (typeof impMontant === "number" && impMontant > 0) {
+    return NextResponse.json({ success: true, montant: impMontant, source: "import" });
+  }
+
   const pipeline = await prisma.insurancePipeline.findUnique({
     where: { id: pipelineId },
     select: { copro: { select: { buildingId: true, adresse: true, nom: true } } },

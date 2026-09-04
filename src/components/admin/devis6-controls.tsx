@@ -7,7 +7,7 @@
 // bouton « Générer la comparaison » qui rejoue la comparaison Claude des fiches.
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Loader2, RefreshCw, Sparkles, ExternalLink, Send, ArrowRight } from "lucide-react";
+import { Search, Loader2, RefreshCw, Sparkles, ExternalLink, Send, ArrowRight, FileSpreadsheet, UploadCloud, X } from "lucide-react";
 import { toast } from "sonner";
 import { resolvePrimeReference } from "@/lib/devis-prime";
 import { Devis6RelanceButton } from "@/components/admin/devis6-relance-button";
@@ -125,6 +125,31 @@ export function Devis6Controls({ table }: { table: Table }) {
     await runQueue(table.rows.map((r) => r.pipelineId), fetchPrime, 4);
   }
 
+  // ── Import Excel des « dernières primes payées » (lot envoyé à AXA) ──
+  type PrimesRow = { address: string; copro: string; statut: string | null; prime: number | null; applied: boolean; note: string };
+  type PrimesResult = { summary: { total: number; applied: number; unmatched: number; noPrime: number; addrHeader?: string; primeHeader?: string }; report: PrimesRow[] };
+  const [primesFile, setPrimesFile] = useState<File | null>(null);
+  const [primesImporting, setPrimesImporting] = useState(false);
+  const [primesResult, setPrimesResult] = useState<PrimesResult | null>(null);
+  const [primesDetailOpen, setPrimesDetailOpen] = useState(false);
+  const primesInputRef = useRef<HTMLInputElement>(null);
+
+  async function importPrimes() {
+    if (!primesFile || primesImporting) return;
+    setPrimesImporting(true); setPrimesResult(null);
+    try {
+      const fd = new FormData(); fd.append("file", primesFile);
+      const res = await fetch("/api/devis6/import-primes-payees", { method: "POST", body: fd });
+      const j = await res.json();
+      if (!res.ok || !j.success) throw new Error(j.detail ? `${j.error} — ${j.detail}` : (j.error ?? "Échec"));
+      setPrimesResult(j as PrimesResult);
+      toast.success(`${j.summary.applied} dernière(s) prime(s) payée(s) appliquée(s).`);
+      setPrimesFile(null); if (primesInputRef.current) primesInputRef.current.value = "";
+      await loadPrices(); // recharge la colonne « Prix actuel » avec les DP importées
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Échec de l'import"); }
+    finally { setPrimesImporting(false); }
+  }
+
   // Chargement auto des prix actuels au 1er montage (source = mail de demande de devis).
   useEffect(() => {
     if (fetchedRef.current) return;
@@ -237,6 +262,65 @@ export function Devis6Controls({ table }: { table: Table }) {
               <div style={{ height: "100%", borderRadius: 999, transition: "width .2s", width: `${genBatch!.total ? Math.round((genBatch!.done / genBatch!.total) * 100) : 0}%`, background: "#4E49FC" }} />
             </div>
             <p style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>{genBatch!.done}/{genBatch!.total} · <b style={{ color: "#13762C" }}>{genBatch!.ok} générées</b>{genBatch!.fail ? ` · ${genBatch!.fail} ignorées (pas de devis stocké)` : ""}{genBatch!.running ? " · en cours…" : ""}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Import des dernières primes payées (lot Excel envoyé à AXA) */}
+      <div style={{ marginBottom: 12, background: "#FAFAFC", border: "1px solid #ECECF2", borderRadius: 10, padding: "12px 14px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 9, fontSize: 12.5, fontWeight: 700, background: "#fff", color: "#4E49FC", border: "1.5px solid #C7C5FB", cursor: primesImporting ? "wait" : "pointer" }}>
+            <UploadCloud size={15} /> Importer les primes payées du dernier lot de devis
+            <input ref={primesInputRef} type="file" accept=".xlsx,.xls" disabled={primesImporting} onChange={(e) => { setPrimesFile(e.target.files?.[0] ?? null); setPrimesResult(null); }} style={{ display: "none" }} />
+          </label>
+          <span style={{ fontSize: 11.5, color: "#A2A1AF" }}>Excel avec une colonne « dernière prime payée » → écrase le prix actuel (marqué <b>DP</b>) sur les dossiers concernés.</span>
+        </div>
+
+        {/* Case du doc déposé + bouton d'application */}
+        {primesFile && (
+          <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#fff", border: "1px solid #E4E4EA", borderRadius: 8, padding: "8px 12px" }}>
+            <FileSpreadsheet size={16} style={{ color: "#13762C" }} />
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "#26262C" }}>{primesFile.name}</span>
+            <button onClick={() => { setPrimesFile(null); if (primesInputRef.current) primesInputRef.current.value = ""; }} title="Retirer" style={{ background: "none", border: "none", cursor: "pointer", color: "#A2A1AF", display: "inline-flex" }}><X size={14} /></button>
+            <button onClick={importPrimes} disabled={primesImporting} style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 9, border: "none", fontSize: 12.5, fontWeight: 700, background: primesImporting ? "#C9C8D3" : "#4E49FC", color: "#fff", cursor: primesImporting ? "wait" : "pointer" }}>
+              {primesImporting ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />} {primesImporting ? "Import en cours…" : "Importer les données"}
+            </button>
+          </div>
+        )}
+        {primesImporting && (
+          <div style={{ marginTop: 8, height: 6, width: "100%", maxWidth: 420, overflow: "hidden", borderRadius: 999, background: "#EEE" }}>
+            <div className="animate-pulse" style={{ height: "100%", borderRadius: 999, width: "100%", background: "#4E49FC" }} />
+          </div>
+        )}
+
+        {/* Bilan */}
+        {primesResult && (
+          <div style={{ marginTop: 10, background: primesResult.summary.unmatched || primesResult.summary.noPrime ? "#FFF9F0" : "#EAF7EE", border: `1px solid ${primesResult.summary.unmatched || primesResult.summary.noPrime ? "#F3D9B8" : "#B7E4C4"}`, borderRadius: 8, padding: "10px 12px" }}>
+            <div style={{ fontSize: 12.5, color: "#26262C" }}>
+              <b>{primesResult.summary.applied}</b> prime(s) appliquée(s)
+              {primesResult.summary.unmatched ? <> · <b style={{ color: "#A65B12" }}>{primesResult.summary.unmatched} copro(s) non trouvée(s)</b></> : null}
+              {primesResult.summary.noPrime ? <> · {primesResult.summary.noPrime} prime(s) illisible(s)</> : null}
+              <span style={{ color: "#A2A1AF" }}> · colonnes : « {primesResult.summary.addrHeader} » / « {primesResult.summary.primeHeader} »</span>
+            </div>
+            <button onClick={() => setPrimesDetailOpen((o) => !o)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: "6px 0 0" }}>{primesDetailOpen ? "Masquer" : "Voir"} le détail ({primesResult.report.length})</button>
+            {primesDetailOpen && (
+              <div style={{ overflowX: "auto", maxHeight: 300, overflowY: "auto", marginTop: 6 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560, background: "#fff", fontSize: 12 }}>
+                  <thead><tr style={{ color: "#A2A1AF", textAlign: "left" }}>{["Adresse (Excel)", "Copro", "Prime payée", "Appliqué", "Note"].map((h) => <th key={h} style={{ padding: "5px 8px", fontWeight: 600 }}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {primesResult.report.map((r, i) => (
+                      <tr key={i} style={{ borderTop: "1px solid #F1F1F4" }}>
+                        <td style={{ padding: "5px 8px" }}>{r.address}</td>
+                        <td style={{ padding: "5px 8px", color: "#656576" }}>{r.copro}</td>
+                        <td style={{ padding: "5px 8px", fontWeight: 600 }}>{r.prime != null ? `${r.prime.toLocaleString("fr-FR")} €` : "—"}</td>
+                        <td style={{ padding: "5px 8px" }}>{r.applied ? "✓" : "—"}</td>
+                        <td style={{ padding: "5px 8px", color: /trouvée|ambigu|illisible/i.test(r.note) ? "#A65B12" : "#A2A1AF" }}>{r.note || "ok"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
