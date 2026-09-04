@@ -645,13 +645,25 @@ function classifyReply(body: string, hasDoc: boolean, bounce: boolean): string {
 // « aucune donnée » (cf. bug scan qui rétrogradait des RS reçus en sans réponse).
 async function frontGet(path: string): Promise<Record<string, unknown> | null> {
   if (!FRONT_TOKEN) return null;
-  try {
-    const res = await fetch(`${FRONT_API_URL}${path}`, { headers: { Authorization: `Bearer ${FRONT_TOKEN}` } });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
+  // Sur un 429 (rate-limit), on RESPECTE le Retry-After et on réessaie plutôt que de
+  // renvoyer null tout de suite : sinon le scan saute silencieusement des dossiers et
+  // rate des réponses réelles (RS reçus non détectés). Jusqu'à 4 tentatives.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const res = await fetch(`${FRONT_API_URL}${path}`, { headers: { Authorization: `Bearer ${FRONT_TOKEN}` } });
+      if (res.status === 429) {
+        const ra = Number(res.headers.get("Retry-After"));
+        const waitMs = Math.min((Number.isFinite(ra) && ra > 0 ? ra : 2 * (attempt + 1)) * 1000, 20000);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
   }
+  return null; // toujours rate-limité après retries → échec de lecture (garde-fou appelant)
 }
 // Rouvre une conversation (statut open) SANS toucher l'assigné → elle réapparaît
 // dans l'inbox Gufetto (affichée « assigned » au gestionnaire déjà en place),
