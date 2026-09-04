@@ -8,6 +8,7 @@ import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { gestionnaireLabel } from "@/lib/gestionnaire";
 import { EvolutionChart } from "./evolution-chart";
 import { FlowChart } from "./rs-flow-chart";
+import { OdrSuiviAdmin } from "./odr-suivi-admin";
 
 type Pipeline = {
   id: string;
@@ -723,6 +724,9 @@ export function AdminBoard({ pipelines, gestionnaires, events, lostPipelines, pr
       </div>
 
       <PartTitle n={3} title="Suivi des ODR" />
+
+      {/* ── Nouveau volet : Suivi des ODR acceptés (recap hebdo + retours gestionnaires « prévenir le CS ») ── */}
+      <OdrSuiviAdmin />
 
       {/* ── Suivi des ODR ── */}
       <div style={{ background: "#fff", border: "1px solid #E8E8EC", borderRadius: 8, padding: "20px 24px", boxShadow: "0 1px 2px rgba(13,22,63,.05)" }}>
