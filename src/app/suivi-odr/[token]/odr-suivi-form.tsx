@@ -23,8 +23,8 @@ export function OdrSuiviForm({ token, rows }: { token: string; rows: OdrAccepteR
     }
   };
 
-  const th: React.CSSProperties = { textAlign: "left", fontSize: 11, fontWeight: 800, letterSpacing: 0.4, color: "#8A8A99", textTransform: "uppercase", padding: "0 10px 8px" };
-  const td: React.CSSProperties = { padding: "10px", borderTop: "1px solid #F1F1F4", fontSize: 13.5, color: "#26262C", verticalAlign: "middle" };
+  const th: React.CSSProperties = { textAlign: "left", fontSize: 10.5, fontWeight: 800, letterSpacing: 0.4, color: "#8A8A99", textTransform: "uppercase", padding: "0 10px 6px" };
+  const td: React.CSSProperties = { padding: "5px 10px", borderTop: "1px solid #F1F1F4", fontSize: 13, color: "#26262C", verticalAlign: "middle" };
 
   return (
     <div style={{ overflowX: "auto" }}>
@@ -50,10 +50,10 @@ export function OdrSuiviForm({ token, rows }: { token: string; rows: OdrAccepteR
                     onClick={() => toggle(r.pipelineId)}
                     disabled={busy === r.pipelineId}
                     style={{
-                      display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 13px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: busy === r.pipelineId ? "wait" : "pointer",
-                      border: on ? "1.5px solid #B7E4C4" : "none",
-                      background: on ? "#EAF7EE" : "#7A3FF2",
-                      color: on ? "#13762C" : "#fff",
+                      display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 9, fontSize: 12.5, fontWeight: 700, cursor: busy === r.pipelineId ? "wait" : "pointer",
+                      border: on ? "1.5px solid #F3C48B" : "none",
+                      background: on ? "#FDEEDC" : "#7A3FF2",
+                      color: on ? "#A65B12" : "#fff",
                       whiteSpace: "nowrap",
                       opacity: busy === r.pipelineId ? 0.6 : 1,
                     }}
@@ -66,7 +66,7 @@ export function OdrSuiviForm({ token, rows }: { token: string; rows: OdrAccepteR
           })}
         </tbody>
       </table>
-      <p style={{ fontSize: 12, color: "#B0B0BC", margin: "14px 0 0" }}>Clique à nouveau sur un bouton vert pour annuler. L&apos;équipe assurance voit tes signalements en temps réel.</p>
+      <p style={{ fontSize: 12, color: "#B0B0BC", margin: "12px 0 0" }}>Clique à nouveau sur un bouton orange pour annuler. L&apos;équipe assurance voit tes signalements en temps réel.</p>
     </div>
   );
 }

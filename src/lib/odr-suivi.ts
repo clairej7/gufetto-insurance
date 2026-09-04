@@ -50,6 +50,7 @@ export type OdrAccepteRow = {
   pipelineId: string;
   copro: string;
   gestionnaire: string | null;
+  gestionnaireEmail: string | null;
   assureur: string;
   acceptedAt: string;
   prevenirCs: boolean;
@@ -74,7 +75,7 @@ export async function getOdrAcceptesSemaine(weekStart: Date): Promise<OdrAccepte
   const [pipes, flags] = await Promise.all([
     prisma.insurancePipeline.findMany({
       where: { id: { in: ids }, copro: { archivedAt: null } },
-      select: { id: true, odrPartenaire: true, copro: { select: { nom: true, gestionnaireNom: true, assureurActuel: true } } },
+      select: { id: true, odrPartenaire: true, copro: { select: { nom: true, gestionnaireNom: true, gestionnaireEmail: true, assureurActuel: true } } },
     }),
     prisma.pipelineEvent.findMany({
       where: { pipelineId: { in: ids }, metadata: { path: ["auto"], equals: "odr_prevenir_cs" } },
@@ -96,6 +97,7 @@ export async function getOdrAcceptesSemaine(weekStart: Date): Promise<OdrAccepte
       pipelineId: p.id,
       copro: p.copro.nom,
       gestionnaire: p.copro.gestionnaireNom,
+      gestionnaireEmail: p.copro.gestionnaireEmail,
       assureur: p.odrPartenaire || p.copro.assureurActuel || "—",
       acceptedAt: acceptedAt.get(p.id)!.toISOString(),
       prevenirCs: !!fl?.on,
