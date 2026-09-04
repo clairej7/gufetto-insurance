@@ -8,7 +8,6 @@ import { AutofillBatchButton } from "@/components/admin/autofill-batch-button";
 import { IdentifyScanControls } from "@/components/admin/identify-scan-controls";
 import { countIdentifyDossiers, getIdentifyHistory } from "@/lib/autofill-identify";
 import { getAutofillHistory } from "@/lib/autofill-batch";
-import { VerifyPrimesBatchButton } from "@/components/admin/verify-primes-batch-button";
 import { OdrControls } from "@/components/admin/odr-controls";
 import { OdrSuiviAdmin } from "@/components/admin/odr-suivi-admin";
 import { PrimeBatchButton } from "@/components/admin/prime-batch-button";
@@ -457,9 +456,8 @@ export default async function AutomatisationsPage() {
                       <p style={{ fontSize: 13, color: "#656576", margin: "0 0 12px" }}>
                         {eligibleAuto6} comparaison{eligibleAuto6 > 1 ? "s" : ""} de devis en cours — vérifie la dernière prime payée de chacune (via Front) et repère celles à recaler ou les cas étranges. Lecture seule.
                       </p>
-                      <VerifyPrimesBatchButton stock={eligibleAuto6} />
                     </div>
-                    <Devis6Controls table={devis6Table} />
+                    <Devis6Controls table={devis6Table} verifyStock={eligibleAuto6} />
                   </details>
                 )}
 

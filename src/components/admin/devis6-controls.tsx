@@ -11,6 +11,7 @@ import { Search, Loader2, RefreshCw, Sparkles, ExternalLink, Send, ArrowRight, F
 import { toast } from "sonner";
 import { resolvePrimeReference } from "@/lib/devis-prime";
 import { Devis6RelanceButton } from "@/components/admin/devis6-relance-button";
+import { VerifyPrimesBatchButton } from "@/components/admin/verify-primes-batch-button";
 
 type Devis = { assureur: string; prime: number | null };
 type Statut = "non_envoye" | "attente" | "valide" | "refus";
@@ -43,7 +44,7 @@ async function runQueue<T>(items: T[], worker: (t: T) => Promise<void>, concurre
   }));
 }
 
-export function Devis6Controls({ table }: { table: Table }) {
+export function Devis6Controls({ table, verifyStock }: { table: Table; verifyStock: number }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [gest, setGest] = useState("");        // filtre gestionnaire ("" = tous)
@@ -239,6 +240,60 @@ export function Devis6Controls({ table }: { table: Table }) {
 
   return (
     <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #E8E8EC" }}>
+      {/* Vérifier les primes (audit Front) + Importer les primes payées (Excel) — même ligne */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+        <VerifyPrimesBatchButton stock={verifyStock} />
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 14px", borderRadius: 10, fontSize: 13, fontWeight: 700, background: "#fff", color: "#4E49FC", border: "1.5px solid #C7C5FB", cursor: primesImporting ? "wait" : "pointer" }}>
+          <UploadCloud size={15} /> Importer les primes payées du dernier lot de devis
+          <input ref={primesInputRef} type="file" accept=".xlsx,.xls" disabled={primesImporting} onChange={(e) => { setPrimesFile(e.target.files?.[0] ?? null); setPrimesResult(null); }} style={{ display: "none" }} />
+        </label>
+      </div>
+      {/* Case du doc déposé + application (import des primes payées) */}
+      {primesFile && (
+        <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#fff", border: "1px solid #E4E4EA", borderRadius: 8, padding: "8px 12px" }}>
+          <FileSpreadsheet size={16} style={{ color: "#13762C" }} />
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: "#26262C" }}>{primesFile.name}</span>
+          <button onClick={() => { setPrimesFile(null); if (primesInputRef.current) primesInputRef.current.value = ""; }} title="Retirer" style={{ background: "none", border: "none", cursor: "pointer", color: "#A2A1AF", display: "inline-flex" }}><X size={14} /></button>
+          <button onClick={importPrimes} disabled={primesImporting} style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 9, border: "none", fontSize: 12.5, fontWeight: 700, background: primesImporting ? "#C9C8D3" : "#4E49FC", color: "#fff", cursor: primesImporting ? "wait" : "pointer" }}>
+            {primesImporting ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />} {primesImporting ? "Import en cours…" : "Importer les données"}
+          </button>
+        </div>
+      )}
+      {primesImporting && (
+        <div style={{ marginBottom: 12, height: 6, width: "100%", maxWidth: 420, overflow: "hidden", borderRadius: 999, background: "#EEE" }}>
+          <div className="animate-pulse" style={{ height: "100%", borderRadius: 999, width: "100%", background: "#4E49FC" }} />
+        </div>
+      )}
+      {primesResult && (
+        <div style={{ marginBottom: 12, background: primesResult.summary.unmatched || primesResult.summary.noPrime ? "#FFF9F0" : "#EAF7EE", border: `1px solid ${primesResult.summary.unmatched || primesResult.summary.noPrime ? "#F3D9B8" : "#B7E4C4"}`, borderRadius: 8, padding: "10px 12px" }}>
+          <div style={{ fontSize: 12.5, color: "#26262C" }}>
+            <b>{primesResult.summary.applied}</b> prime(s) appliquée(s)
+            {primesResult.summary.unmatched ? <> · <b style={{ color: "#A65B12" }}>{primesResult.summary.unmatched} copro(s) non trouvée(s)</b></> : null}
+            {primesResult.summary.noPrime ? <> · {primesResult.summary.noPrime} prime(s) illisible(s)</> : null}
+            <span style={{ color: "#A2A1AF" }}> · colonnes : « {primesResult.summary.addrHeader} » / « {primesResult.summary.primeHeader} »</span>
+          </div>
+          <button onClick={() => setPrimesDetailOpen((o) => !o)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: "6px 0 0" }}>{primesDetailOpen ? "Masquer" : "Voir"} le détail ({primesResult.report.length})</button>
+          {primesDetailOpen && (
+            <div style={{ overflowX: "auto", maxHeight: 300, overflowY: "auto", marginTop: 6 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560, background: "#fff", fontSize: 12 }}>
+                <thead><tr style={{ color: "#A2A1AF", textAlign: "left" }}>{["Adresse (Excel)", "Copro", "Prime payée", "Appliqué", "Note"].map((h) => <th key={h} style={{ padding: "5px 8px", fontWeight: 600 }}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {primesResult.report.map((r, i) => (
+                    <tr key={i} style={{ borderTop: "1px solid #F1F1F4" }}>
+                      <td style={{ padding: "5px 8px" }}>{r.address}</td>
+                      <td style={{ padding: "5px 8px", color: "#656576" }}>{r.copro}</td>
+                      <td style={{ padding: "5px 8px", fontWeight: 600 }}>{r.prime != null ? `${r.prime.toLocaleString("fr-FR")} €` : "—"}</td>
+                      <td style={{ padding: "5px 8px" }}>{r.applied ? "✓" : "—"}</td>
+                      <td style={{ padding: "5px 8px", color: /trouvée|ambigu|illisible/i.test(r.note) ? "#A65B12" : "#A2A1AF" }}>{r.note || "ok"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Envoi par lot vers l'automatisation 7 (dossiers validés par le gestionnaire). */}
       <div style={{ marginBottom: 12 }}>
         <button onClick={envoyerAuto7} disabled={prets === 0 || sending7}
@@ -262,65 +317,6 @@ export function Devis6Controls({ table }: { table: Table }) {
               <div style={{ height: "100%", borderRadius: 999, transition: "width .2s", width: `${genBatch!.total ? Math.round((genBatch!.done / genBatch!.total) * 100) : 0}%`, background: "#4E49FC" }} />
             </div>
             <p style={{ fontSize: 11.5, color: "#656576", marginTop: 4 }}>{genBatch!.done}/{genBatch!.total} · <b style={{ color: "#13762C" }}>{genBatch!.ok} générées</b>{genBatch!.fail ? ` · ${genBatch!.fail} ignorées (pas de devis stocké)` : ""}{genBatch!.running ? " · en cours…" : ""}</p>
-          </div>
-        )}
-      </div>
-
-      {/* Import des dernières primes payées (lot Excel envoyé à AXA) */}
-      <div style={{ marginBottom: 12, background: "#FAFAFC", border: "1px solid #ECECF2", borderRadius: 10, padding: "12px 14px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 9, fontSize: 12.5, fontWeight: 700, background: "#fff", color: "#4E49FC", border: "1.5px solid #C7C5FB", cursor: primesImporting ? "wait" : "pointer" }}>
-            <UploadCloud size={15} /> Importer les primes payées du dernier lot de devis
-            <input ref={primesInputRef} type="file" accept=".xlsx,.xls" disabled={primesImporting} onChange={(e) => { setPrimesFile(e.target.files?.[0] ?? null); setPrimesResult(null); }} style={{ display: "none" }} />
-          </label>
-          <span style={{ fontSize: 11.5, color: "#A2A1AF" }}>Excel avec une colonne « dernière prime payée » → écrase le prix actuel (marqué <b>DP</b>) sur les dossiers concernés.</span>
-        </div>
-
-        {/* Case du doc déposé + bouton d'application */}
-        {primesFile && (
-          <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#fff", border: "1px solid #E4E4EA", borderRadius: 8, padding: "8px 12px" }}>
-            <FileSpreadsheet size={16} style={{ color: "#13762C" }} />
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: "#26262C" }}>{primesFile.name}</span>
-            <button onClick={() => { setPrimesFile(null); if (primesInputRef.current) primesInputRef.current.value = ""; }} title="Retirer" style={{ background: "none", border: "none", cursor: "pointer", color: "#A2A1AF", display: "inline-flex" }}><X size={14} /></button>
-            <button onClick={importPrimes} disabled={primesImporting} style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 9, border: "none", fontSize: 12.5, fontWeight: 700, background: primesImporting ? "#C9C8D3" : "#4E49FC", color: "#fff", cursor: primesImporting ? "wait" : "pointer" }}>
-              {primesImporting ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />} {primesImporting ? "Import en cours…" : "Importer les données"}
-            </button>
-          </div>
-        )}
-        {primesImporting && (
-          <div style={{ marginTop: 8, height: 6, width: "100%", maxWidth: 420, overflow: "hidden", borderRadius: 999, background: "#EEE" }}>
-            <div className="animate-pulse" style={{ height: "100%", borderRadius: 999, width: "100%", background: "#4E49FC" }} />
-          </div>
-        )}
-
-        {/* Bilan */}
-        {primesResult && (
-          <div style={{ marginTop: 10, background: primesResult.summary.unmatched || primesResult.summary.noPrime ? "#FFF9F0" : "#EAF7EE", border: `1px solid ${primesResult.summary.unmatched || primesResult.summary.noPrime ? "#F3D9B8" : "#B7E4C4"}`, borderRadius: 8, padding: "10px 12px" }}>
-            <div style={{ fontSize: 12.5, color: "#26262C" }}>
-              <b>{primesResult.summary.applied}</b> prime(s) appliquée(s)
-              {primesResult.summary.unmatched ? <> · <b style={{ color: "#A65B12" }}>{primesResult.summary.unmatched} copro(s) non trouvée(s)</b></> : null}
-              {primesResult.summary.noPrime ? <> · {primesResult.summary.noPrime} prime(s) illisible(s)</> : null}
-              <span style={{ color: "#A2A1AF" }}> · colonnes : « {primesResult.summary.addrHeader} » / « {primesResult.summary.primeHeader} »</span>
-            </div>
-            <button onClick={() => setPrimesDetailOpen((o) => !o)} style={{ fontSize: 12, fontWeight: 600, color: "#4E49FC", background: "none", border: "none", cursor: "pointer", padding: "6px 0 0" }}>{primesDetailOpen ? "Masquer" : "Voir"} le détail ({primesResult.report.length})</button>
-            {primesDetailOpen && (
-              <div style={{ overflowX: "auto", maxHeight: 300, overflowY: "auto", marginTop: 6 }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560, background: "#fff", fontSize: 12 }}>
-                  <thead><tr style={{ color: "#A2A1AF", textAlign: "left" }}>{["Adresse (Excel)", "Copro", "Prime payée", "Appliqué", "Note"].map((h) => <th key={h} style={{ padding: "5px 8px", fontWeight: 600 }}>{h}</th>)}</tr></thead>
-                  <tbody>
-                    {primesResult.report.map((r, i) => (
-                      <tr key={i} style={{ borderTop: "1px solid #F1F1F4" }}>
-                        <td style={{ padding: "5px 8px" }}>{r.address}</td>
-                        <td style={{ padding: "5px 8px", color: "#656576" }}>{r.copro}</td>
-                        <td style={{ padding: "5px 8px", fontWeight: 600 }}>{r.prime != null ? `${r.prime.toLocaleString("fr-FR")} €` : "—"}</td>
-                        <td style={{ padding: "5px 8px" }}>{r.applied ? "✓" : "—"}</td>
-                        <td style={{ padding: "5px 8px", color: /trouvée|ambigu|illisible/i.test(r.note) ? "#A65B12" : "#A2A1AF" }}>{r.note || "ok"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </div>
         )}
       </div>
