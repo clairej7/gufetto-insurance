@@ -35,22 +35,28 @@ export function OdrSuiviAdmin() {
     finally { setPosting(false); }
   };
 
+  const prevenirEtCloturer = () => {
+    toast.info("« Prévenir les CS et clôturer la semaine » — action à définir ensemble (bientôt).");
+  };
+
   const aPrevenir = data?.rows.filter((r) => r.prevenirCs) ?? [];
 
-  const card: React.CSSProperties = { background: "#fff", border: "1px solid #E4E4EA", borderRadius: 12, padding: "16px 18px", marginTop: 14 };
+  const card: React.CSSProperties = { background: "#fff", border: "1px solid #E4E4EA", borderRadius: 12, padding: "16px 18px" };
   const th: React.CSSProperties = { textAlign: "left", fontSize: 10.5, fontWeight: 800, letterSpacing: 0.4, color: "#8A8A99", textTransform: "uppercase", padding: "0 8px 6px" };
   const td: React.CSSProperties = { padding: "8px", borderTop: "1px solid #F1F1F4", fontSize: 13, color: "#26262C" };
 
   return (
     <div style={card}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#26262C" }}>Suivi des ODR acceptés</span>
-          <span style={{ fontSize: 12.5, color: "#8A8A99", marginLeft: 8 }}>{data ? `${data.weekLabel} · ${data.total} dossier(s)` : "…"}</span>
+        <span style={{ fontSize: 13, color: "#656576" }}>{data ? `Semaine ${data.weekLabel} · ${data.total} dossier(s)` : "…"}</span>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={postRecap} disabled={posting} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 14px", borderRadius: 10, border: "none", fontSize: 13, fontWeight: 700, background: posting ? "#C9C8D3" : "#4E49FC", color: "#fff", cursor: posting ? "wait" : "pointer" }}>
+            {posting ? <Loader2 size={15} /> : <Send size={15} />} Transmettre le recap hebdo aux gestionnaires
+          </button>
+          <button onClick={prevenirEtCloturer} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 14px", borderRadius: 10, border: "1.5px solid #E8E8EC", fontSize: 13, fontWeight: 700, background: "#fff", color: "#26262C", cursor: "pointer" }}>
+            <ShieldAlert size={15} style={{ color: "#7A3FF2" }} /> Prévenir les CS et clôturer la semaine
+          </button>
         </div>
-        <button onClick={postRecap} disabled={posting} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 14px", borderRadius: 10, border: "none", fontSize: 13, fontWeight: 700, background: posting ? "#C9C8D3" : "#4E49FC", color: "#fff", cursor: posting ? "wait" : "pointer" }}>
-          {posting ? <Loader2 size={15} /> : <Send size={15} />} Poster le recap ODR (Slack)
-        </button>
       </div>
 
       {/* Retours gestionnaires : dossiers « à prévenir le CS » regroupés */}

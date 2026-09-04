@@ -10,6 +10,7 @@ import { countIdentifyDossiers, getIdentifyHistory } from "@/lib/autofill-identi
 import { getAutofillHistory } from "@/lib/autofill-batch";
 import { VerifyPrimesBatchButton } from "@/components/admin/verify-primes-batch-button";
 import { OdrControls } from "@/components/admin/odr-controls";
+import { OdrSuiviAdmin } from "@/components/admin/odr-suivi-admin";
 import { PrimeBatchButton } from "@/components/admin/prime-batch-button";
 import { PerimeBatchButton } from "@/components/admin/perime-batch-button";
 import { getPrimeCleanHistory } from "@/lib/prime";
@@ -371,7 +372,19 @@ export default async function AutomatisationsPage() {
                       Contrôles admin
                     </summary>
                     <div style={{ marginTop: 10 }}>
+                      {/* Volet 1 — Envoi des ODR (outillage existant) */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 1</span>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: "#26262C" }}>Envoi des ODR</span>
+                      </div>
                       <OdrControls template={ODR_TEMPLATE_TEXT} partners={odrPartners} sent={odrSent} history={odrHistory} />
+
+                      {/* Volet 2 — Suivi des ODR acceptés (recap hebdo gestios + « prévenir le CS ») */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "30px 0 14px", paddingTop: 22, borderTop: "1px dashed #E8E8EC" }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 2</span>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: "#26262C" }}>Suivi des ODR acceptés</span>
+                      </div>
+                      <OdrSuiviAdmin />
                     </div>
                   </details>
                 )}
