@@ -71,7 +71,7 @@ export function OdrSuiviAdmin() {
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {aPrevenir.map((r) => (
               <div key={r.pipelineId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: "#fff", border: "1px solid #F1D9D2", borderRadius: 8, padding: "8px 12px", fontSize: 13 }}>
-                <span style={{ fontWeight: 600, color: "#26262C" }}>{r.copro}</span>
+                <a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ fontWeight: 600, color: "#4E49FC", textDecoration: "none" }}>{r.copro}</a>
                 <span style={{ color: "#656576" }}>{r.gestionnaire || "—"} · {r.assureur}</span>
               </div>
             ))}
@@ -91,7 +91,7 @@ export function OdrSuiviAdmin() {
             <tbody>
               {data.rows.map((r) => (
                 <tr key={r.pipelineId}>
-                  <td style={{ ...td, fontWeight: 600 }}>{r.copro}</td>
+                  <td style={{ ...td, fontWeight: 600 }}><a href={`/pipeline/${r.pipelineId}`} target="_blank" rel="noreferrer" style={{ color: "#4E49FC", textDecoration: "none" }}>{r.copro}</a></td>
                   <td style={{ ...td, color: "#656576" }}>{r.gestionnaire || "—"}</td>
                   <td style={td}>{r.assureur}</td>
                   <td style={{ ...td, textAlign: "right" }}>{r.prevenirCs ? <span style={{ color: "#CA1E12", fontWeight: 700 }}>✓ à prévenir</span> : <span style={{ color: "#C7C7D2" }}>—</span>}</td>

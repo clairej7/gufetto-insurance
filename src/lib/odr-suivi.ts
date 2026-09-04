@@ -58,7 +58,7 @@ export type OdrAccepteRow = {
 };
 
 // Dossiers passés en `odr_accepte` pendant la semaine contenant `weekStart`.
-// Triés par ordre alphabétique de copropriété.
+// Triés par ordre alphabétique de gestionnaire (puis copropriété).
 export async function getOdrAcceptesSemaine(weekStart: Date): Promise<OdrAccepteRow[]> {
   const { start, end } = weekBounds(weekStart);
   const evts = await prisma.pipelineEvent.findMany({
@@ -103,7 +103,12 @@ export async function getOdrAcceptesSemaine(weekStart: Date): Promise<OdrAccepte
       prevenirCsBy: fl?.on ? fl.by : null,
     };
   });
-  rows.sort((a, b) => a.copro.localeCompare(b.copro, "fr", { sensitivity: "base" }));
+  // Tri alphabétique par GESTIONNAIRE (puis copro), pour que chaque gestio retrouve
+  // ses dossiers regroupés.
+  rows.sort((a, b) =>
+    (a.gestionnaire || "zzz").localeCompare(b.gestionnaire || "zzz", "fr", { sensitivity: "base" }) ||
+    a.copro.localeCompare(b.copro, "fr", { sensitivity: "base" }),
+  );
   return rows;
 }
 
