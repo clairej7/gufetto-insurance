@@ -157,24 +157,30 @@ export async function buildOdrRecapMessage(ref: Date): Promise<OdrRecap> {
   const url = `${BASE_URL}/suivi-odr/${signOdrWeekToken(start.toISOString())}`;
   const label = weekLabel(ref);
 
-  // Gestionnaires concernés, dédupliqués (par email sinon nom), triés alpha.
-  const seen = new Set<string>();
-  const uniques: { nom: string; email: string | null }[] = [];
-  for (const r of rows) {
-    const key = (r.gestionnaireEmail || r.gestionnaire || "").toLowerCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    uniques.push({ nom: r.gestionnaire || "—", email: r.gestionnaireEmail });
-  }
-  uniques.sort((a, b) => a.nom.localeCompare(b.nom, "fr", { sensitivity: "base" }));
+  // v1 : on NE tague PAS les gestionnaires dans le message (risque de spam/notifs).
+  // Repasser à true après les premiers retours pour réactiver la ligne « Liste des
+  // gestionnaires concernés : @… » (résolution email → Slack + fallback nom).
+  const TAG_GESTIOS = false;
 
-  // @mention si l'email est trouvé sur Slack, sinon nom en clair (best-effort).
   const gestios: RecapGestio[] = [];
   const mentions: string[] = [];
-  for (const g of uniques) {
-    const uid = g.email ? await resolveSlackUserId(g.email) : null;
-    gestios.push({ nom: g.nom, email: g.email, tagged: !!uid });
-    mentions.push(uid ? `<@${uid}>` : `*${g.nom}*`);
+  if (TAG_GESTIOS) {
+    // Gestionnaires concernés, dédupliqués (par email sinon nom), triés alpha.
+    const seen = new Set<string>();
+    const uniques: { nom: string; email: string | null }[] = [];
+    for (const r of rows) {
+      const key = (r.gestionnaireEmail || r.gestionnaire || "").toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      uniques.push({ nom: r.gestionnaire || "—", email: r.gestionnaireEmail });
+    }
+    uniques.sort((a, b) => a.nom.localeCompare(b.nom, "fr", { sensitivity: "base" }));
+    // @mention si l'email est trouvé sur Slack, sinon nom en clair (best-effort).
+    for (const g of uniques) {
+      const uid = g.email ? await resolveSlackUserId(g.email) : null;
+      gestios.push({ nom: g.nom, email: g.email, tagged: !!uid });
+      mentions.push(uid ? `<@${uid}>` : `*${g.nom}*`);
+    }
   }
 
   const text = `ODR acceptés de la semaine (${label}) — ${rows.length} dossier(s)`;
