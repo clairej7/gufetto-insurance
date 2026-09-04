@@ -1,0 +1,641 @@
+[
+  {
+    "file": "1 AVENUE JOSEPH FROMENT 92250 LA GARENNE COLOMBES.pdf",
+    "pipelineId": "cmq9hpmw501b501p2coa7369j",
+    "coproId": "cmq9hpmw001b401p2f4w6op5e",
+    "coproNom": "SDC 1 Avenue Joseph Froment",
+    "adresse": "1 Avenue Joseph Froment, 92250 La Garenne-Colombes, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "1 IMPASSE DU JARDIN RENARD 95110 SANNOIS.pdf",
+    "pipelineId": "cmq9hq1y9023h01p21g32nvym",
+    "coproId": "cmq9hq1x2023g01p2qtjkt01s",
+    "coproNom": "SDC 1 Impasse du Jardin Renard",
+    "adresse": "1 Impasse du Jardin Renard, 95110 Sannois, FRANCE",
+    "statut": "envoye_cs",
+    "action": "skip"
+  },
+  {
+    "file": "1 RUE CLAUDIUS THIRARD 69190 SAINT FONS.pdf",
+    "pipelineId": "cmq9hpvyc01r101p2wafakaqy",
+    "coproId": "cmq9hpvxx01r001p2zf8kqhv9",
+    "coproNom": "SDC 1 Rue Claudius Thirard",
+    "adresse": "1 Rue Claudius Thirard, 69190 Saint-Fons, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "1 RUE DES BLEUETS 33650 SAINT MEDARD D'EYRANS.pdf",
+    "pipelineId": "cmq9hpxqm01u301p2k9z2bs6k",
+    "coproId": "cmq9hpxqc01u201p2y0ef8q8z",
+    "coproNom": "SDC Canterane 1 - 1 Rue des Bleuets",
+    "adresse": "Canterane 1 - 1 Rue des Bleuets, 33650 Saint-Médard-d'Eyrans, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "1 RUE DU LOISIR 13001 MARSEILLE.pdf",
+    "pipelineId": "cmq9h6nn3004v01p2g79dsdmt",
+    "coproId": "cmq9h6nmx004u01p2ig9z1o0d",
+    "coproNom": "SDC 1 rue du loisir",
+    "adresse": "1 rue du loisir, 13001 Marseille, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "1 VILLA ORNANO 75018 PARIS.pdf",
+    "pipelineId": "cmq9hphqq00wt01p2gkyqg06n",
+    "coproId": "cmq9hphqg00ws01p20o0m4cfw",
+    "coproNom": "SDC 1 Villa Ornano",
+    "adresse": "1 Villa Ornano, 75018 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "10 RUE MAISANT 92190 MEUDON.pdf",
+    "pipelineId": "cmq9hpl3s015p01p2raavrqt9",
+    "coproId": "cmq9hpl3k015o01p2qje90jlx",
+    "coproNom": "SDC 10 Rue Maisant",
+    "adresse": "10-12 Rue Maisant, 92190 Meudon, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "114 AVENUE JEAN JAURES 75019 PARIS.pdf",
+    "pipelineId": "cmq9h6y0000k901p2193xczd9",
+    "coproId": "cmq9h6xzg00k801p26bqljcbz",
+    "coproNom": "SDC 114 Avenue Jean Jaurès",
+    "adresse": "114 Avenue Jean Jaurès, 75019 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "117 AV JEAN JAURES 93320 LES PAVILLONS SOUS BOIS.pdf",
+    "pipelineId": "cmq9h6tzx00dz01p2ews1iklm",
+    "coproId": "cmq9h6txx00dy01p2bankds0f",
+    "coproNom": "SDC 177 avenue Jean Jaurès",
+    "adresse": "177 avenue Jean Jaurès, 93320 Les-Pavillons-Sous-Bois, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "117 AV PDT JOHN KENNEDY 93110 ROSNY SOUS BOIS.pdf",
+    "pipelineId": "cmq9hq120022301p2u9uvbmox",
+    "coproId": "cmq9hq11c022201p2i3nk6ny1",
+    "coproNom": "SDC 117 Avenue du Président John Kennedy",
+    "adresse": "117 Avenue du Président John Kennedy, 93110 Rosny-sous-bois, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "122 BD GABRIEL PERI MALAKOFF 92240 AMANCY.pdf",
+    "pipelineId": "cmq9hpsy201nb01p2p110m94d",
+    "coproId": "cmq9hpswt01na01p2w6vc6cji",
+    "coproNom": "SDC 122 BD Gabriel Péri Malakoff",
+    "adresse": "122 BD Gabriel Péri Malakoff, 92240 Malakoff, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "14 RUE DE CHARTRES 75018 PARIS.pdf",
+    "pipelineId": "cmq9hpf5d00sf01p2ebdipvos",
+    "coproId": "cmq9hpf5400se01p23ly4isox",
+    "coproNom": "SDC 14 RUE DE CHARTRES",
+    "adresse": "14 RUE DE CHARTRES, 75018 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "14 RUE DU GENERAL LECLERC 92130 ISSY LES MOULINEAUX.pdf",
+    "pipelineId": "cmq9hpxav01sv01p2w1qjg7br",
+    "coproId": "cmq9hpxaj01su01p2j77q3ggo",
+    "coproNom": "SDC 14 rue du Général Leclerc",
+    "adresse": "14 rue du Général Leclerc, 92130 Issy-les-Moulineaux, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "140 AV DU MARECHAL LECLERC 93330 NEUILLY SUR MARNE.pdf",
+    "pipelineId": "cmq9hppp201h901p2ysns7fg8",
+    "coproId": "cmq9hppox01h801p2xuwzh3xg",
+    "coproNom": "SDC 140 av. du Maréchal Leclerc",
+    "adresse": "140 av. du Maréchal Leclerc, 93330 Neuilly-sur-Marne, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "15 RUE DES PAPILLONS 74960 MEYTHET.pdf",
+    "pipelineId": "cmq9hpx9d01sr01p2jozp7rvc",
+    "coproId": "cmq9hpx9501sq01p2dncl581q",
+    "coproNom": "SDC 15 Rue des Papillons",
+    "adresse": "15 Rue des Papillons, 74960 Meythet, FRANCE",
+    "statut": "devis_recus",
+    "action": "regen"
+  },
+  {
+    "file": "16 BD DES BATIGNOLLES 75017 PARIS.pdf",
+    "pipelineId": "cmq9hqbrh02l701p2uo5w8oi1",
+    "coproId": "cmq9hqbr802l601p25wye2e1r",
+    "coproNom": "SDC 16 Boulevard des Batignolles",
+    "adresse": "16 Boulevard des Batignolles, 75017 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "16 RUE DES DORIS 33130 BEGLES.pdf",
+    "pipelineId": "cmq9hpog801e501p2ra892bgn",
+    "coproId": "cmq9hpofr01e401p2zmbhaksk",
+    "coproNom": "SDC 16 Rue des Doris",
+    "adresse": "16 Rue des Doris, 33130 Bègles, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "16 RUE JULIETTE RECAMIER 69130 ECULLY.pdf",
+    "pipelineId": "cmq9hpdx700q301p2jj7f5o3o",
+    "coproId": "cmq9hpdw600q201p28m3d9sa0",
+    "coproNom": "SDC Le Manoir",
+    "adresse": "16 RUE JULIETTE RECAMIER 69130 ECULLY",
+    "statut": "devis_recus",
+    "action": "regen"
+  },
+  {
+    "file": "162 AV DE LA REPUBLIQUE 78500 SARTROUVILLE.pdf",
+    "pipelineId": "cmq9hqwgt036b01p2hfa8wxdg",
+    "coproId": "cmq9hqwfv036a01p20x9b4z57",
+    "coproNom": "SDC 162 avenue de la République",
+    "adresse": "162 avenue de la République, 78500 Sartrouville, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "17 RUE ALPHAND 75013 PARIS.pdf",
+    "pipelineId": "cmq9h6yda00kj01p2d08klstb",
+    "coproId": "cmq9h6y9s00ki01p23p9enth8",
+    "coproNom": "SDC 17-19 rue Alphand",
+    "adresse": "17, 19 rue Alphand, 75013 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "17 RUE BRAVASTRO 06300 NICE.pdf",
+    "pipelineId": "cmq9hph8z00vz01p2d72y8cma",
+    "coproId": "cmq9hph8h00vy01p21r78vkx0",
+    "coproNom": "SDC 17 rue Bavastro",
+    "adresse": "17 rue Bavastro, 06300 Nice, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "174 RUE DE BELLEVILLE 75020 PARIS.pdf",
+    "pipelineId": "cmqb2xr7d000301oe1uk0no9r",
+    "coproId": "cmqb2xr72000201oev2xk3jcw",
+    "coproNom": "SDC 174 Rue de Belleville",
+    "adresse": "174 Rue de Belleville, 75020 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "18B RUE DANTON 92150 SURESNES.pdf",
+    "pipelineId": "cmq9hpyvd01yh01p2d7xghk9x",
+    "coproId": "cmq9hpyuh01yg01p2koo6k7fm",
+    "coproNom": "SDC 18B r danton",
+    "adresse": "18B r danton, 92150 Suresnes, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "19 COURS D'HERBOUVILLE 69004 LYON.pdf",
+    "pipelineId": "cmq9hq9bl02gn01p2p4x0h523",
+    "coproId": "cmq9hq9b702gm01p2ckle6lxw",
+    "coproNom": "SDC LES GLORIETTES 19 cours d'herbouville 18 Bonafous",
+    "adresse": "19 cours d'herbouville, 69004 Lyon, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "19 RUE MARCELIN BERTHELOT 92120 MONTROUGE.pdf",
+    "pipelineId": "cmq9hqntt02z901p2w8g7z4na",
+    "coproId": "cmq9hqntj02z801p2sapgdznu",
+    "coproNom": "SDC 19 Rue Marcelin-Berthelot",
+    "adresse": "19 Rue Marcelin-Berthelot, 92120 Montrouge, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "2 AVENUE DU VALON 78450 CHAVENAY.pdf",
+    "pipelineId": "cmq9hpnol01cv01p2bobn793u",
+    "coproId": "cmq9hpno501cu01p2m54d1i4p",
+    "coproNom": "SDC 2 Avenue du Valon",
+    "adresse": "2 Avenue du Valon, 78450 Chavenay, FRANCE",
+    "statut": "envoye_cs",
+    "action": "skip"
+  },
+  {
+    "file": "2 RUE NIVET 91310 MONTLHERY.pdf",
+    "pipelineId": "cmq9hq68e02a301p2bnr15m9x",
+    "coproId": "cmq9hq67y02a201p2b84zstpj",
+    "coproNom": "SDC 2 Rue Nivet",
+    "adresse": "2 Rue Nivet, 91310 Montlhéry, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "21 BD JEAN JAURES 92110 CLICHY.pdf",
+    "pipelineId": "cmq9hpdbk00op01p2ocqug8eg",
+    "coproId": "cmq9hpdbb00oo01p2xlx4t1a9",
+    "coproNom": "SDC 21 boulevard Jean Jaurès",
+    "adresse": "21 boulevard Jean Jaurès, 92110 Clichy, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "21 RUE CAVE 75018 PARIS.pdf",
+    "pipelineId": "cmq9hpoi901e901p2fluhbt0e",
+    "coproId": "cmq9hpohl01e801p2mgiqhnhe",
+    "coproNom": "SDC 21 Rue Cave",
+    "adresse": "21 Rue Cave, 75018 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "21 RUE CHAPPE 75018 PARIS.pdf",
+    "pipelineId": "cmq9hpj3i011f01p23e43dvp4",
+    "coproId": "cmq9hpj3d011e01p2w1hx809r",
+    "coproNom": "SDC 21 rue Chappe",
+    "adresse": "21 rue Chappe, 75018 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "22 RUE BOYER 75020 PARIS.pdf",
+    "pipelineId": "cmq9hqvy5035z01p22keuy1wq",
+    "coproId": "cmq9hqvxf035y01p2ku43t4uc",
+    "coproNom": "SDC 22 Rue Boyer",
+    "adresse": "22 Rue Boyer, 75020 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "239BIS LOTISSEMENT LES CASTORS ISABELLA 13240 SEPTEMES LES VALLONS.pdf",
+    "pipelineId": "cmq9hq33x025d01p2x95s49c2",
+    "coproId": "cmq9hq33b025c01p20jxou2ku",
+    "coproNom": "SDC 239 bis lotissement les castors isabella, Campagne Sinière",
+    "adresse": "239 bis lotissement les castors isabella, Campagne Sinière, 13240 SEPTEMES LES VALLONS, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "29 31 RUE LARMODIEU 83000 TOULON.pdf",
+    "pipelineId": "cmq9h70xi00oj01p21b6kvx6z",
+    "coproId": "cmq9h70wt00oi01p2liar8pq5",
+    "coproNom": "SDC 29/31 Rue Larmodieu",
+    "adresse": "29/31 Rue Larmodieu, 83000 Toulon, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "29 RUE BRUNEL 75017 PARIS.pdf",
+    "pipelineId": "cmq9hpyjf01x301p2usfu3sjs",
+    "coproId": "cmq9hpyj901x201p2r0rmoeu7",
+    "coproNom": "SDC 29 rue Brunel",
+    "adresse": "29 rue Brunel, 75017 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "3 BD VOLTAIRE 92600 ASNIERES SUR SEINE.pdf",
+    "pipelineId": "cmq9hpfef00sx01p235z79ypq",
+    "coproId": "cmq9hpfdx00sw01p2wznykrf5",
+    "coproNom": "SDC 3 Bd Voltaire",
+    "adresse": "3 Bd Voltaire, 92600 Asnières-sur-Seine, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "3 IMPASSE EDOUARD VAILLANT 94550 CHEVILLY LARUE.pdf",
+    "pipelineId": "cmq9hpsjh01mv01p21l5tuh6h",
+    "coproId": "cmq9hpsj301mu01p2lb9f3tpn",
+    "coproNom": "SDC 3 impasse Édouard vaillant",
+    "adresse": "3 impasse Édouard vaillant, 94550 Chevilly-Larue, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "3 PLACE DES IMPRESSIONNISTES 92500 RUEIL MALMAISON.pdf",
+    "pipelineId": "cmq9hpxok01tv01p2scrrpxql",
+    "coproId": "cmq9hpxof01tu01p285n15y1l",
+    "coproNom": "SDC 3 Pl. des Impressionnistes",
+    "adresse": "3 Pl. des Impressionnistes, 92500 Rueil-Malmaison, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "3 RUE LOUNES MATOUB 69200 VENISSIEUX.pdf",
+    "pipelineId": "cmq9hqopw030101p2lovwbyzk",
+    "coproId": "cmq9hqopj030001p2jhcep6qj",
+    "coproNom": "SDC 3 Rue Lounes Matoub",
+    "adresse": "3 Rue Lounes Matoub, 69200 Vénissieux, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "326 RUE DE NOISY LE SEC 93170 BAGNOLET.pdf",
+    "pipelineId": "cmq9hpqrj01k101p2vbx3vuzi",
+    "coproId": "cmq9hpqrd01k001p2js01on9a",
+    "coproNom": "SDC 326 Rue de Noisy-le-Sec",
+    "adresse": "326 Rue de Noisy-le-Sec, 93170 Bagnolet, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "33 AV DE LA DIVISION DU GENERAL LECLERC 78200 MANTES LA JOLIE.pdf",
+    "pipelineId": "cmq9hpskl01mx01p2ddvolyme",
+    "coproId": "cmq9hpsjw01mw01p23o9x17vf",
+    "coproNom": "SDC 33 Avenue de la Division du Général Leclerc",
+    "adresse": "33 Avenue de la Division du Général Leclerc, 78200 Mantes-la-Jolie, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "3495 AV PRINCE RAINIER III DE MONACO 06240 BEAUSOLEIL.pdf",
+    "pipelineId": "cmq9h6lqa002701p2u1syzfgq",
+    "coproId": "cmq9h6lpg002601p2518d3pd3",
+    "coproNom": "SDC Résidence Le Corail",
+    "adresse": "3495 Avenue Prince Rainier III de Monaco, 06240 BEAUSOLEIL, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "35 RUE DES FALAISES 95280 JOUY LE MOUTIER.pdf",
+    "pipelineId": "cmq9h6r1t009x01p2kpnvrg79",
+    "coproId": "cmq9h6r1l009w01p2o72k0oju",
+    "coproNom": "SDC Les Vaux Moreaux 1 à 6 Villa de la Porte et 20 à 38 et 35 à 107 Rue des Falaises",
+    "adresse": "1 à 6 villa de la porte et 20 à 38 et 35 à 107 Rue des Falaises, 95280 Jouy-le-Moutier, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "36 BD DE STRASBOURG 75010 PARIS.pdf",
+    "pipelineId": "cmq9h6moo003t01p2golg3fk3",
+    "coproId": "cmq9h6mnj003s01p22svnjj2d",
+    "coproNom": "SDC 36 Bd de Strasbourg, 75010 Paris, France",
+    "adresse": "36 Bd de Strasbourg, 75010 Paris, France, 75010 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "36 RUE DE L'ORANGERIE 78000 VERSAILLES.pdf",
+    "pipelineId": "cmq9hpla4016701p298v7nped",
+    "coproId": "cmq9hpl9u016601p2xft2he84",
+    "coproNom": "SDC 36 Rue de l'Orangerie",
+    "adresse": "36 Rue de l'Orangerie, 78000 Versailles, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "36 RUE SAINT DENIS 75001 PARIS.pdf",
+    "pipelineId": "cmq9h6tsz00dr01p2allijt24",
+    "coproId": "cmq9h6trw00dq01p2jxro37vz",
+    "coproNom": "SDC 36 Rue Saint-Denis",
+    "adresse": "36 Rue Saint-Denis, 75001 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "37 RUE D'HAUTEVILLE 75010 PARIS.pdf",
+    "pipelineId": "cmq9hpxii01t901p2wtlt9xpj",
+    "coproId": "cmq9hpxid01t801p22oivuir2",
+    "coproNom": "SDC 37 Rue d'Hauteville",
+    "adresse": "37 Rue d'Hauteville, 75010 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "40 BD FOCH 93800 EPINAY SUR SEINE.pdf",
+    "pipelineId": "cmq9hpv0p01pp01p2myberhvj",
+    "coproId": "cmq9hpv0401po01p2xfvejl7u",
+    "coproNom": "SDC 40 Boulevard Foch",
+    "adresse": "40 Boulevard Foch, 93800 Épinay-sur-Seine, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "41 RUE DE PARIS 95380 LOUVRES.pdf",
+    "pipelineId": "cmq9hpy1701v101p2ira5bwsu",
+    "coproId": "cmq9hpy1301v001p27uqnxxg3",
+    "coproNom": "SDC 41 Rue de Paris",
+    "adresse": "41 Rue de Paris, 95380 Louvres, FRANCE",
+    "statut": "devis_recus",
+    "action": "regen"
+  },
+  {
+    "file": "41 RUE DES 3 FRERES CARASSO 13004 MARSEILLE.pdf",
+    "pipelineId": "cmq9h6t1400cr01p2czff3uom",
+    "coproId": "cmq9h6t0n00cq01p2hlszh16f",
+    "coproNom": "SDC 41 Rue des 3 Frères Carasso",
+    "adresse": "41 Rue des 3 Frères Carasso, 13004 Marseille, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "44 BD DU GENERAL LECLERC 92110 CLICHY.pdf",
+    "pipelineId": "cmqgekcs6000601s20wn4paus",
+    "coproId": "cmqgekcs0000501s2c6x09dtu",
+    "coproNom": "SDC 44 Bd du Général Leclerc",
+    "adresse": "44 Bd du Général Leclerc, 92110 Clichy, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "45 RUE CECILE DUPARC 95870 BEZONS.pdf",
+    "pipelineId": "cmq9hphfq00wd01p2cvn36dqe",
+    "coproId": "cmq9hphfl00wc01p2oy8wnpj3",
+    "coproNom": "SDC 45 Rue Cécile Duparc",
+    "adresse": "45 Rue Cécile Duparc, 95870 Bezons, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "46 RUE MARX DORMOY 92260 FONTENAY AUX ROSES.pdf",
+    "pipelineId": "cmq9h6w7700hf01p20qmklp8f",
+    "coproId": "cmq9h6w6u00he01p2182osgbn",
+    "coproNom": "SDC IMPULSION - 46 rue Marx dormoy",
+    "adresse": "46 rue Marx dormoy, 92260 Fontenay-aux-Roses, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "49 RUE DU MARECHAL FOCH HAUPTSTROSS 67190 MUTZIG.pdf",
+    "pipelineId": "cmq9hqlcq02w901p2ofpho0h8",
+    "coproId": "cmq9hqlck02w801p29eva1mba",
+    "coproNom": "SDC 49 Rue du Marechal Foch Hauptstross",
+    "adresse": "49 Rue du Marechal Foch Hauptstross, 67190 Mutzig, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "5 RUE CAMPESTRA 06400 CANNES.pdf",
+    "pipelineId": "cmq9h6n3y004b01p2dmf9e41q",
+    "coproId": "cmq9h6n3a004a01p2hj7f7oa0",
+    "coproNom": "SDC 5 Rue Campestra",
+    "adresse": "5 Rue Campestra, 06400 Cannes, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "55 57 RUE LETORT 75018 PARIS.pdf",
+    "pipelineId": "cmq9hpyqn01xx01p26dvwkuzw",
+    "coproId": "cmq9hpyqg01xw01p2b4agyqcs",
+    "coproNom": "SDC 55- 57 Rue Letort",
+    "adresse": "55-57 Rue Letort, 75018 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "55 RUE DES ABESSES 75018 PARIS.pdf",
+    "pipelineId": "cmq9hpp7201ft01p2rs4uj0j2",
+    "coproId": "cmq9hpp6f01fs01p2wzsq377t",
+    "coproNom": "SDC 55 rue des abesses",
+    "adresse": "55 rue des abesses, 75018 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "58 AV DE BOURG LA REINE 92220 BAGNEUX.pdf",
+    "pipelineId": "cmq9h6v9x00fr01p2205yt29k",
+    "coproId": "cmq9h6v7t00fq01p26l33x4zc",
+    "coproNom": "SDC Résidence les Roses",
+    "adresse": "58-60 avenue de Bourg-la-Reine, 92220 Bagneux, FRANCE",
+    "statut": "envoye_cs",
+    "action": "skip"
+  },
+  {
+    "file": "58 RUE DE MACONNEX 01210 VERSONNEX.pdf",
+    "pipelineId": "cmq9hpvx301qz01p2ckzc7t7w",
+    "coproId": "cmq9hpvw001qy01p2rbidhn02",
+    "coproNom": "SDC 28-57 Route de Cessy-58 rue de Maconnex",
+    "adresse": "28-57 Route de Cessy-58 rue de Maconnex, 01210 Versonnex, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "6 AV DU COLONEL DUBOIN 83000 TOULON.pdf",
+    "pipelineId": "cmq9hq2hu024901p2bxbp0dfk",
+    "coproId": "cmq9hq2h8024801p2fjzqbs12",
+    "coproNom": "SDC 6 avenue du Colonel Duboin",
+    "adresse": "6 avenue du Colonel Duboin, 83000 Toulon, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "6 RUE D'ESTIENNES D'ORVES 92260 FONTENAY AUX ROSES.pdf",
+    "pipelineId": "cmq9hpi0c00xj01p2glo83xgd",
+    "coproId": "cmq9hpi0800xi01p2ej130cue",
+    "coproNom": "SDC 6 d'Estiennes d'orves",
+    "adresse": "6 d'Estiennes d'orves, 92260 Fontenay-aux-Roses, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "7 IMPASSE CALMELS 75018 PARIS.pdf",
+    "pipelineId": "cmq9hps9f01mh01p26ldx8i4t",
+    "coproId": "cmq9hps8y01mg01p29ha5sk3e",
+    "coproNom": "SDC 7 Impasse Calmels",
+    "adresse": "7 Impasse Calmels, 75018 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "70 AV GEORGES CLEMENCEAU 92000 NANTERRE.pdf",
+    "pipelineId": "cmq9hpy3n01vb01p29t36bqlt",
+    "coproId": "cmq9hpy3e01va01p22zs139cq",
+    "coproNom": "SDC 70 Av. Georges Clemenceau",
+    "adresse": "70 Av. Georges Clemenceau, 92000 Nanterre, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "8 10 RUE BUFFAULT 75009 PARIS.pdf",
+    "pipelineId": "cmq9hpyye01yp01p2rrybdy4o",
+    "coproId": "cmq9hpyy901yo01p28y5co9f3",
+    "coproNom": "SDC 8-10 rue Buffault",
+    "adresse": "8-10 rue Buffault, 75009 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "8 RUE BONNAND 69003 LYON.pdf",
+    "pipelineId": "cmq9hpjg3012f01p2kpu67rf7",
+    "coproId": "cmq9hpjf4012e01p2bvppvgwd",
+    "coproNom": "SDC 8 Rue Bonnand",
+    "adresse": "8 Rue Bonnand, 69003 Lyon, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "8 RUE DE LA GLACIERE 75013 PARIS.pdf",
+    "pipelineId": "cmq9hq0lj021901p2hvkvtqy7",
+    "coproId": "cmq9hq0l1021801p2wzfqeaf5",
+    "coproNom": "SDC  8 rue de la glacière",
+    "adresse": "8 rue de la glacière, 75013 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "82 RUE DU GENERAL DE GAULLE 83600 FREJUS.pdf",
+    "pipelineId": "cmq9hq4qa028501p2pzgvyhlu",
+    "coproId": "cmq9hq4py028401p27ouwaayq",
+    "coproNom": "SDC 82 rue du Général de Gaulle",
+    "adresse": "82 rue du Général de Gaulle, 83600 Fréjus, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "88 RUE DU MARECHAL FOCH 95620 PARMAIN.pdf",
+    "pipelineId": "cmq9h6qmq009301p25oea7ya9",
+    "coproId": "cmq9h6qmd009201p2ajs9juo6",
+    "coproNom": "SDC 88 Rue du Maréchal Foch",
+    "adresse": "88 RUE DU MARECHAL FOCH, 95620 PARMAIN",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "9 BD ALTERAS 13004 MARSEILLE.pdf",
+    "pipelineId": "cmq9hqnbf02yx01p2kpsyutwe",
+    "coproId": "cmq9hqnb702yw01p2uknd53pk",
+    "coproNom": "SDC 9 Boulevard Alteras",
+    "adresse": "9 Boulevard Alteras, 13004 Marseille, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "91 RUE DU CHEMIN VERT 75011 PARIS.pdf",
+    "pipelineId": "cmq9h6tov00dl01p2e6o4yh2v",
+    "coproId": "cmq9h6toi00dk01p2nzb34eim",
+    "coproNom": "SDC 91 Rue du Chemin Vert",
+    "adresse": "91 Rue du Chemin Vert, 75011 Paris, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "93 AV DE LA REPUBLIQUE 93150 LE BLANC MESNIL.pdf",
+    "pipelineId": "cmq9hppy001hx01p2lag8slex",
+    "coproId": "cmq9hppxm01hw01p2e44644ju",
+    "coproNom": "LA SEIGNEURIE",
+    "adresse": "93 Avenue de la République, 93150 Le Blanc-mesnil, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  },
+  {
+    "file": "99 AV DU LOUP 64000 PAU.pdf",
+    "pipelineId": "cmq9hprzi01m301p25li7qqdz",
+    "coproId": "cmq9hprz901m201p2tph0wsxh",
+    "coproNom": "OREA PARK",
+    "adresse": "99 avenue du loup, 64000 Pau, FRANCE",
+    "statut": "devis_demandes",
+    "action": "move"
+  }
+]
