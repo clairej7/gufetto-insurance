@@ -28,8 +28,11 @@ function cellText(v: unknown): string {
   return String(v);
 }
 
-const ADDR_RE = /adresse|copropri|immeuble|situation|risque|lieu|sdc/i;
-const PRIME_RE = /(derni.{0,6}prime|prime.{0,10}(pay|actuel|derni|dp)|prime\s*pay|cotisation.{0,10}(actuel|pay)|montant.{0,6}pay|\bdp\b)/i;
+// Détection d'en-tête, par ordre de PRIORITÉ (une vraie colonne « Adresse » d'abord,
+// sinon repli) — « Nom de la copropriété » contient « copropri » mais n'a pas le CP,
+// donc on ne le prend qu'en dernier recours.
+const ADDR_RES = [/adresse/i, /situation|risque|lieu du bien/i, /copropri|immeuble|\bsdc\b/i];
+const PRIME_RES = [/derni.{0,6}prime|prime.{0,10}(pay|actuel|derni)|prime\s*pay|cotisation.{0,10}(actuel|pay)|montant.{0,6}pay/i, /\bdp\b/i];
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -53,8 +56,9 @@ export async function POST(req: NextRequest) {
   for (let i = 1; i <= Math.min(5, ws.rowCount); i++) { if (ws.getRow(i).cellCount > 1) { headerRow = i; break; } }
   const headers: { col: number; text: string }[] = [];
   ws.getRow(headerRow).eachCell((cell, col) => headers.push({ col, text: cellText(cell.value).trim() }));
-  const addrCol = headers.find((h) => ADDR_RE.test(h.text))?.col;
-  const primeCol = headers.find((h) => PRIME_RE.test(h.text))?.col;
+  const findCol = (res: RegExp[]) => { for (const re of res) { const h = headers.find((h) => re.test(h.text)); if (h) return h.col; } return undefined; };
+  const addrCol = findCol(ADDR_RES);
+  const primeCol = findCol(PRIME_RES);
 
   if (!addrCol || !primeCol) {
     return NextResponse.json({
