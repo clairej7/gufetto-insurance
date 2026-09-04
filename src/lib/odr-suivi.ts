@@ -10,6 +10,7 @@
 // `metadata.auto = "odr_prevenir_cs"` (+ `on`), le plus récent fait foi (toggle).
 
 import { prisma } from "@/lib/prisma";
+import { resolveSlackUserId } from "@/lib/devis6-slack";
 import crypto from "crypto";
 
 const SECRET = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? "dev-secret-change-me";
@@ -132,4 +133,59 @@ export function weekLabel(weekStart: Date): string {
   const { monday, friday } = weekBounds(weekStart);
   const f = (d: Date) => d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
   return `${f(monday)} → ${f(friday)}`;
+}
+
+// ── Message recap hebdo « ODR acceptés » ────────────────────────────────────
+// Source de vérité UNIQUE : l'envoi Slack ET la prévisualisation admin appellent
+// buildOdrRecapMessage → aucun décalage possible entre l'aperçu et ce qui part.
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://gufetto-insurance.up.railway.app";
+
+export type RecapGestio = { nom: string; email: string | null; tagged: boolean };
+export type OdrRecap = {
+  count: number;
+  label: string;
+  url: string;               // lien tokenisé vers la page gestio
+  gestios: RecapGestio[];    // gestionnaires concernés (dédup) + statut de tag Slack
+  text: string;              // fallback texte Slack
+  blocks: unknown[];         // Block Kit exactement posté
+};
+
+export async function buildOdrRecapMessage(ref: Date): Promise<OdrRecap> {
+  const { start } = weekBounds(ref);
+  const rows = await getOdrAcceptesSemaine(ref);
+  const url = `${BASE_URL}/suivi-odr/${signOdrWeekToken(start.toISOString())}`;
+  const label = weekLabel(ref);
+
+  // Gestionnaires concernés, dédupliqués (par email sinon nom), triés alpha.
+  const seen = new Set<string>();
+  const uniques: { nom: string; email: string | null }[] = [];
+  for (const r of rows) {
+    const key = (r.gestionnaireEmail || r.gestionnaire || "").toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    uniques.push({ nom: r.gestionnaire || "—", email: r.gestionnaireEmail });
+  }
+  uniques.sort((a, b) => a.nom.localeCompare(b.nom, "fr", { sensitivity: "base" }));
+
+  // @mention si l'email est trouvé sur Slack, sinon nom en clair (best-effort).
+  const gestios: RecapGestio[] = [];
+  const mentions: string[] = [];
+  for (const g of uniques) {
+    const uid = g.email ? await resolveSlackUserId(g.email) : null;
+    gestios.push({ nom: g.nom, email: g.email, tagged: !!uid });
+    mentions.push(uid ? `<@${uid}>` : `*${g.nom}*`);
+  }
+
+  const text = `ODR acceptés de la semaine (${label}) — ${rows.length} dossier(s)`;
+  const blocks: unknown[] = [
+    { type: "section", text: { type: "mrkdwn", text: `*📋 ODR acceptés de la semaine* _(${label})_\nVoici les *${rows.length}* copropriété(s) dont l'ODR a été accepté par nos partenaires cette semaine.` } },
+    { type: "section", text: { type: "mrkdwn", text: `👉 <${url}|Voir la liste et signaler celles où il faut *prévenir le conseil syndical*>` } },
+    { type: "context", elements: [{ type: "mrkdwn", text: "Repère tes copropriétés : si l'une est sensible, clique « Prévenir le CS »." }] },
+  ];
+  if (mentions.length) {
+    blocks.push({ type: "section", text: { type: "mrkdwn", text: `Liste des gestionnaires concernés : ${mentions.join(" ")}` } });
+  }
+
+  return { count: rows.length, label, url, gestios, text, blocks };
 }
