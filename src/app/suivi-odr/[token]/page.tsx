@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { verifyOdrWeekToken, getOdrAcceptesSemaine, weekLabel } from "@/lib/odr-suivi";
+import { verifyOdrWeekToken, getOdrAcceptesSemaine, weekLabel, isoWeekNumber } from "@/lib/odr-suivi";
 import { OdrSuiviForm } from "./odr-suivi-form";
 
 function Shell({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
@@ -25,10 +25,10 @@ export default async function SuiviOdrPage({ params }: { params: Promise<{ token
   return (
     <Shell wide>
       <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: "#4E49FC", textTransform: "uppercase" }}>Assurances — Matera</div>
-      <h1 style={{ fontSize: 20, fontWeight: 800, color: "#26262C", margin: "6px 0 2px" }}>ODR acceptés de la semaine</h1>
+      <h1 style={{ fontSize: 20, fontWeight: 800, color: "#26262C", margin: "6px 0 2px" }}>ODR acceptés de la semaine {isoWeekNumber(weekStart)}</h1>
       <p style={{ fontSize: 14, color: "#656576", margin: "0 0 4px" }}>{weekLabel(weekStart)} · {rows.length} dossier{rows.length > 1 ? "s" : ""}</p>
       <p style={{ fontSize: 13.5, color: "#656576", margin: "10px 0 18px", lineHeight: 1.5 }}>
-        Repère tes copropriétés ci-dessous. Si l&apos;une est <strong>sensible</strong> et que le conseil syndical doit être prévenu du changement d&apos;assurance, clique sur <strong style={{ color: "#7A3FF2" }}>« Prévenir le CS »</strong> — l&apos;équipe assurance s&apos;en occupera.
+        Repère tes copropriétés ci-dessous. Si l&apos;une est <strong>sensible</strong> et que le conseil syndical doit être prévenu du changement d&apos;assurance, clique sur <strong style={{ color: "#7A3FF2" }}>« Prévenir le CS »</strong> — ce dernier sera automatiquement prévenu.
       </p>
       {rows.length === 0 ? (
         <p style={{ fontSize: 14, color: "#8A8A99", fontStyle: "italic" }}>Aucun ODR accepté cette semaine.</p>

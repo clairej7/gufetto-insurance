@@ -14,6 +14,7 @@ export async function GET() {
     success: true,
     count: m.count,
     label: m.label,
+    weekNum: m.weekNum,
     url: m.url,
     gestios: m.gestios,
   });

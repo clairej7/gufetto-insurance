@@ -135,6 +135,16 @@ export function weekLabel(weekStart: Date): string {
   return `${f(monday)} → ${f(friday)}`;
 }
 
+// Numéro de semaine ISO 8601 (la « semaine 36 » du langage courant FR).
+export function isoWeekNumber(ref: Date): number {
+  const { monday } = weekBounds(ref);
+  const d = new Date(Date.UTC(monday.getFullYear(), monday.getMonth(), monday.getDate()));
+  d.setUTCDate(d.getUTCDate() + 3); // jeudi de la semaine (ISO ancre sur le jeudi)
+  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - ((firstThursday.getUTCDay() + 6) % 7) + 3);
+  return 1 + Math.round((d.getTime() - firstThursday.getTime()) / (7 * 86400000));
+}
+
 // ── Message recap hebdo « ODR acceptés » ────────────────────────────────────
 // Source de vérité UNIQUE : l'envoi Slack ET la prévisualisation admin appellent
 // buildOdrRecapMessage → aucun décalage possible entre l'aperçu et ce qui part.
@@ -145,6 +155,7 @@ export type RecapGestio = { nom: string; email: string | null; tagged: boolean }
 export type OdrRecap = {
   count: number;
   label: string;
+  weekNum: number;
   url: string;               // lien tokenisé vers la page gestio
   gestios: RecapGestio[];    // gestionnaires concernés (dédup) + statut de tag Slack
   text: string;              // fallback texte Slack
@@ -156,6 +167,7 @@ export async function buildOdrRecapMessage(ref: Date): Promise<OdrRecap> {
   const rows = await getOdrAcceptesSemaine(ref);
   const url = `${BASE_URL}/suivi-odr/${signOdrWeekToken(start.toISOString())}`;
   const label = weekLabel(ref);
+  const weekNum = isoWeekNumber(ref);
 
   // v1 : on NE tague PAS les gestionnaires dans le message (risque de spam/notifs).
   // Repasser à true après les premiers retours pour réactiver la ligne « Liste des
@@ -185,13 +197,13 @@ export async function buildOdrRecapMessage(ref: Date): Promise<OdrRecap> {
 
   const text = `ODR acceptés de la semaine (${label}) — ${rows.length} dossier(s)`;
   const blocks: unknown[] = [
-    { type: "section", text: { type: "mrkdwn", text: `*📋 ODR acceptés de la semaine* _(${label})_\nVoici les *${rows.length}* copropriété(s) dont l'ODR a été accepté par nos partenaires cette semaine.` } },
+    { type: "section", text: { type: "mrkdwn", text: `*📋 ODR acceptés de la semaine ${weekNum}* _(${label})_\nVoici les *${rows.length}* copropriété(s) dont l'ODR a été accepté par nos partenaires cette semaine.` } },
     { type: "section", text: { type: "mrkdwn", text: `👉 <${url}|Voir la liste et signaler celles où il faut *prévenir le conseil syndical*>` } },
-    { type: "context", elements: [{ type: "mrkdwn", text: "Repère tes copropriétés : si l'une est sensible, clique « Prévenir le CS »." }] },
+    { type: "context", elements: [{ type: "mrkdwn", text: "Repère tes copropriétés : si l'une est sensible, clique sur « Prévenir le CS »." }] },
   ];
   if (mentions.length) {
     blocks.push({ type: "section", text: { type: "mrkdwn", text: `Liste des gestionnaires concernés : ${mentions.join(" ")}` } });
   }
 
-  return { count: rows.length, label, url, gestios, text, blocks };
+  return { count: rows.length, label, weekNum, url, gestios, text, blocks };
 }

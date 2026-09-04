@@ -13,7 +13,7 @@ import { toast } from "sonner";
 type Row = { pipelineId: string; copro: string; gestionnaire: string | null; assureur: string; prevenirCs: boolean };
 type Data = { weekLabel: string; total: number; aPrevenirCount: number; rows: Row[] };
 type PreviewGestio = { nom: string; email: string | null; tagged: boolean };
-type Preview = { count: number; label: string; url: string; gestios: PreviewGestio[] };
+type Preview = { count: number; label: string; weekNum: number; url: string; gestios: PreviewGestio[] };
 
 export function OdrSuiviAdmin() {
   const [data, setData] = useState<Data | null>(null);
@@ -34,7 +34,7 @@ export function OdrSuiviAdmin() {
       const r = await fetch("/api/odr-suivi/preview");
       const j = (await r.json().catch(() => ({}))) as { success?: boolean; error?: string } & Partial<Preview>;
       if (!r.ok || !j.success) throw new Error(j.error ?? "Échec");
-      setPreview({ count: j.count ?? 0, label: j.label ?? "", url: j.url ?? "", gestios: j.gestios ?? [] });
+      setPreview({ count: j.count ?? 0, label: j.label ?? "", weekNum: j.weekNum ?? 0, url: j.url ?? "", gestios: j.gestios ?? [] });
     } catch (e) { toast.error(e instanceof Error ? e.message : "Échec de la prévisualisation"); }
     finally { setLoadingPreview(false); }
   };
@@ -90,13 +90,13 @@ export function OdrSuiviAdmin() {
             <div style={{ fontSize: 11, color: "#8A8A99", marginBottom: 8 }}>Ce message partira sur <b style={{ color: "#4E49FC" }}>#devis_assurance_pro</b> :</div>
             <div style={{ background: "#fff", border: "1px solid #E9E9EF", borderLeft: "3px solid #4A154B", borderRadius: 8, padding: "12px 14px" }}>
               <div style={{ fontSize: 14, color: "#1D1C1D", lineHeight: 1.5 }}>
-                <div style={{ fontWeight: 800, marginBottom: 2 }}>📋 ODR acceptés de la semaine <span style={{ fontWeight: 400, fontStyle: "italic", color: "#616061" }}>({preview.label})</span></div>
-                Voici les <b>{preview.count}</b> copropriété(s) dont l&apos;ODR a été accepté par nos partenaires cette semaine.
+                <div style={{ fontWeight: 800, marginBottom: 2 }}>📋 ODR acceptés de la semaine {preview.weekNum} <span style={{ fontWeight: 400, fontStyle: "italic", color: "#616061" }}>({preview.label})</span></div>
+                Voici les <b>{preview.count}</b>{" "}copropriété(s) dont l&apos;ODR a été accepté par nos partenaires cette semaine.
               </div>
               <div style={{ fontSize: 14, marginTop: 8 }}>
                 👉 <a href={preview.url} target="_blank" rel="noreferrer" style={{ color: "#1264A3", textDecoration: "none", fontWeight: 600 }}>Voir la liste et signaler celles où il faut prévenir le conseil syndical</a>
               </div>
-              <div style={{ fontSize: 12.5, color: "#616061", marginTop: 8 }}>Repère tes copropriétés : si l&apos;une est sensible, clique « Prévenir le CS ».</div>
+              <div style={{ fontSize: 12.5, color: "#616061", marginTop: 8 }}>Repère tes copropriétés : si l&apos;une est sensible, clique sur « Prévenir le CS ».</div>
               {preview.gestios.length > 0 && (
                 <div style={{ fontSize: 14, marginTop: 10, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
                   <span>Liste des gestionnaires concernés :</span>
