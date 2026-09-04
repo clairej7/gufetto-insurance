@@ -9,6 +9,7 @@ import { Search, Loader2, Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Devis5ExcelTable } from "@/components/admin/devis5-excel-table";
 import { Devis5Volet3 } from "@/components/admin/devis5-volet3";
+import { Devis5ImportMasse } from "@/components/admin/devis5-import-masse";
 type Devis5Lot = { id: string; createdAt: string; createdBy: string; sentAt: string | null; count: number; sends: { assureur: string; at: string; by: string }[] };
 
 type Row = { pipelineId: string; nom: string; adresse: string | null; assureur: string | null; numeroContrat: string | null; prime: number | null; courtier: string | null; gestionnaire: string | null; hasRs: boolean; hasContrat: boolean; frontUrl: string | null };
@@ -432,6 +433,15 @@ export function Devis5Controls({ data, toLoad, docHistory = [], noDocs = [], doc
             })()}
           </>
         )}
+      </div>
+
+      {/* ── Volet 5 — Import de devis en masse ── */}
+      <div style={{ marginTop: 22, paddingTop: 18, borderTop: "1px solid #E8E8EC" }}>
+        <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: "#4E49FC", background: "#EEF0FF", border: "1px solid #D9D9F5", borderRadius: 999, padding: "4px 11px", whiteSpace: "nowrap" }}>VOLET 5</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: "#26262C" }}>Import de devis en masse</span>
+        </div>
+        <Devis5ImportMasse />
       </div>
     </div>
   );
