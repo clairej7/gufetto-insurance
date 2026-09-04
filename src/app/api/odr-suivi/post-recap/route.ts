@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { buildOdrRecapMessage } from "@/lib/odr-suivi";
+import { buildOdrRecapMessage, recordRecapSent, weekBounds } from "@/lib/odr-suivi";
 import { postToChannelViaBot } from "@/lib/devis6-slack";
 
 const CHANNEL = process.env.SLACK_DEVIS_CHANNEL_ID;
@@ -12,8 +12,10 @@ export async function POST() {
   if (!session?.user?.isAdmin) return NextResponse.json({ error: "Réservé aux admins" }, { status: 403 });
   if (!CHANNEL) return NextResponse.json({ error: "SLACK_DEVIS_CHANNEL_ID non configuré" }, { status: 500 });
 
-  const m = await buildOdrRecapMessage(new Date());
+  const now = new Date();
+  const m = await buildOdrRecapMessage(now);
   const r = await postToChannelViaBot(CHANNEL, m.text, m.blocks);
   if (!r.ok) return NextResponse.json({ error: r.error ?? "Échec de l'envoi Slack" }, { status: 502 });
+  await recordRecapSent(weekBounds(now).start.toISOString(), m.count, session.user?.email ?? null);
   return NextResponse.json({ success: true, count: m.count, link: m.url });
 }

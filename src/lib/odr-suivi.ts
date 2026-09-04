@@ -207,3 +207,80 @@ export async function buildOdrRecapMessage(ref: Date): Promise<OdrRecap> {
 
   return { count: rows.length, label, weekNum, url, gestios, text, blocks };
 }
+
+// ── Statut d'envoi & historique des recaps ──────────────────────────────────
+// Stockage sans changement de schéma : une ligne AutomationExclusion par semaine
+// (kind "odr_recap_sent", value = lundi ISO), payload JSON dans `label`.
+// Un recap reste « actif » (affiché en tête) tant qu'il n'est pas CLÔTURÉ ; une
+// fois clôturé (bouton « Prévenir les CS et clôturer la semaine », branché plus
+// tard) il bascule dans l'historique.
+
+const RECAP_KIND = "odr_recap_sent";
+
+export type RecapStatus = {
+  weekStart: string;
+  weekLabel: string;
+  weekNum: number;
+  sentAt: string;
+  count: number;
+  by: string | null;
+  closed: boolean;
+  closedAt: string | null;
+  closedBy: string | null;
+};
+
+type RecapPayload = { sentAt: string; count: number; by: string | null; closed: boolean; closedAt: string | null; closedBy: string | null };
+
+function parseRecap(label: string | null): RecapPayload | null {
+  if (!label) return null;
+  try {
+    const p = JSON.parse(label) as Partial<RecapPayload>;
+    if (typeof p.sentAt !== "string") return null;
+    return { sentAt: p.sentAt, count: p.count ?? 0, by: p.by ?? null, closed: !!p.closed, closedAt: p.closedAt ?? null, closedBy: p.closedBy ?? null };
+  } catch { return null; }
+}
+
+function toStatus(weekStart: string, p: RecapPayload): RecapStatus {
+  const d = new Date(weekStart);
+  return { weekStart, weekLabel: weekLabel(d), weekNum: isoWeekNumber(d), sentAt: p.sentAt, count: p.count, by: p.by, closed: p.closed, closedAt: p.closedAt, closedBy: p.closedBy };
+}
+
+// Enregistre (ou met à jour) l'envoi du recap d'une semaine.
+export async function recordRecapSent(weekStartISO: string, count: number, by: string | null): Promise<void> {
+  const existing = await prisma.automationExclusion.findUnique({ where: { kind_value: { kind: RECAP_KIND, value: weekStartISO } } });
+  const prev = parseRecap(existing?.label ?? null);
+  const payload: RecapPayload = { sentAt: new Date().toISOString(), count, by, closed: prev?.closed ?? false, closedAt: prev?.closedAt ?? null, closedBy: prev?.closedBy ?? null };
+  await prisma.automationExclusion.upsert({
+    where: { kind_value: { kind: RECAP_KIND, value: weekStartISO } },
+    create: { kind: RECAP_KIND, value: weekStartISO, label: JSON.stringify(payload), createdBy: by },
+    update: { label: JSON.stringify(payload) },
+  });
+}
+
+// Statut du recap d'une semaine (null si jamais envoyé).
+export async function getRecapStatus(weekStartISO: string): Promise<RecapStatus | null> {
+  const rec = await prisma.automationExclusion.findUnique({ where: { kind_value: { kind: RECAP_KIND, value: weekStartISO } } });
+  const p = parseRecap(rec?.label ?? null);
+  return p ? toStatus(weekStartISO, p) : null;
+}
+
+// Historique = recaps CLÔTURÉS (les semaines passées), le plus récent d'abord.
+export async function getRecapHistory(): Promise<RecapStatus[]> {
+  const recs = await prisma.automationExclusion.findMany({ where: { kind: RECAP_KIND }, orderBy: { value: "desc" } });
+  const out: RecapStatus[] = [];
+  for (const r of recs) {
+    const p = parseRecap(r.label);
+    if (p?.closed) out.push(toStatus(r.value, p));
+  }
+  return out;
+}
+
+// Clôture la semaine (branché plus tard sur le bouton « Prévenir les CS… ») :
+// le recap bascule alors dans l'historique.
+export async function closeRecapWeek(weekStartISO: string, by: string | null): Promise<void> {
+  const rec = await prisma.automationExclusion.findUnique({ where: { kind_value: { kind: RECAP_KIND, value: weekStartISO } } });
+  const p = parseRecap(rec?.label ?? null);
+  if (!p) return; // rien à clôturer si le recap n'a pas été envoyé
+  const payload: RecapPayload = { ...p, closed: true, closedAt: new Date().toISOString(), closedBy: by };
+  await prisma.automationExclusion.update({ where: { kind_value: { kind: RECAP_KIND, value: weekStartISO } }, data: { label: JSON.stringify(payload) } });
+}

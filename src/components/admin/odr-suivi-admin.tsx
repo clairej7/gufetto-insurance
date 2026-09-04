@@ -7,11 +7,20 @@
 // Se rafraîchit tout seul pour voir les retours en temps réel.
 
 import { useCallback, useEffect, useState } from "react";
-import { Send, Loader2, ShieldAlert, ChevronDown, Eye, ExternalLink, AtSign, AlertTriangle } from "lucide-react";
+import { Send, Loader2, ShieldAlert, ChevronDown, Eye, ExternalLink, AtSign, AlertTriangle, CheckCircle2, History } from "lucide-react";
 import { toast } from "sonner";
 
 type Row = { pipelineId: string; copro: string; gestionnaire: string | null; assureur: string; prevenirCs: boolean };
-type Data = { weekLabel: string; total: number; aPrevenirCount: number; rows: Row[] };
+type RecapStatus = { weekStart: string; weekLabel: string; weekNum: number; sentAt: string; count: number; by: string | null; closed: boolean; closedAt: string | null; closedBy: string | null };
+type Data = { weekLabel: string; total: number; aPrevenirCount: number; rows: Row[]; sent: RecapStatus | null; history: RecapStatus[] };
+
+// "4 sept. à 16h32"
+const fmtDateTime = (iso: string) => {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  const time = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }).replace(":", "h");
+  return `${date} à ${time}`;
+};
 type PreviewGestio = { nom: string; email: string | null; tagged: boolean };
 type Preview = { count: number; label: string; weekNum: number; url: string; gestios: PreviewGestio[] };
 
@@ -65,9 +74,17 @@ export function OdrSuiviAdmin() {
   const td: React.CSSProperties = { padding: "8px", borderTop: "1px solid #F1F1F4", fontSize: 13, color: "#26262C" };
 
   return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
     <div style={card}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 13, color: "#656576" }}>{data ? `Semaine ${data.weekLabel} · ${data.total} dossier(s)` : "…"}</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={{ fontSize: 13, color: "#656576" }}>{data ? `Semaine ${data.weekLabel} · ${data.total} dossier(s)` : "…"}</span>
+          {data?.sent && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, alignSelf: "flex-start", fontSize: 12, fontWeight: 700, color: "#13762C", background: "#EAF7EE", border: "1px solid #B7E4C4", borderRadius: 8, padding: "3px 9px" }}>
+              <CheckCircle2 size={13} /> Recap envoyé le {fmtDateTime(data.sent.sentAt)}{data.sent.count ? ` · ${data.sent.count} dossier(s)` : ""}
+            </span>
+          )}
+        </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button onClick={loadPreview} disabled={loadingPreview} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 14px", borderRadius: 10, border: "1.5px solid #D9D9F5", fontSize: 13, fontWeight: 700, background: "#F4F5FF", color: "#4E49FC", cursor: loadingPreview ? "wait" : "pointer" }}>
             {loadingPreview ? <Loader2 size={15} /> : <Eye size={15} />} Prévisualiser le recap
@@ -176,6 +193,28 @@ export function OdrSuiviAdmin() {
           </table>
         </div>
       )}
+    </div>
+
+    {/* Historique des recaps ODR clôturés (semaines passées) */}
+    <div style={card}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: (data?.history?.length ?? 0) ? 12 : 0 }}>
+        <History size={16} style={{ color: "#8A8A99" }} />
+        <span style={{ fontSize: 13, fontWeight: 800, color: "#26262C" }}>Historique des recaps ODR</span>
+        <span style={{ fontSize: 12, color: "#8A8A99" }}>({data?.history?.length ?? 0})</span>
+      </div>
+      {(data?.history?.length ?? 0) === 0 ? (
+        <p style={{ fontSize: 12.5, color: "#A0A0AC", margin: 0, fontStyle: "italic" }}>Aucun recap clôturé pour l&apos;instant. Les semaines passées apparaîtront ici une fois clôturées.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {data!.history.map((h) => (
+            <div key={h.weekStart} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: "#FAFAFC", border: "1px solid #EEE", borderRadius: 8, padding: "9px 12px", fontSize: 13, flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 700, color: "#26262C" }}>Semaine {h.weekNum} <span style={{ fontWeight: 400, color: "#8A8A99" }}>({h.weekLabel})</span></span>
+              <span style={{ color: "#656576", fontSize: 12 }}>{h.count} dossier(s) · envoyé le {fmtDateTime(h.sentAt)}{h.closedAt ? ` · clôturé le ${fmtDateTime(h.closedAt)}` : ""}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
     </div>
   );
 }
